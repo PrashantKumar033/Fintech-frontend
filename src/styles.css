@@ -213,14 +213,14 @@
 }
 
 @utility text-gradient-brand {
-  background: linear-gradient(120deg, oklch(0.68 0.18 155) 0%, oklch(0.55 0.14 175) 45%, oklch(0.78 0.17 55) 100%);
+  background: linear-gradient(120deg, oklch(0.58 0.19 258) 0%, oklch(0.55 0.2 275) 55%, oklch(0.65 0.18 240) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
 @utility text-gradient-warm {
-  background: linear-gradient(120deg, oklch(0.78 0.17 55), oklch(0.68 0.19 25));
+  background: linear-gradient(120deg, oklch(0.68 0.17 255), oklch(0.55 0.2 275));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
