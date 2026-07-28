@@ -30,7 +30,7 @@ export function FaqSection() {
       <Reveal className="mx-auto max-w-2xl text-center">
         <span className="text-xs font-bold uppercase tracking-[0.3em] text-primary">FAQ's</span>
         <h2 className="mt-3 font-display text-4xl font-extrabold tracking-tighter text-secondary sm:text-5xl">
-          Frequently asked <span className="text-gradient-brand">questions</span>
+          Frequently asked <span className="text-primary">questions</span>
         </h2>
         <p className="mt-4 text-foreground/70">
           Quick answers to common queries — from account management to transaction security.
@@ -118,8 +118,6 @@ export function TestimonialSlider({ avatars }: { avatars: string[] }) {
 
   return (
     <section className="relative overflow-hidden bg-secondary py-28 text-secondary-foreground">
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid opacity-20" />
-      <div aria-hidden className="pointer-events-none absolute -left-24 top-10 h-96 w-96 rounded-full bg-primary/25 blur-3xl [animation:var(--animate-blob)]" />
       <div className="relative mx-auto max-w-5xl px-6">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
