@@ -12,11 +12,12 @@ const links = [
 export function SiteNav() {
   const [open, setOpen] = useState(false);
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 w-full border-b border-secondary/10 bg-background/90 backdrop-blur-xl">
       <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6 py-4">
         <Link to="/" className="flex items-center gap-2">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-primary-foreground font-display text-xl font-black shadow-lg shadow-primary/30">
-            U
+          <span className="relative grid h-11 w-11 place-items-center overflow-hidden rounded-2xl bg-secondary text-primary-foreground font-display text-xl font-black shadow-soft">
+            <span className="absolute -right-1 top-1 h-8 w-4 rounded-full bg-primary" />
+            <span className="relative">U</span>
           </span>
           <span className="flex flex-col leading-tight">
             <span className="font-display text-lg font-extrabold tracking-tight text-secondary">
@@ -32,7 +33,7 @@ export function SiteNav() {
             <Link
               key={l.to}
               to={l.to}
-              className="rounded-full px-4 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-mint hover:text-secondary [&.active]:bg-mint [&.active]:text-secondary"
+              className="rounded-full px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-mint hover:text-secondary [&.active]:bg-mint [&.active]:text-secondary"
               activeOptions={{ exact: true }}
             >
               {l.label}

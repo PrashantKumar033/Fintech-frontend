@@ -63,32 +63,35 @@
 
 :root {
   --radius: 1.25rem;
-  /* Razorpay-inspired: crisp white surface, deep navy text, vibrant blue primary. */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.22 0.04 260);
+  /* UMOBIPAY palette sampled from umobipay.com: orange, deep teal-green, soft mint. */
+  --background: oklch(0.974 0.011 176.3);
+  --foreground: oklch(0.242 0.034 278.6);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.04 260);
+  --card-foreground: oklch(0.242 0.034 278.6);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.04 260);
-  --primary: oklch(0.58 0.19 258);
-  --primary-foreground: oklch(0.99 0.005 255);
-  --primary-glow: oklch(0.68 0.17 255);
-  --secondary: oklch(0.22 0.05 258);
-  --secondary-foreground: oklch(0.99 0.005 255);
-  --muted: oklch(0.97 0.01 255);
-  --muted-foreground: oklch(0.5 0.03 258);
-  --accent: oklch(0.65 0.18 258);
-  --accent-foreground: oklch(0.99 0.005 255);
-  --mint: oklch(0.965 0.02 255);
-  --mint-deep: oklch(0.92 0.04 255);
+  --popover-foreground: oklch(0.242 0.034 278.6);
+  --primary: oklch(0.697 0.193 43.1);
+  --primary-foreground: oklch(1 0 0);
+  --primary-glow: oklch(0.813 0.152 70.8);
+  --secondary: oklch(0.408 0.071 188);
+  --secondary-foreground: oklch(0.985 0.02 185.5);
+  --muted: oklch(0.962 0.02 172.8);
+  --muted-foreground: oklch(0.439 0.015 171.7);
+  --accent: oklch(0.639 0.146 159.3);
+  --accent-foreground: oklch(1 0 0);
+  --mint: oklch(0.913 0.047 173);
+  --mint-deep: oklch(0.962 0.02 172.8);
   --destructive: oklch(0.62 0.22 27);
   --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.92 0.015 258);
-  --input: oklch(0.92 0.015 258);
-  --ring: oklch(0.58 0.19 258);
-  /* Minimal decorative tokens — flat, editorial */
-  --shadow-elegant: 0 20px 45px -22px color-mix(in oklab, var(--primary) 45%, transparent);
-  --shadow-soft: 0 10px 30px -14px oklch(0.22 0.05 258 / 0.14);
+  --border: oklch(0.885 0.032 173);
+  --input: oklch(0.885 0.032 173);
+  --ring: oklch(0.697 0.193 43.1);
+  --gradient-brand: linear-gradient(120deg, var(--accent), var(--primary));
+  --gradient-hero: linear-gradient(180deg, var(--mint), var(--muted));
+  --gradient-aurora: radial-gradient(circle, color-mix(in oklab, var(--mint) 75%, transparent), transparent 70%);
+  --shadow-elegant: 0 18px 38px -20px color-mix(in oklab, var(--primary) 55%, transparent);
+  --shadow-soft: 0 12px 30px -18px oklch(0.242 0.034 278.6 / 0.24);
+  --shadow-glow: 0 14px 35px -22px color-mix(in oklab, var(--accent) 55%, transparent);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -108,9 +111,9 @@
   --color-mint: var(--mint);
   --color-mint-deep: var(--mint-deep);
   --color-primary-glow: var(--primary-glow);
-  --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+  --font-display: "Onest", "Plus Jakarta Sans", system-ui, sans-serif;
   --font-serif: "Instrument Serif", "Playfair Display", Georgia, serif;
-  --font-sans: "Inter", system-ui, sans-serif;
+  --font-sans: "Onest", "Inter", system-ui, sans-serif;
 }
 
 @theme {
@@ -213,14 +216,14 @@
 }
 
 @utility text-gradient-brand {
-  background: linear-gradient(120deg, oklch(0.58 0.19 258) 0%, oklch(0.55 0.2 275) 55%, oklch(0.65 0.18 240) 100%);
+  background: linear-gradient(120deg, var(--secondary), var(--accent));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
 @utility text-gradient-warm {
-  background: linear-gradient(120deg, oklch(0.68 0.17 255), oklch(0.55 0.2 275));
+  background: linear-gradient(120deg, var(--primary), var(--primary-glow));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -269,8 +272,8 @@
 
 @utility bg-grid {
   background-image:
-    linear-gradient(oklch(0.32 0.05 175 / 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(0.32 0.05 175 / 0.07) 1px, transparent 1px);
+    linear-gradient(oklch(0.408 0.071 188 / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.408 0.071 188 / 0.07) 1px, transparent 1px);
   background-size: 44px 44px;
 }
 
