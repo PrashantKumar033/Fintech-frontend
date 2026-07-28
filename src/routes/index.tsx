@@ -206,7 +206,7 @@ function Home() {
         <Reveal className="mx-auto max-w-2xl text-center">
           <span className="text-xs font-bold uppercase tracking-[0.3em] text-primary">Features</span>
           <h2 className="mt-3 font-display text-4xl font-extrabold tracking-tighter text-secondary sm:text-5xl">
-            Delivering <span className="text-gradient-brand">payment solutions</span>
+            Delivering <span className="text-primary">payment solutions</span>
           </h2>
           <p className="mt-4 text-foreground/70">
             At UMOBIPAY we simplify bill payments through BBPS. From utility bills to mobile recharges — fast, secure and hassle-free, all in one place.
@@ -257,7 +257,7 @@ function Home() {
           <div>
             <span className="text-xs font-bold uppercase tracking-widest text-primary">All-in-one</span>
             <h2 className="mt-3 max-w-2xl font-display text-4xl font-extrabold tracking-tighter text-secondary sm:text-6xl">
-              Every payment. <span className="text-gradient-brand">One platform.</span>
+              Every payment. <span className="text-primary">One platform.</span>
             </h2>
           </div>
           <Link to="/services" className="inline-flex items-center gap-1 text-sm font-semibold text-secondary hover:text-primary">
@@ -316,13 +316,12 @@ function Home() {
       </section>
 
       {/* ═════════════ OUR PROFESSIONAL SERVICES ═════════════ */}
-      <section id="professional" className="relative border-y border-border bg-mint/40 py-28">
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-dots opacity-30" />
+      <section id="professional" className="relative border-y border-border bg-mint/60 py-28">
         <div className="relative mx-auto max-w-7xl px-6">
           <Reveal className="mx-auto max-w-2xl text-center">
             <span className="text-xs font-bold uppercase tracking-[0.3em] text-primary">Our Services</span>
             <h2 className="mt-3 font-display text-4xl font-extrabold tracking-tighter text-secondary sm:text-5xl">
-              We provide you our <span className="text-gradient-brand">valuable services</span>
+              We provide you our <span className="text-primary">valuable services</span>
             </h2>
             <p className="mt-4 text-foreground/70">
               Eight production-grade rails powering retailers, agents and businesses across India.
@@ -354,7 +353,7 @@ function Home() {
           <Reveal>
             <span className="text-xs font-bold uppercase tracking-[0.3em] text-primary">Why us</span>
             <h2 className="mt-3 font-display text-4xl font-extrabold tracking-tighter text-secondary sm:text-5xl">
-              Why choose <span className="text-gradient-brand">UMOBIPAY?</span>
+              Why choose <span className="text-primary">UMOBIPAY?</span>
             </h2>
             <p className="mt-5 max-w-md text-foreground/70">
               Choose UMOBIPAY for an unparalleled Recharge and BBPS experience. Our technology keeps every transaction secure, efficient and completely transparent.
@@ -398,7 +397,6 @@ function Home() {
 
       {/* ═════════════ FUN FACTS / COUNTERS ═════════════ */}
       <section className="relative overflow-hidden border-y border-border bg-card py-24">
-        <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-primary/15 blur-3xl [animation:var(--animate-blob)]" />
         <div className="relative mx-auto max-w-7xl px-6">
           <div className="flex flex-wrap items-end justify-between gap-8">
             <Reveal className="max-w-xl">
@@ -438,8 +436,7 @@ function Home() {
 
       {/* ═════════════ FEATURE STRIP w/ ICON GRID ═════════════ */}
       <section className="mx-auto max-w-7xl px-6 pb-20">
-        <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-secondary via-secondary to-secondary/85 p-10 text-secondary-foreground sm:p-16">
-          <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid opacity-20" />
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-secondary p-10 text-secondary-foreground sm:p-16">
           <div className="relative grid gap-14 lg:grid-cols-2 lg:items-center">
             <div>
               <span className="text-xs font-bold uppercase tracking-widest text-primary">Built for scale</span>
@@ -519,10 +516,6 @@ function Home() {
       {/* ═════════════ FINAL CTA ═════════════ */}
       <section className="mx-auto max-w-7xl px-6 pb-24 pt-12">
         <div className="relative overflow-hidden rounded-[3rem] bg-primary p-12 text-primary-foreground sm:p-20">
-          <div aria-hidden className="pointer-events-none absolute inset-0">
-            <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-primary-foreground/10 blur-2xl" />
-            <div className="absolute -bottom-40 left-1/3 h-96 w-96 rounded-full bg-secondary/50 blur-3xl" />
-          </div>
           <div className="relative grid gap-10 lg:grid-cols-[1.4fr_1fr] lg:items-center">
             <div>
               <h2 className="font-display text-5xl font-extrabold tracking-tighter sm:text-6xl">
