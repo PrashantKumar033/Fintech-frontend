@@ -78,38 +78,44 @@ function Home() {
       <section className="relative isolate">
         {/* animated blobs */}
         <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -left-32 top-10 h-[420px] w-[420px] rounded-full bg-primary/30 blur-3xl [animation:var(--animate-blob)]" />
-          <div className="absolute right-[-6rem] top-40 h-[520px] w-[520px] rounded-full bg-secondary/25 blur-3xl [animation:var(--animate-blob)] [animation-delay:-6s]" />
-          <div className="absolute left-1/3 top-[30rem] h-[300px] w-[300px] rounded-full bg-mint blur-3xl" />
+          <div className="absolute inset-0 bg-hero-mesh" />
+          <div className="absolute -left-32 top-10 h-[460px] w-[460px] rounded-full bg-primary/40 blur-3xl [animation:var(--animate-blob)]" />
+          <div className="absolute right-[-6rem] top-40 h-[540px] w-[540px] rounded-full bg-accent/35 blur-3xl [animation:var(--animate-blob)] [animation-delay:-6s]" />
+          <div className="absolute left-1/3 top-[30rem] h-[340px] w-[340px] rounded-full bg-primary-glow/40 blur-3xl [animation:var(--animate-blob)] [animation-delay:-12s]" />
         </div>
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid opacity-40" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid opacity-30" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 bg-noise opacity-40 mix-blend-overlay" />
 
         <div className="relative mx-auto grid max-w-7xl gap-16 px-6 pb-20 pt-12 lg:grid-cols-[1.15fr_1fr] lg:items-center lg:pt-20">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-background/70 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-secondary backdrop-blur">
-              <Sparkles size={12} className="text-primary" />
+            <span className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-background/80 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-secondary shadow-soft backdrop-blur">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+              </span>
               India's Fintech · BBPS Authorised
             </span>
-            <h1 className="mt-6 font-display text-[clamp(2.75rem,6.5vw,5.5rem)] font-extrabold leading-[0.95] tracking-tighter text-secondary">
+            <h1 className="mt-6 font-display text-[clamp(2.75rem,6.8vw,5.75rem)] font-extrabold leading-[0.95] tracking-tighter text-secondary">
               Pay smart.<br />
               Pay fast.<br />
               <span className="text-gradient-brand">Pay anywhere.</span>
             </h1>
-            <p className="mt-6 max-w-xl text-lg text-foreground/70">
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-foreground/70">
               The all-in-one fintech built for India — recharge mobiles, settle bills, transfer money, and grow your retail business, from one beautifully simple dashboard.
             </p>
 
             <div className="mt-9 flex flex-wrap items-center gap-4">
               <Link
                 to="/services"
-                className="group relative inline-flex items-center gap-2 overflow-hidden rounded-full bg-secondary px-8 py-4 text-sm font-semibold text-secondary-foreground shadow-2xl shadow-secondary/30 transition-transform hover:-translate-y-0.5"
+                className="group relative inline-flex items-center gap-2 overflow-hidden rounded-full bg-primary px-8 py-4 text-sm font-semibold text-primary-foreground shadow-elegant transition-transform hover:-translate-y-0.5"
               >
-                <span className="absolute inset-0 bg-gradient-to-r from-primary to-primary/70 opacity-0 transition-opacity group-hover:opacity-100" />
+                <span className="absolute inset-0 bg-gradient-to-r from-primary-glow via-primary to-accent opacity-0 transition-opacity group-hover:opacity-100" />
+                <span className="absolute inset-y-0 -left-24 w-16 rotate-12 bg-white/25 blur-md transition-transform duration-700 group-hover:translate-x-[280px]" />
                 <span className="relative">Get Started Free</span>
                 <ArrowRight size={16} className="relative transition-transform group-hover:translate-x-1" />
               </Link>
               <button className="group inline-flex items-center gap-3 text-sm font-semibold text-secondary">
-                <span className="grid h-12 w-12 place-items-center rounded-full border border-secondary/20 bg-background transition-transform group-hover:scale-110">
+                <span className="grid h-12 w-12 place-items-center rounded-full border border-primary/25 bg-background shadow-soft transition-transform group-hover:scale-110">
                   <Play size={14} className="ml-0.5 fill-primary text-primary" />
                 </span>
                 Watch 90-sec demo
