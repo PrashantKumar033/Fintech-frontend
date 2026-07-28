@@ -219,16 +219,64 @@
 }
 
 @utility text-gradient-brand {
-  background: linear-gradient(120deg, oklch(0.68 0.18 40), oklch(0.48 0.09 175));
+  background: linear-gradient(120deg, oklch(0.68 0.18 155) 0%, oklch(0.55 0.14 175) 45%, oklch(0.78 0.17 55) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
+@utility text-gradient-warm {
+  background: linear-gradient(120deg, oklch(0.78 0.17 55), oklch(0.68 0.19 25));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility bg-hero-mesh {
+  background-image: var(--gradient-hero);
+}
+
+@utility bg-aurora {
+  background: var(--gradient-aurora);
+  filter: blur(60px) saturate(1.2);
+}
+
+@utility bg-noise {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/></svg>");
+}
+
+@utility shadow-elegant {
+  box-shadow: var(--shadow-elegant);
+}
+
+@utility shadow-glow {
+  box-shadow: var(--shadow-glow);
+}
+
+@utility shadow-soft {
+  box-shadow: var(--shadow-soft);
+}
+
+@utility gradient-border {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1.5px;
+    border-radius: inherit;
+    background: var(--gradient-brand);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
+}
+
 @utility bg-grid {
   background-image:
-    linear-gradient(oklch(0.48 0.09 175 / 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(0.48 0.09 175 / 0.06) 1px, transparent 1px);
+    linear-gradient(oklch(0.32 0.05 175 / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.32 0.05 175 / 0.07) 1px, transparent 1px);
   background-size: 44px 44px;
 }
 
