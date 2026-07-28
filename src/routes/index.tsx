@@ -75,54 +75,73 @@ function Home() {
       <SiteNav />
 
       {/* ═════════════ HERO ═════════════ */}
-      <section className="relative isolate">
-        {/* animated blobs */}
-        <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute inset-0 bg-hero-mesh" />
-          <div className="absolute -left-32 top-10 h-[460px] w-[460px] rounded-full bg-primary/40 blur-3xl [animation:var(--animate-blob)]" />
-          <div className="absolute right-[-6rem] top-40 h-[540px] w-[540px] rounded-full bg-accent/35 blur-3xl [animation:var(--animate-blob)] [animation-delay:-6s]" />
-          <div className="absolute left-1/3 top-[30rem] h-[340px] w-[340px] rounded-full bg-primary-glow/40 blur-3xl [animation:var(--animate-blob)] [animation-delay:-12s]" />
-        </div>
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid opacity-30" />
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-noise opacity-40 mix-blend-overlay" />
+      <section className="relative isolate bg-mint">
+        {/* Subtle line-wave decoration, à la umobipay.com */}
+        <svg
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[420px] w-full opacity-40"
+          viewBox="0 0 1440 420"
+          fill="none"
+          preserveAspectRatio="none"
+        >
+          {Array.from({ length: 14 }).map((_, i) => (
+            <path
+              key={i}
+              d={`M0 ${180 + i * 8} C 360 ${120 + i * 10}, 1080 ${340 - i * 6}, 1440 ${200 + i * 8}`}
+              stroke="currentColor"
+              strokeWidth="1"
+              className="text-secondary/25"
+            />
+          ))}
+        </svg>
 
         <div className="relative mx-auto grid max-w-7xl gap-16 px-6 pb-20 pt-12 lg:grid-cols-[1.15fr_1fr] lg:items-center lg:pt-20">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-background/80 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-secondary shadow-soft backdrop-blur">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-              </span>
-              India's Fintech · BBPS Authorised
+            <span className="inline-flex items-center gap-2 rounded-full bg-card px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-secondary">
+              <span className="h-2 w-2 rounded-full bg-primary" />
+              Simple · Seamless · Secure
             </span>
-            <h1 className="mt-6 font-display text-[clamp(2.75rem,6.8vw,5.75rem)] font-extrabold leading-[0.95] tracking-tighter text-secondary">
-              Pay smart.<br />
-              Pay fast.<br />
-              <span className="text-gradient-brand">Pay anywhere.</span>
+            <h1 className="mt-6 font-display text-[clamp(2.75rem,6.8vw,5.75rem)] font-extrabold leading-[1.02] tracking-tighter text-primary">
+              Welcome to<br />
+              UMOBIPAY
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-foreground/70">
-              The all-in-one fintech built for India — recharge mobiles, settle bills, transfer money, and grow your retail business, from one beautifully simple dashboard.
+            <p className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 font-display text-xl font-bold text-primary sm:text-2xl">
+              <span>· Simple</span>
+              <span>· Seamless</span>
+              <span>· Secure</span>
+            </p>
+            <p className="mt-6 max-w-xl text-base leading-relaxed text-foreground/75">
+              Online payments made easy and fast — mobile & DTH recharge, DMT, utility bills and BBPS, all on one clean dashboard trusted by retailers across India.
             </p>
 
-            <div className="mt-9 flex flex-wrap items-center gap-4">
-              <Link
-                to="/services"
-                className="group relative inline-flex items-center gap-2 overflow-hidden rounded-full bg-primary px-8 py-4 text-sm font-semibold text-primary-foreground shadow-elegant transition-transform hover:-translate-y-0.5"
-              >
-                <span className="absolute inset-0 bg-gradient-to-r from-primary-glow via-primary to-accent opacity-0 transition-opacity group-hover:opacity-100" />
-                <span className="absolute inset-y-0 -left-24 w-16 rotate-12 bg-white/25 blur-md transition-transform duration-700 group-hover:translate-x-[280px]" />
-                <span className="relative">Get Started Free</span>
-                <ArrowRight size={16} className="relative transition-transform group-hover:translate-x-1" />
-              </Link>
-              <button className="group inline-flex items-center gap-3 text-sm font-semibold text-secondary">
-                <span className="grid h-12 w-12 place-items-center rounded-full border border-primary/25 bg-background shadow-soft transition-transform group-hover:scale-110">
-                  <Play size={14} className="ml-0.5 fill-primary text-primary" />
-                </span>
-                Watch 90-sec demo
-              </button>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm font-semibold text-secondary">
+                {["Online Payments", "Easy And Fast", "Safe And Secure"].map((t) => (
+                  <span key={t} className="inline-flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-accent" />
+                    {t}
+                  </span>
+                ))}
+              </div>
             </div>
 
-            <div className="mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-border pt-8">
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <Link
+                to="/services"
+                className="group inline-flex items-center gap-2 rounded-full bg-primary px-8 py-4 text-sm font-semibold text-primary-foreground shadow-elegant transition-transform hover:-translate-y-0.5"
+              >
+                Get Started here
+                <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+              </Link>
+              <Link
+                to="/services"
+                className="inline-flex items-center gap-2 rounded-full border border-secondary/25 px-8 py-4 text-sm font-semibold text-secondary hover:bg-card"
+              >
+                Our Services
+              </Link>
+            </div>
+
+            <div className="mt-12 grid max-w-lg grid-cols-3 gap-6 border-t border-secondary/10 pt-8">
               {[
                 { v: "50L+", l: "Retailers" },
                 { v: "₹1,200 Cr", l: "Processed" },
@@ -138,7 +157,6 @@ function Home() {
 
           {/* Phone showcase */}
           <div className="relative mx-auto w-full max-w-md">
-            <div aria-hidden className="absolute inset-0 -z-10 rounded-[3rem] bg-gradient-to-tr from-primary/30 via-mint to-secondary/30 blur-3xl" />
             <div className="relative">
               <img
                 src={phoneMock}
@@ -148,7 +166,7 @@ function Home() {
                 className="relative z-10 mx-auto w-full max-w-sm drop-shadow-2xl [animation:var(--animate-float)]"
               />
               {/* Floating card 1 */}
-              <div className="absolute -left-4 top-16 z-20 hidden rounded-2xl border border-border bg-background/90 p-4 shadow-2xl backdrop-blur sm:block">
+              <div className="absolute -left-4 top-16 z-20 hidden rounded-2xl border border-border bg-card p-4 shadow-soft sm:block">
                 <div className="flex items-center gap-3">
                   <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-primary-foreground">
                     <Zap size={18} />
@@ -160,7 +178,7 @@ function Home() {
                 </div>
               </div>
               {/* Floating card 2 */}
-              <div className="absolute -right-4 bottom-32 z-20 hidden rounded-2xl border border-border bg-background/90 p-4 shadow-2xl backdrop-blur sm:block">
+              <div className="absolute -right-4 bottom-32 z-20 hidden rounded-2xl border border-border bg-card p-4 shadow-soft sm:block">
                 <div className="flex items-center gap-3">
                   <span className="grid h-10 w-10 place-items-center rounded-xl bg-secondary text-secondary-foreground">
                     <Shield size={18} />
@@ -172,7 +190,7 @@ function Home() {
                 </div>
               </div>
               {/* Rating pill */}
-              <div className="absolute -bottom-2 left-1/2 z-20 -translate-x-1/2 rounded-full border border-border bg-background px-5 py-2 shadow-2xl">
+              <div className="absolute -bottom-2 left-1/2 z-20 -translate-x-1/2 rounded-full border border-border bg-card px-5 py-2 shadow-soft">
                 <div className="flex items-center gap-2 text-xs font-semibold">
                   <span className="flex text-primary">{[...Array(5)].map((_, i) => <Star key={i} size={12} className="fill-primary" />)}</span>
                   <span className="text-secondary">4.9 · 1.2L reviews</span>
