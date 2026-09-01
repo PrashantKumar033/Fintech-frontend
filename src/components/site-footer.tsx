@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Facebook, Twitter, Instagram, Linkedin, Mail, Phone, MapPin } from "lucide-react";
+import logo from "../assets/logo.png";
 
 export function SiteFooter() {
   return (
@@ -7,12 +8,9 @@ export function SiteFooter() {
       <div className="mx-auto max-w-7xl px-6 py-16">
         <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-4">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary font-display text-xl font-black">
-                U
-              </span>
-              <span className="font-display text-lg font-extrabold">UMOBIPAY</span>
-            </div>
+            <Link to="/" className="flex items-center">
+              <img src={logo} alt="UMOBIPAY logo" className="h-10 w-auto object-contain" />
+            </Link>
             <p className="mt-4 text-sm leading-relaxed text-secondary-foreground/70">
               Simple. Seamless. Secure. Powering everyday payments across India with BBPS-backed reliability.
             </p>
@@ -65,9 +63,9 @@ export function SiteFooter() {
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-secondary-foreground/10 pt-6 text-xs text-secondary-foreground/60 md:flex-row">
           <p>© {new Date().getFullYear()} UMOBIPAY. All rights reserved.</p>
           <div className="flex gap-6">
-            <a href="#" className="hover:text-primary">Privacy</a>
-            <a href="#" className="hover:text-primary">Terms</a>
-            <a href="#" className="hover:text-primary">Refund Policy</a>
+            <Link to="/privacy" className="hover:text-primary">Privacy</Link>
+            <Link to="/terms" className="hover:text-primary">Terms</Link>
+            <Link to="/refund-policy" className="hover:text-primary">Refund Policy</Link>
           </div>
         </div>
       </div>

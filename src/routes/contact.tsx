@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+                            import { useFormik } from "formik";
 import { Mail, Phone, MapPin, MessageSquare, Send } from "lucide-react";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
@@ -19,6 +20,24 @@ export const Route = createFileRoute("/contact")({
 
 function Contact() {
   const [sent, setSent] = useState(false);
+
+  const formik = useFormik({
+    initialValues: { name: "", email: "", phone: "", message: "" },
+    validate: (values) => {
+      const errors: Record<string, string> = {};
+      if (!values.name.trim()) errors.name = "Full name is required";
+      if (!values.email.trim()) errors.email = "Email is required";
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) errors.email = "Please enter a valid email";
+      if (!values.phone.trim()) errors.phone = "Phone number is required";
+      if (!values.message.trim()) errors.message = "Please add a short message";
+      return errors;
+    },
+    onSubmit: (values, { resetForm }) => {
+      setSent(true);
+      resetForm();
+    },
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <SiteNav />
@@ -37,7 +56,6 @@ function Contact() {
 
       <section className="mx-auto max-w-7xl px-6 py-20">
         <div className="grid gap-10 lg:grid-cols-5">
-          {/* LEFT — info cards */}
           <div className="space-y-5 lg:col-span-2">
             {[
               { icon: Phone, title: "Call us", value: "+91 98765 43210", note: "Mon–Sat · 9am–8pm IST" },
@@ -58,7 +76,6 @@ function Contact() {
             ))}
           </div>
 
-          {/* RIGHT — form */}
           <div className="relative overflow-hidden rounded-[2.5rem] bg-secondary p-8 text-secondary-foreground sm:p-12 lg:col-span-3">
             <img
               src={supportImg}
@@ -73,28 +90,58 @@ function Contact() {
               We usually respond within an hour during business hours.
             </p>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setSent(true);
-              }}
-              className="relative mt-8 space-y-5"
-            >
+            <form onSubmit={formik.handleSubmit} className="relative mt-8 space-y-5">
               <div className="grid gap-5 sm:grid-cols-2">
-                <Field label="Full name" placeholder="Priya Sharma" />
-                <Field label="Email" type="email" placeholder="you@company.com" />
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-secondary-foreground/70">Full name</label>
+                  <input
+                    name="name"
+                    placeholder="Priya Sharma"
+                    value={formik.values.name}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    className="mt-2 w-full rounded-2xl border border-secondary-foreground/15 bg-secondary-foreground/5 px-4 py-3 text-sm text-secondary-foreground placeholder:text-secondary-foreground/40 focus:border-primary focus:outline-none"
+                  />
+                  {formik.touched.name && formik.errors.name ? <p className="mt-1 text-xs text-red-200">{formik.errors.name}</p> : null}
+                </div>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-widest text-secondary-foreground/70">Email</label>
+                  <input
+                    name="email"
+                    type="email"
+                    placeholder="you@company.com"
+                    value={formik.values.email}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    className="mt-2 w-full rounded-2xl border border-secondary-foreground/15 bg-secondary-foreground/5 px-4 py-3 text-sm text-secondary-foreground placeholder:text-secondary-foreground/40 focus:border-primary focus:outline-none"
+                  />
+                  {formik.touched.email && formik.errors.email ? <p className="mt-1 text-xs text-red-200">{formik.errors.email}</p> : null}
+                </div>
               </div>
-              <Field label="Phone" placeholder="+91 …" />
               <div>
-                <label className="text-xs font-semibold uppercase tracking-widest text-secondary-foreground/70">
-                  Message
-                </label>
-                <textarea
-                  rows={4}
-                  required
-                  placeholder="Tell us how we can help…"
+                <label className="text-xs font-semibold uppercase tracking-widest text-secondary-foreground/70">Phone</label>
+                <input
+                  name="phone"
+                  placeholder="+91 …"
+                  value={formik.values.phone}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
                   className="mt-2 w-full rounded-2xl border border-secondary-foreground/15 bg-secondary-foreground/5 px-4 py-3 text-sm text-secondary-foreground placeholder:text-secondary-foreground/40 focus:border-primary focus:outline-none"
                 />
+                {formik.touched.phone && formik.errors.phone ? <p className="mt-1 text-xs text-red-200">{formik.errors.phone}</p> : null}
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-widest text-secondary-foreground/70">Message</label>
+                <textarea
+                  name="message"
+                  rows={4}
+                  placeholder="Tell us how we can help…"
+                  value={formik.values.message}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                  className="mt-2 w-full rounded-2xl border border-secondary-foreground/15 bg-secondary-foreground/5 px-4 py-3 text-sm text-secondary-foreground placeholder:text-secondary-foreground/40 focus:border-primary focus:outline-none"
+                />
+                {formik.touched.message && formik.errors.message ? <p className="mt-1 text-xs text-red-200">{formik.errors.message}</p> : null}
               </div>
               <button
                 type="submit"
@@ -108,21 +155,6 @@ function Contact() {
       </section>
 
       <SiteFooter />
-    </div>
-  );
-}
-
-function Field({ label, ...rest }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <div>
-      <label className="text-xs font-semibold uppercase tracking-widest text-secondary-foreground/70">
-        {label}
-      </label>
-      <input
-        {...rest}
-        required
-        className="mt-2 w-full rounded-2xl border border-secondary-foreground/15 bg-secondary-foreground/5 px-4 py-3 text-sm text-secondary-foreground placeholder:text-secondary-foreground/40 focus:border-primary focus:outline-none"
-      />
     </div>
   );
 }

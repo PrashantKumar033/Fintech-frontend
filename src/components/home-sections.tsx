@@ -110,7 +110,7 @@ export function TestimonialSlider({ avatars }: { avatars: string[] }) {
   const go = (d: number) => setI((p) => (p + d + testimonials.length) % testimonials.length);
 
   useEffect(() => {
-    const t = setInterval(() => setI((p) => (p + 1) % testimonials.length), 6000);
+    const t = setInterval(() => setI((p) => (p + 1) % testimonials.length), 8000);
     return () => clearInterval(t);
   }, []);
 

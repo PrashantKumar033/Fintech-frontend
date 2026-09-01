@@ -1,5 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Smartphone, Send, Zap, Tv, CreditCard, Wifi, Droplet, Flame, ArrowRight, CheckCircle2 } from "lucide-react";
+import {
+  Smartphone,
+  Send,
+  Zap,
+  Tv,
+  CreditCard,
+  Wifi,
+  Droplet,
+  Flame,
+  ArrowRight,
+  CheckCircle2,
+  Banknote,
+  Landmark,
+  BadgeCheck,
+  ReceiptText,
+  Store,
+  ShieldCheck,
+  ScanLine,
+} from "lucide-react";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -7,46 +25,71 @@ export const Route = createFileRoute("/services")({
   head: () => ({
     meta: [
       { title: "Our Services — UMOBIPAY | Recharge, DMT, BBPS & Bills" },
-      { name: "description", content: "Mobile & DTH recharge, DMT, utility bill collection and full BBPS services under one UMOBIPAY dashboard." },
+      { name: "description", content: "Mobile & DTH recharge, domestic money transfer, utility bill collection, BBPS, insurance payments and merchant services under one UMOBIPAY dashboard." },
       { property: "og:title", content: "UMOBIPAY Services" },
-      { property: "og:description", content: "Recharge, DMT, bills and BBPS — one platform, every service." },
+      { property: "og:description", content: "Recharge, money transfer, bills, insurance and merchant payments — one platform, every service." },
     ],
   }),
   component: Services,
 });
 
-const primary = [
+const featured = [
   {
     icon: Smartphone,
     title: "Mobile & DTH Recharge",
-    desc: "Instant recharges for every prepaid mobile and DTH operator in India. Real-time confirmation, no delays.",
+    desc: "Instant recharges for prepaid mobile, postpaid mobile and DTH services with real-time confirmation and auto-retry support.",
     tags: ["All operators", "Instant", "Auto-retry"],
   },
   {
     icon: Send,
-    title: "DMT — Domestic Money Transfer",
-    desc: "Send money to any bank account, anywhere in India, 24×7. Backed by RBI-licensed partners.",
+    title: "Domestic Money Transfer",
+    desc: "Send money to bank accounts all across India with secure transfer options and fast settlement support.",
     tags: ["IMPS", "NEFT", "24×7"],
   },
   {
     icon: Zap,
-    title: "Utility Bill Collection",
-    desc: "Collect payments for electricity, water, gas, broadband — through one unified UMOBIPAY interface.",
+    title: "Utility Bill Payments",
+    desc: "Collect and process electricity, water, gas and broadband bills through one unified interface.",
     tags: ["Electricity", "Water", "Gas"],
   },
   {
-    icon: Tv,
-    title: "BBPS Services",
-    desc: "Full Bharat Bill Payment System integration. Compliant, unified, and covering 500+ billers.",
-    tags: ["BBPS certified", "500+ billers", "Unified"],
+    icon: ReceiptText,
+    title: "BBPS & Billers",
+    desc: "500+ billers integrated with Bharat Bill Payment System support for seamless customer coverage.",
+    tags: ["BBPS", "500+ billers", "Unified"],
+  },
+  {
+    icon: Banknote,
+    title: "Credit Card & Loan EMI",
+    desc: "Support customers with card bill payments and EMI commitments without adding operational friction.",
+    tags: ["Cards", "EMI", "Easy pay"],
+  },
+  {
+    icon: Landmark,
+    title: "Insurance Premiums",
+    desc: "Help customers stay active on life, health and vehicle insurance renewals with convenient payments.",
+    tags: ["Insurance", "Renewal", "Fast"],
   },
 ];
 
-const more = [
-  { icon: CreditCard, title: "Credit Card Bill" },
+const categories = [
+  { icon: CreditCard, title: "Credit Card Bills" },
   { icon: Wifi, title: "Broadband & Landline" },
-  { icon: Droplet, title: "Water Bill" },
+  { icon: Droplet, title: "Water Bills" },
   { icon: Flame, title: "Gas — LPG & PNG" },
+  { icon: ScanLine, title: "FASTag Recharge" },
+  { icon: Store, title: "Merchant Payments" },
+  { icon: BadgeCheck, title: "Education Fees" },
+  { icon: ShieldCheck, title: "Secure Transactions" },
+];
+
+const benefits = [
+  "500+ billers on-boarded",
+  "Instant confirmation receipts",
+  "Refund support for failed transactions",
+  "Daily commission settlement",
+  "High uptime for peak demand",
+  "Multi-channel support for agents",
 ];
 
 function Services() {
@@ -61,29 +104,29 @@ function Services() {
             One platform. <span className="text-primary">Every payment.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-foreground/70">
-            From a small recharge to a large utility payment — UMOBIPAY handles it, end to end.
+            From a quick recharge to a large utility payment — UMOBIPAY helps you serve every customer need with confidence.
           </p>
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-6 py-24">
-        <div className="grid gap-6 md:grid-cols-2">
-          {primary.map((s, i) => (
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {featured.map((s, i) => (
             <div
               key={s.title}
-              className={`relative overflow-hidden rounded-[2rem] p-10 ${i % 2 === 0 ? "bg-secondary text-secondary-foreground" : "bg-card border border-border"}`}
+              className={`relative overflow-hidden rounded-[2rem] p-8 ${i % 2 === 0 ? "bg-secondary text-secondary-foreground" : "bg-card border border-border"}`}
             >
               <span
                 className={`grid h-14 w-14 place-items-center rounded-2xl ${
                   i % 2 === 0 ? "bg-primary text-primary-foreground" : "bg-mint text-secondary"
                 }`}
               >
-                <s.icon size={26} />
+                <s.icon size={24} />
               </span>
               <h3 className={`mt-6 font-display text-2xl font-bold ${i % 2 === 0 ? "" : "text-secondary"}`}>
                 {s.title}
               </h3>
-              <p className={`mt-3 max-w-md text-sm ${i % 2 === 0 ? "text-secondary-foreground/80" : "text-foreground/70"}`}>
+              <p className={`mt-3 min-h-20 text-sm leading-7 ${i % 2 === 0 ? "text-secondary-foreground/80" : "text-foreground/70"}`}>
                 {s.desc}
               </p>
               <div className="mt-6 flex flex-wrap gap-2">
@@ -110,29 +153,29 @@ function Services() {
         </div>
       </section>
 
-      {/* MORE BILL CATEGORIES */}
       <section className="mx-auto max-w-7xl px-6 pb-24">
-        <div className="rounded-[2.5rem] border border-border p-10 sm:p-16">
-          <div className="grid gap-10 md:grid-cols-2 md:items-center">
+        <div className="rounded-[2.5rem] border border-border bg-gradient-to-br from-card via-background to-mint/40 p-10 sm:p-16">
+          <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
             <div>
-              <span className="text-xs font-bold uppercase tracking-widest text-primary">Bill Categories</span>
+              <span className="text-xs font-bold uppercase tracking-widest text-primary">Service Coverage</span>
               <h2 className="mt-3 font-display text-4xl font-extrabold text-secondary">
-                Cover every bill your customer walks in with.
+                Cover every bill and payment your customer walks in with.
               </h2>
+              <p className="mt-4 max-w-xl text-base leading-8 text-foreground/75">
+                From everyday recharges to premium services, the UMOBIPAY stack gives retailers and agents a single, reliable place to serve more customers.
+              </p>
               <ul className="mt-6 space-y-3 text-sm text-foreground/80">
-                {["500+ billers on-boarded", "Live receipt on completion", "Refund automation for failures", "Daily commission settlement"].map(
-                  (b) => (
-                    <li key={b} className="flex items-center gap-2">
-                      <CheckCircle2 size={16} className="text-primary" /> {b}
-                    </li>
-                  ),
-                )}
+                {benefits.map((b) => (
+                  <li key={b} className="flex items-center gap-2">
+                    <CheckCircle2 size={16} className="text-primary" /> {b}
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {more.map((m) => (
-                <div key={m.title} className="rounded-2xl bg-mint p-6 text-center">
-                  <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-background text-primary">
+              {categories.map((m) => (
+                <div key={m.title} className="rounded-2xl bg-background/90 p-6 text-center shadow-sm ring-1 ring-border/60">
+                  <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-mint text-primary">
                     <m.icon size={22} />
                   </span>
                   <p className="mt-3 font-semibold text-secondary">{m.title}</p>
