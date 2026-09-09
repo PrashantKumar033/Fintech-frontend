@@ -1,8 +1,23 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { BadgeCheck, Camera, FileCheck2, FileUp, Fingerprint, RefreshCw } from "lucide-react";
-import { BusinessPage, ServiceNotice } from "@/components/business-page";
+import {
+  BadgeCheck,
+  Camera,
+  FileCheck2,
+  FileUp,
+  Fingerprint,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import { ServiceNotice } from "@/components/business-page";
+import { RoleAwareAccountPage } from "@/components/role-aware-account-page";
 import { ApiError, getSession } from "@/lib/auth-api";
+import {
+  credentialsPending,
+  isManagementRole,
+  managementBasePath,
+  signedInHome,
+} from "@/lib/role-hierarchy";
 import {
   complianceApi,
   complianceMessage,
@@ -10,7 +25,7 @@ import {
   type KycProfile,
 } from "@/lib/compliance-api";
 
-export const Route = createFileRoute("/kyc")({
+export const Route = createFileRoute("/retailer/kyc/")({
   head: () => ({ meta: [{ title: "KYC Verification — UMOBIPAY" }] }),
   component: KycPage,
 });
@@ -49,8 +64,8 @@ function KycPage() {
       navigate({ to: "/login" });
       return;
     }
-    if (!value.identity.passwordChangedAt || !value.identity.mpinChangedAt) {
-      navigate({ to: "/dashboard" });
+    if (credentialsPending(value.identity)) {
+      window.location.replace(signedInHome(value));
       return;
     }
     setSession(value);
@@ -94,9 +109,9 @@ function KycPage() {
     ...(!bundle?.video ? ["Verification video"] : []),
   ];
   return (
-    <BusinessPage
+    <RoleAwareAccountPage
       identity={session.identity}
-      active="kyc"
+      section="kyc"
       eyebrow="Identity & compliance"
       title="KYC verification"
       description="Submit business documents and track approval status. KYC is the first prerequisite for AEPS."
@@ -176,6 +191,10 @@ function KycPage() {
                         label={d.label}
                         needNumber={d.number}
                         done={uploaded.has(d.type)}
+                        existingNumber={
+                          bundle?.documents.find((item) => item.documentType === d.type)
+                            ?.documentNumber || ""
+                        }
                         disabled={!!busy}
                         upload={(file, number) =>
                           run(
@@ -190,6 +209,19 @@ function KycPage() {
                             `${d.label} uploaded.`,
                           )
                         }
+                        replace={(file, number) =>
+                          run(
+                            `replace-${d.type}`,
+                            () =>
+                              complianceApi.updateDocument(
+                                session.accessToken,
+                                d.type,
+                                number,
+                                file,
+                              ),
+                            `${d.label} replaced and queued for verification.`,
+                          )
+                        }
                       />
                     ))}
                   </div>
@@ -200,8 +232,13 @@ function KycPage() {
                   upload={(number, front, back) =>
                     run(
                       "aadhaar",
-                      () => complianceApi.uploadAadhaar(session.accessToken, number, front, back),
-                      "Aadhaar uploaded.",
+                      () =>
+                        uploaded.has("AADHAAR_FRONT") || uploaded.has("AADHAAR_BACK")
+                          ? complianceApi.updateAadhaar(session.accessToken, number, front, back)
+                          : complianceApi.uploadAadhaar(session.accessToken, number, front, back),
+                      uploaded.has("AADHAAR_FRONT") || uploaded.has("AADHAAR_BACK")
+                        ? "Aadhaar images replaced and queued for verification."
+                        : "Aadhaar uploaded.",
                     )
                   }
                 />
@@ -253,62 +290,130 @@ function KycPage() {
                   Your identity prerequisite is ready. Continue to the independent AEPS onboarding
                   service.
                 </p>
-                <Link
-                  to="/aeps"
-                  className="mt-5 inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-bold"
-                >
-                  Continue to AEPS
-                </Link>
+                {isManagementRole(session.identity.role) ? (
+                  <Link
+                    to={managementBasePath(session.identity.role) as never}
+                    className="mt-5 inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-bold"
+                  >
+                    Return to dashboard
+                  </Link>
+                ) : (
+                  <Link
+                    to="/retailer/aeps"
+                    className="mt-5 inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-bold"
+                  >
+                    Continue to AEPS
+                  </Link>
+                )}
               </section>
             )}
           </section>
           <aside>
-            <div className="sticky top-6 rounded-2xl border border-border bg-card p-6 shadow-soft">
-              <h3 className="font-extrabold text-secondary">Application checklist</h3>
-              <div className="mt-5 space-y-3">
-                {[
-                  ...docs.map((d) => [d.label, uploaded.has(d.type)] as const),
-                  [
-                    "Aadhaar front & back",
-                    uploaded.has("AADHAAR_FRONT") && uploaded.has("AADHAAR_BACK"),
-                  ] as const,
-                  ["Verification video", !!bundle?.video] as const,
-                ].map(([label, done]) => (
-                  <div key={label} className="flex items-center gap-3 text-sm">
-                    <span
-                      className={`grid h-7 w-7 place-items-center rounded-full ${done ? "bg-emerald-50 text-emerald-600" : "bg-muted text-muted-foreground"}`}
-                    >
-                      {done ? <FileCheck2 size={14} /> : <FileUp size={14} />}
-                    </span>
-                    <span
-                      className={done ? "font-semibold text-secondary" : "text-muted-foreground"}
-                    >
-                      {label}
-                    </span>
+            <div className="sticky top-6 space-y-4">
+              {editable && (bundle?.documents.length || bundle?.video) && (
+                <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
+                  <h3 className="font-extrabold text-secondary">Uploaded files</h3>
+                  <div className="mt-4 space-y-2">
+                    {bundle.documents.map((document) => (
+                      <div
+                        key={document.id}
+                        className="flex items-center gap-2 rounded-xl bg-muted p-3 text-xs"
+                      >
+                        <FileCheck2 size={15} className="text-emerald-600" />
+                        <span className="min-w-0 flex-1 truncate font-semibold">
+                          {document.documentType.replaceAll("_", " ")}
+                        </span>
+                        <button
+                          disabled={!!busy}
+                          aria-label={`Delete ${document.documentType}`}
+                          onClick={() =>
+                            run(
+                              `delete-${document.id}`,
+                              () => complianceApi.deleteDocument(session.accessToken, document.id),
+                              "Document removed. You can upload a replacement.",
+                            )
+                          }
+                          className="text-red-600 disabled:opacity-40"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    ))}
+                    {bundle.video && (
+                      <div className="flex items-center gap-2 rounded-xl bg-muted p-3 text-xs">
+                        <Camera size={15} className="text-emerald-600" />
+                        <span className="flex-1 font-semibold">Verification video</span>
+                        <button
+                          disabled={!!busy}
+                          aria-label="Delete verification video"
+                          onClick={() =>
+                            run(
+                              "delete-video",
+                              () =>
+                                complianceApi.deleteVideo(session.accessToken, bundle.video!.id),
+                              "Verification video removed.",
+                            )
+                          }
+                          className="text-red-600 disabled:opacity-40"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ))}
+                </div>
+              )}
+              <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
+                <h3 className="font-extrabold text-secondary">Application checklist</h3>
+                <div className="mt-5 space-y-3">
+                  {[
+                    ...docs.map((d) => [d.label, uploaded.has(d.type)] as const),
+                    [
+                      "Aadhaar front & back",
+                      uploaded.has("AADHAAR_FRONT") && uploaded.has("AADHAAR_BACK"),
+                    ] as const,
+                    ["Verification video", !!bundle?.video] as const,
+                  ].map(([label, done]) => (
+                    <div key={label} className="flex items-center gap-3 text-sm">
+                      <span
+                        className={`grid h-7 w-7 place-items-center rounded-full ${done ? "bg-emerald-50 text-emerald-600" : "bg-muted text-muted-foreground"}`}
+                      >
+                        {done ? <FileCheck2 size={14} /> : <FileUp size={14} />}
+                      </span>
+                      <span
+                        className={done ? "font-semibold text-secondary" : "text-muted-foreground"}
+                      >
+                        {label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </aside>
         </div>
       )}
-    </BusinessPage>
+    </RoleAwareAccountPage>
   );
 }
 function DocumentCard({
   label,
   needNumber,
   done,
+  existingNumber,
   disabled,
   upload,
+  replace,
 }: {
   label: string;
   needNumber: boolean;
   done: boolean;
+  existingNumber: string;
   disabled: boolean;
   upload: (file: File, number: string) => void;
+  replace: (file: File, number: string) => void;
 }) {
-  const [number, setNumber] = useState("");
+  const [number, setNumber] = useState(existingNumber);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const submit = () => {
@@ -321,7 +426,8 @@ function DocumentCard({
     if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type))
       return setError("Only PDF, JPG, JPEG and PNG files are allowed.");
     if (file.size > 10 * 1024 * 1024) return setError("Document must not exceed 10 MB.");
-    upload(file, value);
+    if (done) replace(file, value);
+    else upload(file, value);
   };
   return (
     <div className="rounded-xl border border-border bg-background p-4">
@@ -357,11 +463,11 @@ function DocumentCard({
       )}
       <button
         type="button"
-        disabled={disabled || done}
+        disabled={disabled}
         onClick={submit}
         className="mt-3 w-full rounded-lg bg-secondary px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
       >
-        {done ? "Uploaded" : disabled ? "Uploading…" : `Upload ${label}`}
+        {disabled ? "Uploading…" : done ? `Replace ${label}` : `Upload ${label}`}
       </button>
     </div>
   );
@@ -419,7 +525,7 @@ function VideoCard({
       )}
       <button
         type="button"
-        disabled={disabled || done}
+        disabled={disabled}
         onClick={submit}
         className="mt-4 rounded-xl bg-secondary px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"
       >
@@ -500,11 +606,11 @@ function AadhaarCard({
         </p>
       )}
       <button
-        disabled={disabled || done}
+        disabled={disabled}
         onClick={submit}
         className="mt-5 rounded-xl bg-secondary px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40"
       >
-        {done ? "Aadhaar uploaded" : disabled ? "Uploading…" : "Upload Aadhaar"}
+        {disabled ? "Uploading…" : done ? "Replace Aadhaar images" : "Upload Aadhaar"}
       </button>
     </section>
   );

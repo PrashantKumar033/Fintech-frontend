@@ -4,8 +4,17 @@ import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { authApi, ApiError } from "@/lib/auth-api";
 import logo from "@/assets/logo.png";
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, ShieldCheck, User, MessageSquare, KeyRound } from "lucide-react";
-
+import {
+  ArrowLeft,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Loader2,
+  ShieldCheck,
+  User,
+  MessageSquare,
+  KeyRound,
+} from "lucide-react";
 
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({ meta: [{ title: "Forgot Password — UMOBIPAY" }] }),
@@ -211,52 +220,52 @@ function ForgotPasswordPage() {
 
               {step === 3 && (
                 <>
-                    <h2 className="text-xl font-extrabold text-secondary">Set new password</h2>
-                    <div>
-                        <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                            New Password
-                        </label>
-                        <div className="relative">
-                            <input
-                            type={showNewPassword ? "text" : "password"}
-                            className={`${inputClass} pr-11`}
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
-                            minLength={8}
-                            required
-                            />
-                            <button
-                            type="button"
-                            onClick={() => setShowNewPassword(!showNewPassword)}
-                            aria-label="Toggle password visibility"
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                            >
-                            {showNewPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                            </button>
-                        </div>
+                  <h2 className="text-xl font-extrabold text-secondary">Set new password</h2>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? "text" : "password"}
+                        className={`${inputClass} pr-11`}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        minLength={8}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        aria-label="Toggle password visibility"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                      >
+                        {showNewPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
                     </div>
-                    <div>
-                        <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                            Confirm New Password
-                        </label>
-                        <div className="relative">
-                            <input
-                            type={showConfirmPassword ? "text" : "password"}
-                            className={`${inputClass} pr-11`}
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            required
-                            />
-                            <button
-                            type="button"
-                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            aria-label="Toggle password visibility"
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                            >
-                            {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                            </button>
-                        </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                      Confirm New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        className={`${inputClass} pr-11`}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        aria-label="Toggle password visibility"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                      >
+                        {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
                     </div>
+                  </div>
                 </>
               )}
 

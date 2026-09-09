@@ -9,17 +9,52 @@ import {
   LayoutDashboard,
   Lock,
   LogOut,
+  Menu,
   Receipt,
   Settings,
   ShieldCheck,
   Users,
   Wallet,
+  X,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { logout, type Identity } from "@/lib/auth-api";
 import { useServiceReadiness } from "@/lib/service-readiness";
+import { credentialsPending } from "@/lib/role-hierarchy";
+import { SectionTabs, type SectionTab } from "@/components/section-tabs";
+
+const retailerSectionTabs: Partial<Record<"aeps"|"transactions"|"wallet"|"reports"|"settings",SectionTab[]>> = {
+  aeps: [
+    { label: "AEPS Services", href: "/retailer/aeps" },
+    { label: "Cash Withdrawal", href: "/retailer/aeps?service=cash-withdrawal" },
+    { label: "Balance Enquiry", href: "/retailer/aeps?service=balance-enquiry" },
+    { label: "Mini Statement", href: "/retailer/aeps?service=mini-statement" },
+    { label: "Transaction Status", href: "/retailer/transactions" },
+  ],
+  transactions: [
+    { label: "All Transactions", href: "/retailer/transactions" },
+    { label: "Successful", href: "/retailer/transactions?status=SUCCESS" },
+    { label: "Pending", href: "/retailer/transactions?status=PENDING" },
+    { label: "Failed", href: "/retailer/transactions?status=FAILED" },
+  ],
+  wallet: [
+    { label: "Wallet Balance", href: "/retailer/wallet" },
+    { label: "Transfer Fund", href: "/retailer/wallet/transfer" },
+  ],
+  reports: [
+    { label: "Account Activity", href: "/activity" },
+    { label: "AEPS Report", href: "/activity?view=aeps" },
+    { label: "Wallet Report", href: "/activity?view=wallet" },
+    { label: "Commission Report", href: "/activity?view=commission" },
+  ],
+  settings: [
+    { label: "Personal Details", href: "/retailer/settings?tab=profile" },
+    { label: "Login & Security", href: "/retailer/settings?tab=security" },
+    { label: "Preferences", href: "/retailer/settings?tab=preferences" },
+  ],
+};
 
 export function BusinessPage({
   identity,
@@ -27,63 +62,115 @@ export function BusinessPage({
   eyebrow,
   title,
   description,
+  showPageHeader = true,
+  onSettingsClick,
   children,
 }: {
   identity: Identity;
-  active: "bank" | "kyc" | "aeps";
-  eyebrow: string;
-  title: string;
-  description: string;
+  active:
+    | "dashboard"
+    | "bank"
+    | "kyc"
+    | "aeps"
+    | "wallet"
+    | "transactions"
+    | "reports"
+    | "settings";
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+  showPageHeader?: boolean;
+  onSettingsClick?: () => void;
   children: ReactNode;
 }) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const securityLocked = credentialsPending(identity);
   const readiness = useServiceReadiness();
-  const nav: Array<{ key: string; label: string; to?: "/dashboard" | "/kyc" | "/bank-accounts" | "/aeps"; icon: LucideIcon; locked: boolean; status?: string }> = [
+  useEffect(() => {
+    if (securityLocked && active !== "settings") window.location.replace("/retailer/settings");
+  }, [active, securityLocked]);
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileMenuOpen]);
+  const nav: Array<{
+    key: string;
+    label: string;
+    to?:
+      | "/retailer/dashboard"
+      | "/retailer/kyc"
+      | "/retailer/bank"
+      | "/retailer/aeps"
+      | "/retailer/wallet"
+      | "/retailer/transactions"
+      | "/retailer/settings"
+      | "/activity";
+    icon: LucideIcon;
+    locked: boolean;
+    status?: string;
+  }> = [
     {
       key: "dashboard",
       label: "Dashboard",
-      to: "/dashboard",
+      to: "/retailer/dashboard",
       icon: LayoutDashboard,
       locked: false,
     },
     {
       key: "kyc",
       label: "KYC verification",
-      to: "/kyc",
+      to: "/retailer/kyc",
       icon: ShieldCheck,
       locked: false,
       status: readiness.data?.kycStatus?.replaceAll("_", " "),
     },
     {
-      key: "bank",
-      label: "Bank accounts",
-      to: "/bank-accounts",
-      icon: Landmark,
-      locked: false,
-      status: readiness.data?.hasVerifiedBank ? "VERIFIED" : undefined,
+      key: "bank",label: "Bank accounts",to: "/retailer/bank",icon: Landmark,
+      locked: false,status: readiness.data?.hasVerifiedBank ? "VERIFIED" : undefined,
     },
     {
       key: "aeps",
       label: "AEPS",
-      to: "/aeps",
+      to: "/retailer/aeps",
       icon: Fingerprint,
       locked: !readiness.data?.aepsUnlocked,
     },
     { key: "members", label: "Member management", icon: Users, locked: true },
-    { key: "wallet", label: "Wallet & settlement", icon: Wallet, locked: true },
-    { key: "transactions", label: "Transactions", icon: Receipt, locked: true },
-    { key: "reports", label: "Reports", icon: FileBarChart, locked: true },
+    { key: "wallet", label: "Wallet & transfer", to: "/retailer/wallet", icon: Wallet, locked: false },
+    { key: "transactions", label: "Transactions", to: "/retailer/transactions", icon: Receipt, locked: false },
+    { key: "reports", label: "Account activity", to: "/activity", icon: FileBarChart, locked: false },
     { key: "commission", label: "Commission", icon: CircleDollarSign, locked: true },
-    { key: "settings", label: "Settings", to: "/dashboard", icon: Settings, locked: false },
+    { key: "settings", label: "Settings", to: "/retailer/settings", icon: Settings, locked: false },
   ];
   async function signOut() {
+    setMobileMenuOpen(false);
     await logout();
     window.location.assign("/login");
   }
   return (
     <div className="min-h-screen bg-[#f5f8f8] text-foreground">
       <header className="sticky top-0 z-40 border-b border-border/70 bg-card/95 backdrop-blur-xl">
-        <div className="flex h-16 items-center px-5 lg:px-6">
-          <Link to="/dashboard">
+        <div className="flex h-16 items-center gap-3 px-4 lg:px-6">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-background text-secondary lg:hidden"
+            aria-label="Open navigation menu"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="retailer-navigation"
+          >
+            <Menu size={19} />
+          </button>
+          <Link to="/retailer/dashboard">
             <img src={logo} className="h-9" alt="UMOBIPAY" />
           </Link>
           <div className="ml-auto flex items-center gap-2">
@@ -107,7 +194,29 @@ export function BusinessPage({
         </div>
       </header>
       <div className="flex">
-        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-72 shrink-0 flex-col border-r border-border bg-card p-4 lg:flex">
+        {mobileMenuOpen && (
+          <button
+            type="button"
+            aria-label="Close navigation menu"
+            onClick={() => setMobileMenuOpen(false)}
+            className="fixed inset-0 z-40 bg-secondary/45 backdrop-blur-[2px] lg:hidden"
+          />
+        )}
+        <aside
+          id="retailer-navigation"
+          className={`fixed inset-y-0 left-0 z-50 flex w-[min(18rem,86vw)] shrink-0 flex-col border-r border-border bg-card p-4 shadow-2xl transition-transform duration-200 lg:sticky lg:top-16 lg:z-20 lg:h-[calc(100vh-4rem)] lg:w-72 lg:translate-x-0 lg:shadow-none ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
+        >
+          <div className="mb-4 flex items-center justify-between px-1 lg:hidden">
+            <img src={logo} className="h-8" alt="UMOBIPAY" />
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="grid h-9 w-9 place-items-center rounded-xl border border-border text-secondary"
+              aria-label="Close navigation menu"
+            >
+              <X size={18} />
+            </button>
+          </div>
           <div className="mb-5 rounded-2xl bg-secondary p-4 text-white">
             <div className="flex items-center gap-3">
               <span className="grid h-11 w-11 place-items-center rounded-xl bg-white/10 text-lg font-extrabold">
@@ -123,14 +232,29 @@ export function BusinessPage({
             </div>
           </div>
           <nav className="space-y-1 overflow-y-auto">
-          {nav.map(({ key, label, icon: Icon, locked, status, to }) =>
-              locked ? (
+            {nav.map(({ key, label, icon: Icon, locked, status, to }) => {
+              const itemLocked = (securityLocked && key !== "settings") || locked;
+              return (
+              key === "settings" && onSettingsClick ? (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    onSettingsClick();
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active === key ? "bg-primary text-white shadow-sm" : "text-secondary hover:bg-mint"}`}
+                >
+                  <Icon size={17} />
+                  <span>{label}</span>
+                </button>
+              ) : itemLocked ? (
                 <div
                   key={key}
                   title={
                     key === "aeps"
                       ? "KYC approval and verified bank account required"
-                      : "Coming soon"
+                      : securityLocked ? "Change temporary password and MPIN in Settings to unlock" : "Coming soon"
                   }
                   className="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-muted-foreground/55"
                 >
@@ -141,7 +265,8 @@ export function BusinessPage({
               ) : (
                 <Link
                   key={key}
-                to={to!}
+                  to={to!}
+                  onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active === key ? "bg-primary text-white shadow-sm" : "text-secondary hover:bg-mint"}`}
                 >
                   <Icon size={17} />
@@ -152,8 +277,8 @@ export function BusinessPage({
                     </span>
                   )}
                 </Link>
-              ),
-            )}
+              ));
+            })}
           </nav>
           <button
             onClick={signOut}
@@ -164,23 +289,26 @@ export function BusinessPage({
         </aside>
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
           <div className="mx-auto max-w-[1500px]">
+            {showPageHeader && (
             <div className="mb-7">
               <div className="mb-4 flex gap-2 overflow-x-auto lg:hidden">
                 <Link
-                  to="/kyc"
+                  to="/retailer/kyc"
                   className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "kyc" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
                 >
                   KYC
                 </Link>
                 <Link
-                  to="/bank-accounts"
+                  to="/retailer/bank"
                   className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "bank" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
                 >
                   Bank Accounts
                 </Link>
+                <Link to="/retailer/wallet" className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "wallet" ? "bg-secondary text-white" : "bg-card text-secondary"}`}>Wallet</Link>
+                <Link to="/retailer/transactions" className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "transactions" ? "bg-secondary text-white" : "bg-card text-secondary"}`}>Transactions</Link>
                 {readiness.data?.aepsUnlocked ? (
                   <Link
-                    to="/aeps"
+                    to="/retailer/aeps"
                     className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "aeps" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
                   >
                     AEPS
@@ -197,6 +325,8 @@ export function BusinessPage({
               <h1 className="mt-1 text-3xl font-extrabold text-secondary">{title}</h1>
               <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
             </div>
+            )}
+            {showPageHeader && <SectionTabs tabs={retailerSectionTabs[active as keyof typeof retailerSectionTabs] || []} />}
             {children}
           </div>
         </main>

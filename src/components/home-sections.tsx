@@ -26,7 +26,10 @@ export function FaqSection() {
 
   return (
     <section id="faq" className="relative mx-auto max-w-7xl px-6 py-28">
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-10 -z-10 mx-auto h-72 max-w-3xl rounded-full bg-primary/10 blur-3xl" />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-10 -z-10 mx-auto h-72 max-w-3xl rounded-full bg-primary/10 blur-3xl"
+      />
       <Reveal className="mx-auto max-w-2xl text-center">
         <span className="text-xs font-bold uppercase tracking-[0.3em] text-primary">FAQ's</span>
         <h2 className="mt-3 font-display text-4xl font-extrabold tracking-tighter text-secondary sm:text-5xl">
@@ -121,7 +124,9 @@ export function TestimonialSlider({ avatars }: { avatars: string[] }) {
       <div className="relative mx-auto max-w-5xl px-6">
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
-            <span className="text-xs font-bold uppercase tracking-[0.3em] text-primary">Testimonial</span>
+            <span className="text-xs font-bold uppercase tracking-[0.3em] text-primary">
+              Testimonial
+            </span>
             <h2 className="mt-3 font-display text-4xl font-extrabold tracking-tighter sm:text-5xl">
               What our clients say
             </h2>
@@ -146,7 +151,10 @@ export function TestimonialSlider({ avatars }: { avatars: string[] }) {
 
         <SpotlightCard className="mt-10 rounded-[2.5rem] border border-secondary-foreground/10 bg-secondary-foreground/5 p-10 backdrop-blur sm:p-14">
           <Quote size={40} className="text-primary" />
-          <p key={t.name} className="mt-6 font-display text-2xl leading-snug tracking-tight sm:text-3xl [animation:var(--animate-float)_0s_1]">
+          <p
+            key={t.name}
+            className="mt-6 font-display text-2xl leading-snug tracking-tight sm:text-3xl [animation:var(--animate-float)_0s_1]"
+          >
             “{t.quote}”
           </p>
           <div className="mt-10 flex items-center gap-4">

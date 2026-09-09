@@ -1,0 +1,6 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { Activity, Bot, Cable, List, RefreshCw, ToggleLeft } from "lucide-react";
+import { AdminLayout } from "@/components/admin/admin-layout";
+import { AdminFeatureGrid } from "@/components/admin/admin-feature-grid";
+export const Route = createFileRoute("/admin/api-settings/")({ component: ApiSettings });
+function ApiSettings() { return <AdminLayout active="api" eyebrow="Integrations" title="API settings" description="Provider configuration, balances and routing controls are grouped in a dedicated restricted module."><AdminFeatureGrid features={[{title:"Provider list",description:"View configured payment and banking API providers.",icon:List},{title:"API balances",description:"Monitor provider balances and availability.",icon:Activity},{title:"Automatic switching",description:"Control provider failover and priority routing.",icon:RefreshCw},{title:"Automation",description:"Configure automated provider rules and thresholds.",icon:Bot},{title:"Add integration",description:"Register a new provider integration securely.",icon:Cable},{title:"System switches",description:"Enable or disable provider routes by service.",icon:ToggleLeft}]} /></AdminLayout>; }

@@ -15,6 +15,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { ApiError, getSession } from "@/lib/auth-api";
+import { credentialsPending, signedInHome } from "@/lib/role-hierarchy";
 import {
   aepsApi,
   capturePid,
@@ -32,7 +33,7 @@ import {
 import { BusinessPage } from "@/components/business-page";
 import { useServiceReadiness } from "@/lib/service-readiness";
 
-export const Route = createFileRoute("/aeps")({
+export const Route = createFileRoute("/retailer/aeps/")({
   head: () => ({ meta: [{ title: "VimoPay AEPS — UMOBIPAY" }] }),
   component: AepsPage,
 });
@@ -74,11 +75,15 @@ function AepsPage() {
       navigate({ to: "/login" });
       return;
     }
+    if (credentialsPending(current.identity)) {
+      window.location.replace(signedInHome(current));
+      return;
+    }
     setSession(current);
     void refresh();
   }, [navigate, refresh]);
   useEffect(() => {
-    if (readiness.isSuccess && !readiness.data.aepsUnlocked) navigate({ to: "/dashboard" });
+    if (readiness.isSuccess && !readiness.data.aepsUnlocked) navigate({ to: "/retailer/dashboard" });
   }, [navigate, readiness.data, readiness.isSuccess]);
   if (!session) return null;
   return (
@@ -768,6 +773,19 @@ function TransactionForm({
   };
   async function submit(e: FormEvent) {
     e.preventDefault();
+    const amount = Number(form.amount);
+    if (needsAmount && (!Number.isFinite(amount) || amount < 100 || amount > 10_000)) {
+      setError("Amount must be between ₹100 and ₹10,000.");
+      return;
+    }
+    if (form.aadhaarNumber.length !== 12 || form.mobileNumber.length !== 10) {
+      setError("Enter a valid 12-digit Aadhaar number and 10-digit mobile number.");
+      return;
+    }
+    if (!form.bankIIN || !form.lat || !form.long) {
+      setError("Select the customer bank and allow location access before continuing.");
+      return;
+    }
     if (highValue && !auth) {
       await requestOtp();
       return;
@@ -961,12 +979,17 @@ function Capture({
 
 function Receipt({ result, again }: { result: TransactionResult; again: () => void }) {
   const detail = result.result || result;
-  const success =
-    String(detail.status || result.status || "").toUpperCase() === "000" ||
-    String(result.status).toUpperCase() === "SUCCESS";
+  const providerStatus = String(detail.status || result.status || "").toUpperCase();
+  const success = providerStatus === "000" || providerStatus === "SUCCESS";
+  const pending =
+    providerStatus === "PENDING" ||
+    providerStatus === "UNKNOWN" ||
+    result.settlement?.status === "PENDING";
   return (
     <Panel
-      title={success ? "Transaction successful" : "Transaction result"}
+      title={
+        success ? "Transaction successful" : pending ? "Transaction pending" : "Transaction result"
+      }
       description="Keep the Nexus platform reference for support and transaction tracking."
     >
       <div
@@ -985,7 +1008,29 @@ function Receipt({ result, again }: { result: TransactionResult; again: () => vo
       <dl className="mt-5 grid gap-3 sm:grid-cols-2">
         {[
           ["Platform reference", result.transactionReferenceId],
+          ["Provider merchant reference", result.merchantRefId],
           ["Transaction type", result.transactionType],
+          ["Amount", result.amount ? `₹${result.amount}` : undefined],
+          [
+            "Gross amount",
+            result.accounting?.grossAmount ? `₹${result.accounting.grossAmount}` : undefined,
+          ],
+          [
+            "Commission",
+            result.accounting?.commissionAmount
+              ? `₹${result.accounting.commissionAmount}`
+              : undefined,
+          ],
+          [
+            "Net principal",
+            result.accounting?.netPrincipalAmount
+              ? `₹${result.accounting.netPrincipalAmount}`
+              : undefined,
+          ],
+          ["Settlement", result.settlement?.status],
+          ["Wallet reference", result.settlement?.transactionReference],
+          ["Commission status", result.commission?.status],
+          ["Commission reference", result.commission?.commissionReference],
           ["RRN", detail.rrn],
           ["NPCI code", detail.npciCode],
           ["Aadhaar", detail.aadhaarNo],

@@ -20,14 +20,23 @@ import {
 } from "lucide-react";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
+import aboutImg from "@/assets/about-team.png";
 
 export const Route = createFileRoute("/services")({
   head: () => ({
     meta: [
       { title: "Our Services — UMOBIPAY | Recharge, DMT, BBPS & Bills" },
-      { name: "description", content: "Mobile & DTH recharge, domestic money transfer, utility bill collection, BBPS, insurance payments and merchant services under one UMOBIPAY dashboard." },
+      {
+        name: "description",
+        content:
+          "Mobile & DTH recharge, domestic money transfer, utility bill collection, BBPS, insurance payments and merchant services under one UMOBIPAY dashboard.",
+      },
       { property: "og:title", content: "UMOBIPAY Services" },
-      { property: "og:description", content: "Recharge, money transfer, bills, insurance and merchant payments — one platform, every service." },
+      {
+        property: "og:description",
+        content:
+          "Recharge, money transfer, bills, insurance and merchant payments — one platform, every service.",
+      },
     ],
   }),
   component: Services,
@@ -97,15 +106,21 @@ function Services() {
     <div className="min-h-screen bg-background">
       <SiteNav />
 
-      <section className="bg-mint">
-        <div className="mx-auto max-w-7xl px-6 py-20 text-center">
-          <span className="text-xs font-bold uppercase tracking-widest text-primary">Our Services</span>
-          <h1 className="mx-auto mt-3 max-w-3xl font-display text-5xl font-extrabold text-secondary sm:text-6xl">
+      <section className="relative overflow-hidden bg-mint">
+        <div className="absolute inset-0 bg-grid opacity-40" />
+        <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-6 py-14 lg:grid-cols-2 lg:py-20">
+          <div>
+          <span className="text-xs font-bold uppercase tracking-widest text-primary">
+            Our Services
+          </span>
+          <h1 className="mt-3 max-w-3xl font-display text-5xl font-extrabold text-secondary sm:text-6xl">
             One platform. <span className="text-primary">Every payment.</span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-foreground/70">
-            From a quick recharge to a large utility payment — UMOBIPAY helps you serve every customer need with confidence.
-          </p>
+          <p className="mt-6 max-w-2xl text-lg text-foreground/70">
+            From a quick recharge to a large utility payment — UMOBIPAY helps you serve every
+            customer need with confidence.
+          </p></div>
+          <img src={aboutImg} alt="UMOBIPAY service team" className="mx-auto max-h-72 w-full object-contain" />
         </div>
       </section>
 
@@ -123,10 +138,14 @@ function Services() {
               >
                 <s.icon size={24} />
               </span>
-              <h3 className={`mt-6 font-display text-2xl font-bold ${i % 2 === 0 ? "" : "text-secondary"}`}>
+              <h3
+                className={`mt-6 font-display text-2xl font-bold ${i % 2 === 0 ? "" : "text-secondary"}`}
+              >
                 {s.title}
               </h3>
-              <p className={`mt-3 min-h-20 text-sm leading-7 ${i % 2 === 0 ? "text-secondary-foreground/80" : "text-foreground/70"}`}>
+              <p
+                className={`mt-3 min-h-20 text-sm leading-7 ${i % 2 === 0 ? "text-secondary-foreground/80" : "text-foreground/70"}`}
+              >
                 {s.desc}
               </p>
               <div className="mt-6 flex flex-wrap gap-2">
@@ -143,7 +162,9 @@ function Services() {
               </div>
               <button
                 className={`mt-8 inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold ${
-                  i % 2 === 0 ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
+                  i % 2 === 0
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground"
                 }`}
               >
                 Explore <ArrowRight size={14} />
@@ -157,12 +178,15 @@ function Services() {
         <div className="rounded-[2.5rem] border border-border bg-gradient-to-br from-card via-background to-mint/40 p-10 sm:p-16">
           <div className="grid gap-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
             <div>
-              <span className="text-xs font-bold uppercase tracking-widest text-primary">Service Coverage</span>
+              <span className="text-xs font-bold uppercase tracking-widest text-primary">
+                Service Coverage
+              </span>
               <h2 className="mt-3 font-display text-4xl font-extrabold text-secondary">
                 Cover every bill and payment your customer walks in with.
               </h2>
               <p className="mt-4 max-w-xl text-base leading-8 text-foreground/75">
-                From everyday recharges to premium services, the UMOBIPAY stack gives retailers and agents a single, reliable place to serve more customers.
+                From everyday recharges to premium services, the UMOBIPAY stack gives retailers and
+                agents a single, reliable place to serve more customers.
               </p>
               <ul className="mt-6 space-y-3 text-sm text-foreground/80">
                 {benefits.map((b) => (
@@ -174,7 +198,10 @@ function Services() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               {categories.map((m) => (
-                <div key={m.title} className="rounded-2xl bg-background/90 p-6 text-center shadow-sm ring-1 ring-border/60">
+                <div
+                  key={m.title}
+                  className="rounded-2xl bg-background/90 p-6 text-center shadow-sm ring-1 ring-border/60"
+                >
                   <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-mint text-primary">
                     <m.icon size={22} />
                   </span>

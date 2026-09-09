@@ -78,10 +78,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "UMOBIPAY — Simple. Seamless. Secure. Payments." },
-      { name: "description", content: "Fast, secure BBPS payments — mobile recharge, DTH, DMT and utility bills, all in one place." },
+      {
+        name: "description",
+        content:
+          "Fast, secure BBPS payments — mobile recharge, DTH, DMT and utility bills, all in one place.",
+      },
       { name: "author", content: "UMOBIPAY" },
       { property: "og:title", content: "UMOBIPAY — Simple. Seamless. Secure." },
-      { property: "og:description", content: "Fast, secure BBPS payments — mobile recharge, DTH, DMT and utility bills." },
+      {
+        property: "og:description",
+        content: "Fast, secure BBPS payments — mobile recharge, DTH, DMT and utility bills.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],

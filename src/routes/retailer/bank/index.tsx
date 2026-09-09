@@ -1,11 +1,28 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
-import { BadgeCheck, Building2, Landmark, Plus, RefreshCw, ShieldCheck, Star } from "lucide-react";
-import { BusinessPage, ServiceNotice } from "@/components/business-page";
+import {
+  BadgeCheck,
+  Building2,
+  Edit3,
+  Landmark,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  Star,
+  Trash2,
+} from "lucide-react";
+import { ServiceNotice } from "@/components/business-page";
+import { RoleAwareAccountPage } from "@/components/role-aware-account-page";
 import { getSession } from "@/lib/auth-api";
+import {
+  credentialsPending,
+  isManagementRole,
+  managementBasePath,
+  signedInHome,
+} from "@/lib/role-hierarchy";
 import { complianceApi, complianceMessage, type BankAccount } from "@/lib/compliance-api";
 
-export const Route = createFileRoute("/bank-accounts")({
+export const Route = createFileRoute("/retailer/bank/")({
   head: () => ({ meta: [{ title: "Bank Accounts — UMOBIPAY" }] }),
   component: BankAccountsPage,
 });
@@ -16,25 +33,71 @@ const initial = {
   accountHolderName: "",
   accountNumber: "",
   confirm: "",
-  accountType: "SAVINGS" as "SAVINGS" | "CURRENT",
+  accountType: "SAVINGS" as "SAVINGS" | "CURRENT" | "SALARY",
+  purposes: ["PAYOUT"] as Array<"PAYOUT" | "DMT">,
 };
 function BankAccountsPage() {
   const navigate = useNavigate(),
     [session, setSession] = useState<ReturnType<typeof getSession>>(null),
     [accounts, setAccounts] = useState<BankAccount[]>([]),
+    [bankDirectory, setBankDirectory] = useState<string[]>([]),
     [form, setForm] = useState(initial),
     [adding, setAdding] = useState(false),
+    [editingId, setEditingId] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),
     [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   async function load(token: string) {
     setLoading(true);
     try {
-      setAccounts(await complianceApi.banks(token));
+      const loaded = await complianceApi.banks(token);
+      if (loaded.length) {
+        try {
+          const primary = await complianceApi.primaryBank(token);
+          setAccounts(
+            loaded.map((account) => ({ ...account, isDefault: account.id === primary.id })),
+          );
+        } catch {
+          setAccounts(loaded);
+        }
+      } else {
+        setAccounts([]);
+      }
     } catch (e) {
       setMessage({ ok: false, text: complianceMessage(e) });
     } finally {
       setLoading(false);
+    }
+  }
+  async function loadBankDirectory(token: string) {
+    try {
+      const response = await complianceApi.bankDirectory(token);
+      const root =
+        response && typeof response === "object" ? (response as Record<string, unknown>) : {};
+      const candidates = Array.isArray(response)
+        ? response
+        : Array.isArray(root.data)
+          ? root.data
+          : Array.isArray(root.banks)
+            ? root.banks
+            : [];
+      setBankDirectory(
+        candidates
+          .map((item) =>
+            typeof item === "string"
+              ? item
+              : item && typeof item === "object"
+                ? String(
+                    (item as Record<string, unknown>).bankName ||
+                      (item as Record<string, unknown>).name ||
+                      "",
+                  )
+                : "",
+          )
+          .filter(Boolean),
+      );
+    } catch {
+      setBankDirectory([]);
     }
   }
   useEffect(() => {
@@ -43,13 +106,14 @@ function BankAccountsPage() {
       navigate({ to: "/login" });
       return;
     }
-    if (!value.identity.passwordChangedAt || !value.identity.mpinChangedAt) {
-      navigate({ to: "/dashboard" });
+    if (credentialsPending(value.identity)) {
+      window.location.replace(signedInHome(value));
       return;
     }
     setSession(value);
     setForm((f) => ({ ...f, accountHolderName: value.identity.fullName }));
     void load(value.accessToken);
+    void loadBankDirectory(value.accessToken);
   }, [navigate]);
   if (!session)
     return (
@@ -61,22 +125,36 @@ function BankAccountsPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setMessage(null);
-    if (form.accountNumber !== form.confirm)
+    if (form.accountNumber && form.accountNumber !== form.confirm)
       return setMessage({ ok: false, text: "Account numbers do not match." });
+    if (!form.purposes.length)
+      return setMessage({ ok: false, text: "Select at least one account purpose." });
     setBusy(true);
     try {
-      await complianceApi.addBank(activeSession.accessToken, {
+      const payload = {
         bankName: form.bankName.trim(),
         ifsc: form.ifsc.toUpperCase(),
         branchName: form.branchName || undefined,
         accountHolderName: form.accountHolderName.trim(),
-        accountNumber: form.accountNumber,
         accountType: form.accountType,
-        purposes: ["PAYOUT", "DMT"],
-      });
+        purposes: form.purposes,
+        ...(form.accountNumber ? { accountNumber: form.accountNumber } : {}),
+      };
+      if (editingId) await complianceApi.updateBank(activeSession.accessToken, editingId, payload);
+      else
+        await complianceApi.addBank(activeSession.accessToken, {
+          ...payload,
+          accountNumber: form.accountNumber,
+        });
       setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
       setAdding(false);
-      setMessage({ ok: true, text: "Bank account verified and added successfully." });
+      setEditingId(null);
+      setMessage({
+        ok: true,
+        text: editingId
+          ? "Bank account updated and sent for verification."
+          : "Bank account verified and added successfully.",
+      });
       await load(activeSession.accessToken);
     } catch (err) {
       setMessage({ ok: false, text: complianceMessage(err) });
@@ -91,9 +169,9 @@ function BankAccountsPage() {
       a.ownershipStatus === "VERIFIED",
   );
   return (
-    <BusinessPage
+    <RoleAwareAccountPage
       identity={session.identity}
-      active="bank"
+      section="bank"
       eyebrow="Settlement & payouts"
       title="Bank accounts"
       description="Manage verified settlement accounts independently from KYC and AEPS services."
@@ -108,7 +186,11 @@ function BankAccountsPage() {
               </p>
             </div>
             <button
-              onClick={() => setAdding(!adding)}
+              onClick={() => {
+                setEditingId(null);
+                setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
+                setAdding(!adding);
+              }}
               className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white"
             >
               <Plus size={16} /> Add account
@@ -154,15 +236,72 @@ function BankAccountsPage() {
                       <p className="text-[10px] text-muted-foreground">
                         Ownership {a.ownershipStatus}
                       </p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setBusy(true);
+                          setMessage(null);
+                          try {
+                            const latest = await complianceApi.bank(session.accessToken, a.id);
+                            setEditingId(latest.id);
+                            setAdding(true);
+                            setForm({
+                              bankName: latest.bankName,
+                              ifsc: latest.ifsc,
+                              branchName: latest.branchName || "",
+                              accountHolderName: latest.accountHolderName,
+                              accountNumber: "",
+                              confirm: "",
+                              accountType: latest.accountType,
+                              purposes: latest.purposes,
+                            });
+                          } catch (error) {
+                            setMessage({ ok: false, text: complianceMessage(error) });
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        disabled={busy}
+                        className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-primary"
+                      >
+                        <Edit3 size={12} /> Edit
+                      </button>
                       {!a.isDefault && a.status === "ACTIVE" && (
                         <button
                           onClick={async () => {
-                            await complianceApi.setPrimary(session.accessToken, a.id);
-                            await load(session.accessToken);
+                            try {
+                              await complianceApi.setPrimary(session.accessToken, a.id);
+                              await load(session.accessToken);
+                              setMessage({ ok: true, text: "Primary bank account updated." });
+                            } catch (error) {
+                              setMessage({ ok: false, text: complianceMessage(error) });
+                            }
                           }}
-                          className="mt-2 text-xs font-bold text-primary"
+                          className="ml-3 mt-2 text-xs font-bold text-primary"
                         >
                           Set as primary
+                        </button>
+                      )}
+                      {!a.isDefault && (
+                        <button
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                `Remove ${a.bankName} account ending ${a.accountNumberLast4}?`,
+                              )
+                            )
+                              return;
+                            try {
+                              await complianceApi.deleteBank(session.accessToken, a.id);
+                              await load(session.accessToken);
+                              setMessage({ ok: true, text: "Bank account removed." });
+                            } catch (error) {
+                              setMessage({ ok: false, text: complianceMessage(error) });
+                            }
+                          }}
+                          className="ml-3 mt-2 inline-flex items-center gap-1 text-xs font-bold text-red-600"
+                        >
+                          <Trash2 size={12} /> Remove
                         </button>
                       )}
                     </div>
@@ -195,7 +334,11 @@ function BankAccountsPage() {
                 <label key={key} className="text-xs font-bold uppercase text-muted-foreground">
                   {label}
                   <input
-                    required={key !== "branchName"}
+                    list={key === "bankName" ? "supported-bank-directory" : undefined}
+                    required={
+                      key !== "branchName" &&
+                      (!editingId || !["accountNumber", "confirm"].includes(key))
+                    }
                     value={form[key as keyof typeof form]}
                     onChange={(e) =>
                       setForm({
@@ -212,25 +355,69 @@ function BankAccountsPage() {
                   />
                 </label>
               ))}
+              <datalist id="supported-bank-directory">
+                {bankDirectory.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
               <label className="text-xs font-bold uppercase text-muted-foreground">
                 Account type
                 <select
                   value={form.accountType}
                   onChange={(e) =>
-                    setForm({ ...form, accountType: e.target.value as "SAVINGS" | "CURRENT" })
+                    setForm({
+                      ...form,
+                      accountType: e.target.value as "SAVINGS" | "CURRENT" | "SALARY",
+                    })
                   }
                   className="mt-1.5 w-full rounded-xl border border-border bg-card px-4 py-3 text-sm"
                 >
                   <option value="SAVINGS">Savings</option>
                   <option value="CURRENT">Current</option>
+                  <option value="SALARY">Salary</option>
                 </select>
               </label>
+              <fieldset className="text-xs font-bold uppercase text-muted-foreground">
+                Use account for
+                <div className="mt-2 flex gap-4 rounded-xl border border-border bg-card px-4 py-3 normal-case">
+                  {(["PAYOUT", "DMT"] as const).map((purpose) => (
+                    <label key={purpose} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.purposes.includes(purpose)}
+                        onChange={(event) =>
+                          setForm({
+                            ...form,
+                            purposes: event.target.checked
+                              ? [...form.purposes, purpose]
+                              : form.purposes.filter((item) => item !== purpose),
+                          })
+                        }
+                      />{" "}
+                      {purpose}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               <button
                 disabled={busy}
                 className="self-end rounded-xl bg-secondary py-3 text-sm font-bold text-white disabled:opacity-50"
               >
-                {busy ? "Verifying account…" : "Verify and save"}
+                {busy ? "Saving account…" : editingId ? "Save and re-verify" : "Verify and save"}
               </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
+                    setAdding(false);
+                    setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
+                  }}
+                  className="rounded-xl border border-border bg-white py-3 text-sm font-bold text-secondary"
+                >
+                  Cancel edit
+                </button>
+              )}
             </form>
           )}
         </section>
@@ -249,7 +436,11 @@ function BankAccountsPage() {
               KYC is a separate compliance service and can be started after bank verification.
             </p>
             <Link
-              to="/kyc"
+              to={
+                isManagementRole(session.identity.role)
+                  ? `${managementBasePath(session.identity.role)}/profile/kyc`
+                  : "/retailer/kyc"
+              }
               className={`mt-4 flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold ${verified ? "bg-primary text-white" : "pointer-events-none bg-muted text-muted-foreground"}`}
             >
               <BadgeCheck size={16} /> Continue to KYC
@@ -257,6 +448,6 @@ function BankAccountsPage() {
           </div>
         </aside>
       </div>
-    </BusinessPage>
+    </RoleAwareAccountPage>
   );
 }

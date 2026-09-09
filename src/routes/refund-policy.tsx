@@ -6,7 +6,11 @@ export const Route = createFileRoute("/refund-policy")({
   head: () => ({
     meta: [
       { title: "Refund Policy | UMOBIPAY" },
-      { name: "description", content: "Understand UMOBIPAY's refund and dispute handling process for payments and service issues." },
+      {
+        name: "description",
+        content:
+          "Understand UMOBIPAY's refund and dispute handling process for payments and service issues.",
+      },
     ],
   }),
   component: RefundPolicyPage,

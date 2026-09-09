@@ -43,7 +43,7 @@ export function SiteNav() {
           {loggedIn ? (
             <>
               <Link
-                to="/dashboard"
+            to="/retailer/dashboard"
                 className="rounded-full border border-secondary/20 px-5 py-2 text-sm font-semibold text-secondary transition-colors hover:bg-secondary hover:text-secondary-foreground"
               >
                 Dashboard
@@ -101,7 +101,7 @@ export function SiteNav() {
             {loggedIn ? (
               <>
                 <Link
-                  to="/dashboard"
+              to="/retailer/dashboard"
                   onClick={() => setOpen(false)}
                   className="mt-2 rounded-lg px-4 py-3 text-sm font-medium text-foreground hover:bg-mint"
                 >

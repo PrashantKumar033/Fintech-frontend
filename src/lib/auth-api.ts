@@ -1,3 +1,5 @@
+import { getDeviceId } from "@/lib/device-id";
+
 const browserDefaultApiUrl =
   typeof window !== "undefined"
     ? `${window.location.protocol}//${window.location.hostname}:8000`
@@ -23,6 +25,47 @@ export type Identity = {
   passwordChangedAt: Date | null;
   mpinChangedAt: Date | null;
 };
+
+export type ActiveSession = {
+  id: string;
+  identityId: string;
+  device?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  locationAccuracy?: number | null;
+  locationCapturedAt?: string | null;
+  revoked: boolean;
+  lastUsedAt?: string | null;
+  expiresAt: string;
+  createdAt: string;
+  isCurrent: boolean;
+};
+
+export type EffectivePermission = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+};
+
+export type EffectivePermissionPackage = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+export type EffectiveAccess = {
+  identity: { id: string; status: string };
+  role: { id: string; name: string; isActive: boolean };
+  packages: EffectivePermissionPackage[];
+  permissions: EffectivePermission[];
+  permissionCodes: string[];
+};
+
+const PERMISSION_CACHE_KEY = "nexus_effective_permissions";
+
 export type RegistrationDetails = {
   draftId: string;
   fullName: string;
@@ -55,7 +98,34 @@ export class ApiError extends Error {
   }
 }
 
-type Session = { accessToken: string; identity: Identity };
+export type IdentityOnboardingStep =
+  | "ADD_AND_VERIFY_PHONE"
+  | "VERIFY_PHONE_OTP"
+  | "ADD_PAN"
+  | "CHANGE_PASSWORD"
+  | "CHANGE_MPIN"
+  | "COMPLETE_ONBOARDING";
+export type Session = {
+  accessToken: string;
+  identity: Identity;
+  onboardingRequired?: boolean;
+  onboardingStatus?: string;
+  nextStep?: IdentityOnboardingStep | null;
+};
+export type DeviceVerificationChallenge = {
+  requiresDeviceVerification: true;
+  challengeId: string;
+  maskedEmail: string;
+  expiresAt: string;
+  message: string;
+};
+export type LoginResult = Session | DeviceVerificationChallenge;
+
+export function requiresDeviceVerification(
+  result: LoginResult,
+): result is DeviceVerificationChallenge {
+  return "requiresDeviceVerification" in result && result.requiresDeviceVerification === true;
+}
 let refreshPromise: Promise<Session> | null = null;
 
 function extractApiMessage(data: unknown): string | null {
@@ -130,8 +200,15 @@ export async function refreshSession(): Promise<Session> {
       redirectToLogin();
       throw new ApiError("The server returned an invalid refreshed session.", 500);
     }
-    saveSession(session.accessToken, session.identity);
-    return session;
+    const existing = getSession();
+    const refreshed = {
+      ...session,
+      onboardingRequired: session.onboardingRequired ?? existing?.onboardingRequired,
+      onboardingStatus: session.onboardingStatus ?? existing?.onboardingStatus,
+      nextStep: session.nextStep ?? existing?.nextStep,
+    };
+    saveSession(refreshed.accessToken, refreshed.identity, refreshed);
+    return refreshed;
   })().finally(() => {
     refreshPromise = null;
   });
@@ -191,7 +268,23 @@ export async function authenticatedRequest<T>(
 
 export const authApi = {
   login: (body: { identifier: string; loginWith: LoginMethod; password: string }) =>
-    request<{ accessToken: string; identity: Identity }>("/auth/login", body),
+    request<LoginResult>("/auth/login", { ...body, deviceId: getDeviceId() }),
+  verifyDeviceLogin: (challengeId: string, otp: string) =>
+    request<Session & { success: boolean; trustedDevice?: boolean }>("/auth/login/verify-device", {
+      challengeId,
+      otp,
+    }),
+  sendPhoneOtp: (phoneNumber: string) =>
+    request<{ message: string; otp?: string }>("/auth/send-phone-otp", { phoneNumber }),
+  verifyPhoneOtp: (phoneNumber: string, otp: string) =>
+    request<{ success?: boolean; message: string }>("/auth/verify-phone-otp", {
+      phoneNumber,
+      otp,
+    }),
+  sendEmailOtp: (email: string) =>
+    request<{ message: string; otp?: string }>("/auth/send-email-otp", { email }),
+  verifyEmailOtp: (email: string, otp: string) =>
+    request<{ success?: boolean; message: string }>("/auth/verify-email-otp", { email, otp }),
   registerRole: (role: "RETAILER" | "DISTRIBUTOR") =>
     request<{ draftId: string; message: string }>("/auth/register/role", { role }),
   registerPhone: (draftId: string, phoneNumber: string) =>
@@ -221,6 +314,54 @@ export const authApi = {
       { method: "POST", body: JSON.stringify(body) },
       accessToken,
     ),
+  sendIdentityOnboardingPhoneOtp: (phoneNumber: string) =>
+    authenticatedRequest<{
+      message: string;
+      otp?: string;
+      onboardingStatus: string;
+      nextStep: IdentityOnboardingStep;
+    }>("/auth/onboarding/phone/send-otp", {
+      method: "POST",
+      body: JSON.stringify({ phoneNumber }),
+    }),
+  verifyIdentityOnboardingPhoneOtp: (otp: string) =>
+    authenticatedRequest<{
+      message: string;
+      onboardingStatus: string;
+      nextStep: IdentityOnboardingStep;
+    }>("/auth/onboarding/phone/verify-otp", { method: "POST", body: JSON.stringify({ otp }) }),
+  addIdentityOnboardingPan: (panNumber: string) =>
+    authenticatedRequest<{
+      message: string;
+      onboardingStatus: string;
+      nextStep: IdentityOnboardingStep;
+      panVerificationStatus: string;
+    }>("/auth/onboarding/pan", { method: "POST", body: JSON.stringify({ panNumber }) }),
+
+  getSessions: () => authenticatedRequest<ActiveSession[]>("/auth/sessions"),
+  getSessionDetails: (sessionId: string) =>
+    authenticatedRequest<ActiveSession>(`/auth/sessions/${encodeURIComponent(sessionId)}`),
+  revokeSession: (sessionId: string) =>
+    authenticatedRequest<{
+      success: boolean;
+      message: string;
+      sessionId: string;
+      isCurrent: boolean;
+    }>(`/auth/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" }),
+  revokeOtherSessions: () =>
+    authenticatedRequest<{
+      success: boolean;
+      message: string;
+      revokedCount: number;
+      currentSessionId: string;
+    }>("/auth/sessions/others", { method: "DELETE" }),
+  revokeAllSessions: () =>
+    authenticatedRequest<{ success: boolean; message: string; revokedCount: number }>(
+      "/auth/sessions",
+      { method: "DELETE" },
+    ),
+  getMyPermissions: (accessToken?: string) =>
+    authenticatedRequest<EffectiveAccess>("/auth/me/permissions", {}, accessToken),
 
   forgotPasswordVerifyUser: (body: { loginId: string; panNumber: string; aadharLast4: string }) =>
     request<{ draftId: string; otp?: string; message: string }>(
@@ -236,10 +377,81 @@ export const authApi = {
     request<{ success: boolean; message: string }>("/auth/forgot-password/reset", body),
 };
 
-export function saveSession(accessToken: string, identity: Identity) {
+export function saveEffectiveAccess(access: EffectiveAccess) {
   if (typeof window === "undefined") return;
+  localStorage.setItem(
+    PERMISSION_CACHE_KEY,
+    JSON.stringify({ ...access, fetchedAt: new Date().toISOString() }),
+  );
+}
+
+export function getEffectiveAccess(): (EffectiveAccess & { fetchedAt?: string }) | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(PERMISSION_CACHE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as EffectiveAccess & { fetchedAt?: string };
+  } catch {
+    localStorage.removeItem(PERMISSION_CACHE_KEY);
+    return null;
+  }
+}
+
+export async function syncMyPermissions(accessToken?: string): Promise<EffectiveAccess> {
+  const access = await authApi.getMyPermissions(accessToken);
+  saveEffectiveAccess(access);
+  return access;
+}
+
+export function hasPermission(code: string): boolean {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return false;
+  return Boolean(
+    getEffectiveAccess()?.permissionCodes?.some((item) => item.toUpperCase() === normalized),
+  );
+}
+
+export function saveSession(
+  accessToken: string,
+  identity: Identity,
+  onboarding?: Pick<Session, "onboardingRequired" | "onboardingStatus" | "nextStep">,
+) {
+  if (typeof window === "undefined") return;
+  if (!onboarding) localStorage.removeItem(PERMISSION_CACHE_KEY);
+  const previousIdentityRaw = localStorage.getItem("nexus_identity");
+  if (!onboarding && previousIdentityRaw) {
+    try {
+      const previousIdentity = JSON.parse(previousIdentityRaw) as Identity;
+      if (previousIdentity.id !== identity.id) localStorage.removeItem("nexus_identity_onboarding");
+    } catch {
+      localStorage.removeItem("nexus_identity_onboarding");
+    }
+  }
   localStorage.setItem("nexus_access_token", accessToken);
   localStorage.setItem("nexus_identity", JSON.stringify(identity));
+  if (onboarding) {
+    localStorage.setItem(
+      "nexus_identity_onboarding",
+      JSON.stringify({
+        onboardingRequired: onboarding.onboardingRequired,
+        onboardingStatus: onboarding.onboardingStatus,
+        nextStep: onboarding.nextStep,
+      }),
+    );
+  }
+}
+
+export function updateIdentityOnboarding(
+  nextStep: IdentityOnboardingStep | null,
+  onboardingStatus?: string,
+) {
+  const session = getSession();
+  if (!session) return;
+  saveSession(session.accessToken, session.identity, {
+    onboardingRequired: Boolean(nextStep && nextStep !== "COMPLETE_ONBOARDING"),
+    onboardingStatus: onboardingStatus ?? session.onboardingStatus,
+    nextStep,
+  });
 }
 
 export function updateSessionIdentity(identity: Identity) {
@@ -253,7 +465,9 @@ export function getSession(): Session | null {
   const identityRaw = localStorage.getItem("nexus_identity");
   if (!accessToken || !identityRaw) return null;
   try {
-    return { accessToken, identity: JSON.parse(identityRaw) as Identity };
+    const onboardingRaw = localStorage.getItem("nexus_identity_onboarding");
+    const onboarding = onboardingRaw ? (JSON.parse(onboardingRaw) as Partial<Session>) : {};
+    return { accessToken, identity: JSON.parse(identityRaw) as Identity, ...onboarding };
   } catch {
     return null;
   }
@@ -263,6 +477,8 @@ export function clearSession() {
   if (typeof window === "undefined") return;
   localStorage.removeItem("nexus_access_token");
   localStorage.removeItem("nexus_identity");
+  localStorage.removeItem("nexus_identity_onboarding");
+  localStorage.removeItem(PERMISSION_CACHE_KEY);
 }
 
 function redirectToLogin() {

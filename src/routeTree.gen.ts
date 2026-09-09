@@ -11,18 +11,88 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
-import { Route as AepsRouteImport } from './routes/aeps'
-import { Route as BankAccountsRouteImport } from './routes/bank-accounts'
+import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as ContactRouteImport } from './routes/contact'
-import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
-import { Route as KycRouteImport } from './routes/kyc'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RefundPolicyRouteImport } from './routes/refund-policy'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ServicesRouteImport } from './routes/services'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminAccountSetupRouteImport } from './routes/admin/account-setup'
+import { Route as AdminLoginRouteImport } from './routes/admin/login'
+import { Route as AdminOnboardingRouteImport } from './routes/admin/onboarding'
+import { Route as DistributorIndexRouteImport } from './routes/distributor/index'
+import { Route as DistributorSplatRouteImport } from './routes/distributor/$'
+import { Route as DistributorAccountSetupRouteImport } from './routes/distributor/account-setup'
+import { Route as DistributorDashboardRouteImport } from './routes/distributor/dashboard'
+import { Route as MasterDistributorIndexRouteImport } from './routes/master-distributor/index'
+import { Route as MasterDistributorSplatRouteImport } from './routes/master-distributor/$'
+import { Route as MasterDistributorAccountSetupRouteImport } from './routes/master-distributor/account-setup'
+import { Route as MasterDistributorDashboardRouteImport } from './routes/master-distributor/dashboard'
+import { Route as RetailerAccountSetupRouteImport } from './routes/retailer/account-setup'
+import { Route as RetailerDashboardRouteImport } from './routes/retailer/dashboard'
+import { Route as RetailerSettingsRouteImport } from './routes/retailer/settings'
+import { Route as AdminAccessIndexRouteImport } from './routes/admin/access/index'
+import { Route as AdminApiSettingsIndexRouteImport } from './routes/admin/api-settings/index'
+import { Route as AdminBankingIndexRouteImport } from './routes/admin/banking/index'
+import { Route as AdminCommissionsIndexRouteImport } from './routes/admin/commissions/index'
+import { Route as AdminCommissionsHierarchyRouteImport } from './routes/admin/commissions/hierarchy'
+import { Route as AdminKycIndexRouteImport } from './routes/admin/kyc/index'
+import { Route as AdminLegalIndexRouteImport } from './routes/admin/legal/index'
+import { Route as AdminMerchantsIndexRouteImport } from './routes/admin/merchants/index'
+import { Route as AdminProfileIndexRouteImport } from './routes/admin/profile/index'
+import { Route as AdminProfileBankRouteImport } from './routes/admin/profile/bank'
+import { Route as AdminProfileKycRouteImport } from './routes/admin/profile/kyc'
+import { Route as AdminReportsIndexRouteImport } from './routes/admin/reports/index'
+import { Route as AdminSettingsIndexRouteImport } from './routes/admin/settings/index'
+import { Route as AdminSettlementsIndexRouteImport } from './routes/admin/settlements/index'
+import { Route as AdminSmsIndexRouteImport } from './routes/admin/sms/index'
+import { Route as AdminTransactionsIndexRouteImport } from './routes/admin/transactions/index'
+import { Route as DistributorAepsIndexRouteImport } from './routes/distributor/aeps/index'
+import { Route as DistributorAepsBalanceEnquiryRouteImport } from './routes/distributor/aeps/balance-enquiry'
+import { Route as DistributorAepsCashWithdrawalRouteImport } from './routes/distributor/aeps/cash-withdrawal'
+import { Route as DistributorAepsMiniStatementRouteImport } from './routes/distributor/aeps/mini-statement'
+import { Route as DistributorAepsTransactionsRouteImport } from './routes/distributor/aeps/transactions'
+import { Route as DistributorCommissionIndexRouteImport } from './routes/distributor/commission/index'
+import { Route as DistributorProfileIndexRouteImport } from './routes/distributor/profile/index'
+import { Route as DistributorProfileBankRouteImport } from './routes/distributor/profile/bank'
+import { Route as DistributorProfileKycRouteImport } from './routes/distributor/profile/kyc'
+import { Route as DistributorReportsIndexRouteImport } from './routes/distributor/reports/index'
+import { Route as DistributorRetailersIndexRouteImport } from './routes/distributor/retailers/index'
+import { Route as DistributorSettingsIndexRouteImport } from './routes/distributor/settings/index'
+import { Route as DistributorSupportIndexRouteImport } from './routes/distributor/support/index'
+import { Route as DistributorWalletIndexRouteImport } from './routes/distributor/wallet/index'
+import { Route as DistributorWalletTransferRouteImport } from './routes/distributor/wallet/transfer'
+import { Route as MasterDistributorCommissionIndexRouteImport } from './routes/master-distributor/commission/index'
+import { Route as MasterDistributorKycIndexRouteImport } from './routes/master-distributor/kyc/index'
+import { Route as MasterDistributorNotificationsIndexRouteImport } from './routes/master-distributor/notifications/index'
+import { Route as MasterDistributorProfileIndexRouteImport } from './routes/master-distributor/profile/index'
+import { Route as MasterDistributorProfileBankRouteImport } from './routes/master-distributor/profile/bank'
+import { Route as MasterDistributorProfileKycRouteImport } from './routes/master-distributor/profile/kyc'
+import { Route as MasterDistributorReportsIndexRouteImport } from './routes/master-distributor/reports/index'
+import { Route as MasterDistributorSettingsIndexRouteImport } from './routes/master-distributor/settings/index'
+import { Route as MasterDistributorSupportIndexRouteImport } from './routes/master-distributor/support/index'
+import { Route as MasterDistributorTransactionsIndexRouteImport } from './routes/master-distributor/transactions/index'
+import { Route as MasterDistributorWalletIndexRouteImport } from './routes/master-distributor/wallet/index'
+import { Route as MasterDistributorWalletHistoryRouteImport } from './routes/master-distributor/wallet/history'
+import { Route as MasterDistributorWalletRequestsRouteImport } from './routes/master-distributor/wallet/requests'
+import { Route as MasterDistributorWalletTransferRouteImport } from './routes/master-distributor/wallet/transfer'
+import { Route as RetailerAepsIndexRouteImport } from './routes/retailer/aeps/index'
+import { Route as RetailerBankIndexRouteImport } from './routes/retailer/bank/index'
+import { Route as RetailerKycIndexRouteImport } from './routes/retailer/kyc/index'
+import { Route as RetailerTransactionsIndexRouteImport } from './routes/retailer/transactions/index'
+import { Route as RetailerWalletIndexRouteImport } from './routes/retailer/wallet/index'
+import { Route as RetailerWalletTransferRouteImport } from './routes/retailer/wallet/transfer'
+import { Route as AdminMerchantsAddIndexRouteImport } from './routes/admin/merchants/add/index'
+import { Route as AdminMerchantsListIndexRouteImport } from './routes/admin/merchants/list/index'
+import { Route as DistributorRetailersAddIndexRouteImport } from './routes/distributor/retailers/add/index'
+import { Route as MasterDistributorNetworkDistributorsIndexRouteImport } from './routes/master-distributor/network/distributors/index'
+import { Route as MasterDistributorNetworkRetailersIndexRouteImport } from './routes/master-distributor/network/retailers/index'
+import { Route as MasterDistributorNetworkTreeIndexRouteImport } from './routes/master-distributor/network/tree/index'
+import { Route as MasterDistributorNetworkDistributorsAddIndexRouteImport } from './routes/master-distributor/network/distributors/add/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,14 +104,9 @@ const AboutRoute = AboutRouteImport.update({
   path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AepsRoute = AepsRouteImport.update({
-  id: '/aeps',
-  path: '/aeps',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BankAccountsRoute = BankAccountsRouteImport.update({
-  id: '/bank-accounts',
-  path: '/bank-accounts',
+const ActivityRoute = ActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactRoute = ContactRouteImport.update({
@@ -49,19 +114,9 @@ const ContactRoute = ContactRouteImport.update({
   path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const KycRoute = KycRouteImport.update({
-  id: '/kyc',
-  path: '/kyc',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -94,122 +149,1008 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAccountSetupRoute = AdminAccountSetupRouteImport.update({
+  id: '/admin/account-setup',
+  path: '/admin/account-setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin/login',
+  path: '/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminOnboardingRoute = AdminOnboardingRouteImport.update({
+  id: '/admin/onboarding',
+  path: '/admin/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorIndexRoute = DistributorIndexRouteImport.update({
+  id: '/distributor/',
+  path: '/distributor/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorSplatRoute = DistributorSplatRouteImport.update({
+  id: '/distributor/$',
+  path: '/distributor/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorAccountSetupRoute = DistributorAccountSetupRouteImport.update({
+  id: '/distributor/account-setup',
+  path: '/distributor/account-setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorDashboardRoute = DistributorDashboardRouteImport.update({
+  id: '/distributor/dashboard',
+  path: '/distributor/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MasterDistributorIndexRoute = MasterDistributorIndexRouteImport.update({
+  id: '/master-distributor/',
+  path: '/master-distributor/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MasterDistributorSplatRoute = MasterDistributorSplatRouteImport.update({
+  id: '/master-distributor/$',
+  path: '/master-distributor/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MasterDistributorAccountSetupRoute =
+  MasterDistributorAccountSetupRouteImport.update({
+    id: '/master-distributor/account-setup',
+    path: '/master-distributor/account-setup',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorDashboardRoute =
+  MasterDistributorDashboardRouteImport.update({
+    id: '/master-distributor/dashboard',
+    path: '/master-distributor/dashboard',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const RetailerAccountSetupRoute = RetailerAccountSetupRouteImport.update({
+  id: '/retailer/account-setup',
+  path: '/retailer/account-setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetailerDashboardRoute = RetailerDashboardRouteImport.update({
+  id: '/retailer/dashboard',
+  path: '/retailer/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetailerSettingsRoute = RetailerSettingsRouteImport.update({
+  id: '/retailer/settings',
+  path: '/retailer/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAccessIndexRoute = AdminAccessIndexRouteImport.update({
+  id: '/admin/access/',
+  path: '/admin/access/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminApiSettingsIndexRoute = AdminApiSettingsIndexRouteImport.update({
+  id: '/admin/api-settings/',
+  path: '/admin/api-settings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminBankingIndexRoute = AdminBankingIndexRouteImport.update({
+  id: '/admin/banking/',
+  path: '/admin/banking/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminCommissionsIndexRoute = AdminCommissionsIndexRouteImport.update({
+  id: '/admin/commissions/',
+  path: '/admin/commissions/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminCommissionsHierarchyRoute =
+  AdminCommissionsHierarchyRouteImport.update({
+    id: '/admin/commissions/hierarchy',
+    path: '/admin/commissions/hierarchy',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AdminKycIndexRoute = AdminKycIndexRouteImport.update({
+  id: '/admin/kyc/',
+  path: '/admin/kyc/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminLegalIndexRoute = AdminLegalIndexRouteImport.update({
+  id: '/admin/legal/',
+  path: '/admin/legal/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminMerchantsIndexRoute = AdminMerchantsIndexRouteImport.update({
+  id: '/admin/merchants/',
+  path: '/admin/merchants/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminProfileIndexRoute = AdminProfileIndexRouteImport.update({
+  id: '/admin/profile/',
+  path: '/admin/profile/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminProfileBankRoute = AdminProfileBankRouteImport.update({
+  id: '/admin/profile/bank',
+  path: '/admin/profile/bank',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminProfileKycRoute = AdminProfileKycRouteImport.update({
+  id: '/admin/profile/kyc',
+  path: '/admin/profile/kyc',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminReportsIndexRoute = AdminReportsIndexRouteImport.update({
+  id: '/admin/reports/',
+  path: '/admin/reports/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSettingsIndexRoute = AdminSettingsIndexRouteImport.update({
+  id: '/admin/settings/',
+  path: '/admin/settings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSettlementsIndexRoute = AdminSettlementsIndexRouteImport.update({
+  id: '/admin/settlements/',
+  path: '/admin/settlements/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSmsIndexRoute = AdminSmsIndexRouteImport.update({
+  id: '/admin/sms/',
+  path: '/admin/sms/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminTransactionsIndexRoute = AdminTransactionsIndexRouteImport.update({
+  id: '/admin/transactions/',
+  path: '/admin/transactions/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorAepsIndexRoute = DistributorAepsIndexRouteImport.update({
+  id: '/distributor/aeps/',
+  path: '/distributor/aeps/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorAepsBalanceEnquiryRoute =
+  DistributorAepsBalanceEnquiryRouteImport.update({
+    id: '/distributor/aeps/balance-enquiry',
+    path: '/distributor/aeps/balance-enquiry',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DistributorAepsCashWithdrawalRoute =
+  DistributorAepsCashWithdrawalRouteImport.update({
+    id: '/distributor/aeps/cash-withdrawal',
+    path: '/distributor/aeps/cash-withdrawal',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DistributorAepsMiniStatementRoute =
+  DistributorAepsMiniStatementRouteImport.update({
+    id: '/distributor/aeps/mini-statement',
+    path: '/distributor/aeps/mini-statement',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DistributorAepsTransactionsRoute =
+  DistributorAepsTransactionsRouteImport.update({
+    id: '/distributor/aeps/transactions',
+    path: '/distributor/aeps/transactions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DistributorCommissionIndexRoute =
+  DistributorCommissionIndexRouteImport.update({
+    id: '/distributor/commission/',
+    path: '/distributor/commission/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DistributorProfileIndexRoute = DistributorProfileIndexRouteImport.update({
+  id: '/distributor/profile/',
+  path: '/distributor/profile/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorProfileBankRoute = DistributorProfileBankRouteImport.update({
+  id: '/distributor/profile/bank',
+  path: '/distributor/profile/bank',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorProfileKycRoute = DistributorProfileKycRouteImport.update({
+  id: '/distributor/profile/kyc',
+  path: '/distributor/profile/kyc',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorReportsIndexRoute = DistributorReportsIndexRouteImport.update({
+  id: '/distributor/reports/',
+  path: '/distributor/reports/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorRetailersIndexRoute =
+  DistributorRetailersIndexRouteImport.update({
+    id: '/distributor/retailers/',
+    path: '/distributor/retailers/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DistributorSettingsIndexRoute =
+  DistributorSettingsIndexRouteImport.update({
+    id: '/distributor/settings/',
+    path: '/distributor/settings/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DistributorSupportIndexRoute = DistributorSupportIndexRouteImport.update({
+  id: '/distributor/support/',
+  path: '/distributor/support/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorWalletIndexRoute = DistributorWalletIndexRouteImport.update({
+  id: '/distributor/wallet/',
+  path: '/distributor/wallet/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorWalletTransferRoute =
+  DistributorWalletTransferRouteImport.update({
+    id: '/distributor/wallet/transfer',
+    path: '/distributor/wallet/transfer',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorCommissionIndexRoute =
+  MasterDistributorCommissionIndexRouteImport.update({
+    id: '/master-distributor/commission/',
+    path: '/master-distributor/commission/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorKycIndexRoute =
+  MasterDistributorKycIndexRouteImport.update({
+    id: '/master-distributor/kyc/',
+    path: '/master-distributor/kyc/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorNotificationsIndexRoute =
+  MasterDistributorNotificationsIndexRouteImport.update({
+    id: '/master-distributor/notifications/',
+    path: '/master-distributor/notifications/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorProfileIndexRoute =
+  MasterDistributorProfileIndexRouteImport.update({
+    id: '/master-distributor/profile/',
+    path: '/master-distributor/profile/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorProfileBankRoute =
+  MasterDistributorProfileBankRouteImport.update({
+    id: '/master-distributor/profile/bank',
+    path: '/master-distributor/profile/bank',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorProfileKycRoute =
+  MasterDistributorProfileKycRouteImport.update({
+    id: '/master-distributor/profile/kyc',
+    path: '/master-distributor/profile/kyc',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorReportsIndexRoute =
+  MasterDistributorReportsIndexRouteImport.update({
+    id: '/master-distributor/reports/',
+    path: '/master-distributor/reports/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorSettingsIndexRoute =
+  MasterDistributorSettingsIndexRouteImport.update({
+    id: '/master-distributor/settings/',
+    path: '/master-distributor/settings/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorSupportIndexRoute =
+  MasterDistributorSupportIndexRouteImport.update({
+    id: '/master-distributor/support/',
+    path: '/master-distributor/support/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorTransactionsIndexRoute =
+  MasterDistributorTransactionsIndexRouteImport.update({
+    id: '/master-distributor/transactions/',
+    path: '/master-distributor/transactions/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorWalletIndexRoute =
+  MasterDistributorWalletIndexRouteImport.update({
+    id: '/master-distributor/wallet/',
+    path: '/master-distributor/wallet/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorWalletHistoryRoute =
+  MasterDistributorWalletHistoryRouteImport.update({
+    id: '/master-distributor/wallet/history',
+    path: '/master-distributor/wallet/history',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorWalletRequestsRoute =
+  MasterDistributorWalletRequestsRouteImport.update({
+    id: '/master-distributor/wallet/requests',
+    path: '/master-distributor/wallet/requests',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorWalletTransferRoute =
+  MasterDistributorWalletTransferRouteImport.update({
+    id: '/master-distributor/wallet/transfer',
+    path: '/master-distributor/wallet/transfer',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const RetailerAepsIndexRoute = RetailerAepsIndexRouteImport.update({
+  id: '/retailer/aeps/',
+  path: '/retailer/aeps/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetailerBankIndexRoute = RetailerBankIndexRouteImport.update({
+  id: '/retailer/bank/',
+  path: '/retailer/bank/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetailerKycIndexRoute = RetailerKycIndexRouteImport.update({
+  id: '/retailer/kyc/',
+  path: '/retailer/kyc/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetailerTransactionsIndexRoute =
+  RetailerTransactionsIndexRouteImport.update({
+    id: '/retailer/transactions/',
+    path: '/retailer/transactions/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const RetailerWalletIndexRoute = RetailerWalletIndexRouteImport.update({
+  id: '/retailer/wallet/',
+  path: '/retailer/wallet/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetailerWalletTransferRoute = RetailerWalletTransferRouteImport.update({
+  id: '/retailer/wallet/transfer',
+  path: '/retailer/wallet/transfer',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminMerchantsAddIndexRoute = AdminMerchantsAddIndexRouteImport.update({
+  id: '/admin/merchants/add/',
+  path: '/admin/merchants/add/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminMerchantsListIndexRoute = AdminMerchantsListIndexRouteImport.update({
+  id: '/admin/merchants/list/',
+  path: '/admin/merchants/list/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorRetailersAddIndexRoute =
+  DistributorRetailersAddIndexRouteImport.update({
+    id: '/distributor/retailers/add/',
+    path: '/distributor/retailers/add/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorNetworkDistributorsIndexRoute =
+  MasterDistributorNetworkDistributorsIndexRouteImport.update({
+    id: '/master-distributor/network/distributors/',
+    path: '/master-distributor/network/distributors/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorNetworkRetailersIndexRoute =
+  MasterDistributorNetworkRetailersIndexRouteImport.update({
+    id: '/master-distributor/network/retailers/',
+    path: '/master-distributor/network/retailers/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorNetworkTreeIndexRoute =
+  MasterDistributorNetworkTreeIndexRouteImport.update({
+    id: '/master-distributor/network/tree/',
+    path: '/master-distributor/network/tree/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const MasterDistributorNetworkDistributorsAddIndexRoute =
+  MasterDistributorNetworkDistributorsAddIndexRouteImport.update({
+    id: '/master-distributor/network/distributors/add/',
+    path: '/master-distributor/network/distributors/add/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/aeps': typeof AepsRoute
-  '/bank-accounts': typeof BankAccountsRoute
+  '/activity': typeof ActivityRoute
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
-  '/kyc': typeof KycRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/refund-policy': typeof RefundPolicyRoute
   '/register': typeof RegisterRoute
   '/services': typeof ServicesRoute
   '/terms': typeof TermsRoute
+  '/admin/account-setup': typeof AdminAccountSetupRoute
+  '/admin/login': typeof AdminLoginRoute
+  '/admin/onboarding': typeof AdminOnboardingRoute
+  '/distributor/$': typeof DistributorSplatRoute
+  '/distributor/account-setup': typeof DistributorAccountSetupRoute
+  '/distributor/dashboard': typeof DistributorDashboardRoute
+  '/master-distributor/$': typeof MasterDistributorSplatRoute
+  '/master-distributor/account-setup': typeof MasterDistributorAccountSetupRoute
+  '/master-distributor/dashboard': typeof MasterDistributorDashboardRoute
+  '/retailer/account-setup': typeof RetailerAccountSetupRoute
+  '/retailer/dashboard': typeof RetailerDashboardRoute
+  '/retailer/settings': typeof RetailerSettingsRoute
+  '/admin/': typeof AdminIndexRoute
+  '/distributor/': typeof DistributorIndexRoute
+  '/master-distributor/': typeof MasterDistributorIndexRoute
+  '/admin/commissions/hierarchy': typeof AdminCommissionsHierarchyRoute
+  '/admin/profile/bank': typeof AdminProfileBankRoute
+  '/admin/profile/kyc': typeof AdminProfileKycRoute
+  '/distributor/aeps/balance-enquiry': typeof DistributorAepsBalanceEnquiryRoute
+  '/distributor/aeps/cash-withdrawal': typeof DistributorAepsCashWithdrawalRoute
+  '/distributor/aeps/mini-statement': typeof DistributorAepsMiniStatementRoute
+  '/distributor/aeps/transactions': typeof DistributorAepsTransactionsRoute
+  '/distributor/profile/bank': typeof DistributorProfileBankRoute
+  '/distributor/profile/kyc': typeof DistributorProfileKycRoute
+  '/distributor/wallet/transfer': typeof DistributorWalletTransferRoute
+  '/master-distributor/profile/bank': typeof MasterDistributorProfileBankRoute
+  '/master-distributor/profile/kyc': typeof MasterDistributorProfileKycRoute
+  '/master-distributor/wallet/history': typeof MasterDistributorWalletHistoryRoute
+  '/master-distributor/wallet/requests': typeof MasterDistributorWalletRequestsRoute
+  '/master-distributor/wallet/transfer': typeof MasterDistributorWalletTransferRoute
+  '/retailer/wallet/transfer': typeof RetailerWalletTransferRoute
+  '/admin/access/': typeof AdminAccessIndexRoute
+  '/admin/api-settings/': typeof AdminApiSettingsIndexRoute
+  '/admin/banking/': typeof AdminBankingIndexRoute
+  '/admin/commissions/': typeof AdminCommissionsIndexRoute
+  '/admin/kyc/': typeof AdminKycIndexRoute
+  '/admin/legal/': typeof AdminLegalIndexRoute
+  '/admin/merchants/': typeof AdminMerchantsIndexRoute
+  '/admin/profile/': typeof AdminProfileIndexRoute
+  '/admin/reports/': typeof AdminReportsIndexRoute
+  '/admin/settings/': typeof AdminSettingsIndexRoute
+  '/admin/settlements/': typeof AdminSettlementsIndexRoute
+  '/admin/sms/': typeof AdminSmsIndexRoute
+  '/admin/transactions/': typeof AdminTransactionsIndexRoute
+  '/distributor/aeps/': typeof DistributorAepsIndexRoute
+  '/distributor/commission/': typeof DistributorCommissionIndexRoute
+  '/distributor/profile/': typeof DistributorProfileIndexRoute
+  '/distributor/reports/': typeof DistributorReportsIndexRoute
+  '/distributor/retailers/': typeof DistributorRetailersIndexRoute
+  '/distributor/settings/': typeof DistributorSettingsIndexRoute
+  '/distributor/support/': typeof DistributorSupportIndexRoute
+  '/distributor/wallet/': typeof DistributorWalletIndexRoute
+  '/master-distributor/commission/': typeof MasterDistributorCommissionIndexRoute
+  '/master-distributor/kyc/': typeof MasterDistributorKycIndexRoute
+  '/master-distributor/notifications/': typeof MasterDistributorNotificationsIndexRoute
+  '/master-distributor/profile/': typeof MasterDistributorProfileIndexRoute
+  '/master-distributor/reports/': typeof MasterDistributorReportsIndexRoute
+  '/master-distributor/settings/': typeof MasterDistributorSettingsIndexRoute
+  '/master-distributor/support/': typeof MasterDistributorSupportIndexRoute
+  '/master-distributor/transactions/': typeof MasterDistributorTransactionsIndexRoute
+  '/master-distributor/wallet/': typeof MasterDistributorWalletIndexRoute
+  '/retailer/aeps/': typeof RetailerAepsIndexRoute
+  '/retailer/bank/': typeof RetailerBankIndexRoute
+  '/retailer/kyc/': typeof RetailerKycIndexRoute
+  '/retailer/transactions/': typeof RetailerTransactionsIndexRoute
+  '/retailer/wallet/': typeof RetailerWalletIndexRoute
+  '/admin/merchants/add/': typeof AdminMerchantsAddIndexRoute
+  '/admin/merchants/list/': typeof AdminMerchantsListIndexRoute
+  '/distributor/retailers/add/': typeof DistributorRetailersAddIndexRoute
+  '/master-distributor/network/distributors/': typeof MasterDistributorNetworkDistributorsIndexRoute
+  '/master-distributor/network/retailers/': typeof MasterDistributorNetworkRetailersIndexRoute
+  '/master-distributor/network/tree/': typeof MasterDistributorNetworkTreeIndexRoute
+  '/master-distributor/network/distributors/add/': typeof MasterDistributorNetworkDistributorsAddIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/aeps': typeof AepsRoute
-  '/bank-accounts': typeof BankAccountsRoute
+  '/activity': typeof ActivityRoute
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
-  '/kyc': typeof KycRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/refund-policy': typeof RefundPolicyRoute
   '/register': typeof RegisterRoute
   '/services': typeof ServicesRoute
   '/terms': typeof TermsRoute
+  '/admin/account-setup': typeof AdminAccountSetupRoute
+  '/admin/login': typeof AdminLoginRoute
+  '/admin/onboarding': typeof AdminOnboardingRoute
+  '/distributor/$': typeof DistributorSplatRoute
+  '/distributor/account-setup': typeof DistributorAccountSetupRoute
+  '/distributor/dashboard': typeof DistributorDashboardRoute
+  '/master-distributor/$': typeof MasterDistributorSplatRoute
+  '/master-distributor/account-setup': typeof MasterDistributorAccountSetupRoute
+  '/master-distributor/dashboard': typeof MasterDistributorDashboardRoute
+  '/retailer/account-setup': typeof RetailerAccountSetupRoute
+  '/retailer/dashboard': typeof RetailerDashboardRoute
+  '/retailer/settings': typeof RetailerSettingsRoute
+  '/admin': typeof AdminIndexRoute
+  '/distributor': typeof DistributorIndexRoute
+  '/master-distributor': typeof MasterDistributorIndexRoute
+  '/admin/commissions/hierarchy': typeof AdminCommissionsHierarchyRoute
+  '/admin/profile/bank': typeof AdminProfileBankRoute
+  '/admin/profile/kyc': typeof AdminProfileKycRoute
+  '/distributor/aeps/balance-enquiry': typeof DistributorAepsBalanceEnquiryRoute
+  '/distributor/aeps/cash-withdrawal': typeof DistributorAepsCashWithdrawalRoute
+  '/distributor/aeps/mini-statement': typeof DistributorAepsMiniStatementRoute
+  '/distributor/aeps/transactions': typeof DistributorAepsTransactionsRoute
+  '/distributor/profile/bank': typeof DistributorProfileBankRoute
+  '/distributor/profile/kyc': typeof DistributorProfileKycRoute
+  '/distributor/wallet/transfer': typeof DistributorWalletTransferRoute
+  '/master-distributor/profile/bank': typeof MasterDistributorProfileBankRoute
+  '/master-distributor/profile/kyc': typeof MasterDistributorProfileKycRoute
+  '/master-distributor/wallet/history': typeof MasterDistributorWalletHistoryRoute
+  '/master-distributor/wallet/requests': typeof MasterDistributorWalletRequestsRoute
+  '/master-distributor/wallet/transfer': typeof MasterDistributorWalletTransferRoute
+  '/retailer/wallet/transfer': typeof RetailerWalletTransferRoute
+  '/admin/access': typeof AdminAccessIndexRoute
+  '/admin/api-settings': typeof AdminApiSettingsIndexRoute
+  '/admin/banking': typeof AdminBankingIndexRoute
+  '/admin/commissions': typeof AdminCommissionsIndexRoute
+  '/admin/kyc': typeof AdminKycIndexRoute
+  '/admin/legal': typeof AdminLegalIndexRoute
+  '/admin/merchants': typeof AdminMerchantsIndexRoute
+  '/admin/profile': typeof AdminProfileIndexRoute
+  '/admin/reports': typeof AdminReportsIndexRoute
+  '/admin/settings': typeof AdminSettingsIndexRoute
+  '/admin/settlements': typeof AdminSettlementsIndexRoute
+  '/admin/sms': typeof AdminSmsIndexRoute
+  '/admin/transactions': typeof AdminTransactionsIndexRoute
+  '/distributor/aeps': typeof DistributorAepsIndexRoute
+  '/distributor/commission': typeof DistributorCommissionIndexRoute
+  '/distributor/profile': typeof DistributorProfileIndexRoute
+  '/distributor/reports': typeof DistributorReportsIndexRoute
+  '/distributor/retailers': typeof DistributorRetailersIndexRoute
+  '/distributor/settings': typeof DistributorSettingsIndexRoute
+  '/distributor/support': typeof DistributorSupportIndexRoute
+  '/distributor/wallet': typeof DistributorWalletIndexRoute
+  '/master-distributor/commission': typeof MasterDistributorCommissionIndexRoute
+  '/master-distributor/kyc': typeof MasterDistributorKycIndexRoute
+  '/master-distributor/notifications': typeof MasterDistributorNotificationsIndexRoute
+  '/master-distributor/profile': typeof MasterDistributorProfileIndexRoute
+  '/master-distributor/reports': typeof MasterDistributorReportsIndexRoute
+  '/master-distributor/settings': typeof MasterDistributorSettingsIndexRoute
+  '/master-distributor/support': typeof MasterDistributorSupportIndexRoute
+  '/master-distributor/transactions': typeof MasterDistributorTransactionsIndexRoute
+  '/master-distributor/wallet': typeof MasterDistributorWalletIndexRoute
+  '/retailer/aeps': typeof RetailerAepsIndexRoute
+  '/retailer/bank': typeof RetailerBankIndexRoute
+  '/retailer/kyc': typeof RetailerKycIndexRoute
+  '/retailer/transactions': typeof RetailerTransactionsIndexRoute
+  '/retailer/wallet': typeof RetailerWalletIndexRoute
+  '/admin/merchants/add': typeof AdminMerchantsAddIndexRoute
+  '/admin/merchants/list': typeof AdminMerchantsListIndexRoute
+  '/distributor/retailers/add': typeof DistributorRetailersAddIndexRoute
+  '/master-distributor/network/distributors': typeof MasterDistributorNetworkDistributorsIndexRoute
+  '/master-distributor/network/retailers': typeof MasterDistributorNetworkRetailersIndexRoute
+  '/master-distributor/network/tree': typeof MasterDistributorNetworkTreeIndexRoute
+  '/master-distributor/network/distributors/add': typeof MasterDistributorNetworkDistributorsAddIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/aeps': typeof AepsRoute
-  '/bank-accounts': typeof BankAccountsRoute
+  '/activity': typeof ActivityRoute
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRoute
   '/forgot-password': typeof ForgotPasswordRoute
-  '/kyc': typeof KycRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/refund-policy': typeof RefundPolicyRoute
   '/register': typeof RegisterRoute
   '/services': typeof ServicesRoute
   '/terms': typeof TermsRoute
+  '/admin/account-setup': typeof AdminAccountSetupRoute
+  '/admin/login': typeof AdminLoginRoute
+  '/admin/onboarding': typeof AdminOnboardingRoute
+  '/distributor/$': typeof DistributorSplatRoute
+  '/distributor/account-setup': typeof DistributorAccountSetupRoute
+  '/distributor/dashboard': typeof DistributorDashboardRoute
+  '/master-distributor/$': typeof MasterDistributorSplatRoute
+  '/master-distributor/account-setup': typeof MasterDistributorAccountSetupRoute
+  '/master-distributor/dashboard': typeof MasterDistributorDashboardRoute
+  '/retailer/account-setup': typeof RetailerAccountSetupRoute
+  '/retailer/dashboard': typeof RetailerDashboardRoute
+  '/retailer/settings': typeof RetailerSettingsRoute
+  '/admin/': typeof AdminIndexRoute
+  '/distributor/': typeof DistributorIndexRoute
+  '/master-distributor/': typeof MasterDistributorIndexRoute
+  '/admin/commissions/hierarchy': typeof AdminCommissionsHierarchyRoute
+  '/admin/profile/bank': typeof AdminProfileBankRoute
+  '/admin/profile/kyc': typeof AdminProfileKycRoute
+  '/distributor/aeps/balance-enquiry': typeof DistributorAepsBalanceEnquiryRoute
+  '/distributor/aeps/cash-withdrawal': typeof DistributorAepsCashWithdrawalRoute
+  '/distributor/aeps/mini-statement': typeof DistributorAepsMiniStatementRoute
+  '/distributor/aeps/transactions': typeof DistributorAepsTransactionsRoute
+  '/distributor/profile/bank': typeof DistributorProfileBankRoute
+  '/distributor/profile/kyc': typeof DistributorProfileKycRoute
+  '/distributor/wallet/transfer': typeof DistributorWalletTransferRoute
+  '/master-distributor/profile/bank': typeof MasterDistributorProfileBankRoute
+  '/master-distributor/profile/kyc': typeof MasterDistributorProfileKycRoute
+  '/master-distributor/wallet/history': typeof MasterDistributorWalletHistoryRoute
+  '/master-distributor/wallet/requests': typeof MasterDistributorWalletRequestsRoute
+  '/master-distributor/wallet/transfer': typeof MasterDistributorWalletTransferRoute
+  '/retailer/wallet/transfer': typeof RetailerWalletTransferRoute
+  '/admin/access/': typeof AdminAccessIndexRoute
+  '/admin/api-settings/': typeof AdminApiSettingsIndexRoute
+  '/admin/banking/': typeof AdminBankingIndexRoute
+  '/admin/commissions/': typeof AdminCommissionsIndexRoute
+  '/admin/kyc/': typeof AdminKycIndexRoute
+  '/admin/legal/': typeof AdminLegalIndexRoute
+  '/admin/merchants/': typeof AdminMerchantsIndexRoute
+  '/admin/profile/': typeof AdminProfileIndexRoute
+  '/admin/reports/': typeof AdminReportsIndexRoute
+  '/admin/settings/': typeof AdminSettingsIndexRoute
+  '/admin/settlements/': typeof AdminSettlementsIndexRoute
+  '/admin/sms/': typeof AdminSmsIndexRoute
+  '/admin/transactions/': typeof AdminTransactionsIndexRoute
+  '/distributor/aeps/': typeof DistributorAepsIndexRoute
+  '/distributor/commission/': typeof DistributorCommissionIndexRoute
+  '/distributor/profile/': typeof DistributorProfileIndexRoute
+  '/distributor/reports/': typeof DistributorReportsIndexRoute
+  '/distributor/retailers/': typeof DistributorRetailersIndexRoute
+  '/distributor/settings/': typeof DistributorSettingsIndexRoute
+  '/distributor/support/': typeof DistributorSupportIndexRoute
+  '/distributor/wallet/': typeof DistributorWalletIndexRoute
+  '/master-distributor/commission/': typeof MasterDistributorCommissionIndexRoute
+  '/master-distributor/kyc/': typeof MasterDistributorKycIndexRoute
+  '/master-distributor/notifications/': typeof MasterDistributorNotificationsIndexRoute
+  '/master-distributor/profile/': typeof MasterDistributorProfileIndexRoute
+  '/master-distributor/reports/': typeof MasterDistributorReportsIndexRoute
+  '/master-distributor/settings/': typeof MasterDistributorSettingsIndexRoute
+  '/master-distributor/support/': typeof MasterDistributorSupportIndexRoute
+  '/master-distributor/transactions/': typeof MasterDistributorTransactionsIndexRoute
+  '/master-distributor/wallet/': typeof MasterDistributorWalletIndexRoute
+  '/retailer/aeps/': typeof RetailerAepsIndexRoute
+  '/retailer/bank/': typeof RetailerBankIndexRoute
+  '/retailer/kyc/': typeof RetailerKycIndexRoute
+  '/retailer/transactions/': typeof RetailerTransactionsIndexRoute
+  '/retailer/wallet/': typeof RetailerWalletIndexRoute
+  '/admin/merchants/add/': typeof AdminMerchantsAddIndexRoute
+  '/admin/merchants/list/': typeof AdminMerchantsListIndexRoute
+  '/distributor/retailers/add/': typeof DistributorRetailersAddIndexRoute
+  '/master-distributor/network/distributors/': typeof MasterDistributorNetworkDistributorsIndexRoute
+  '/master-distributor/network/retailers/': typeof MasterDistributorNetworkRetailersIndexRoute
+  '/master-distributor/network/tree/': typeof MasterDistributorNetworkTreeIndexRoute
+  '/master-distributor/network/distributors/add/': typeof MasterDistributorNetworkDistributorsAddIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/about'
-    | '/aeps'
-    | '/bank-accounts'
+    | '/activity'
     | '/contact'
-    | '/dashboard'
     | '/forgot-password'
-    | '/kyc'
     | '/login'
     | '/privacy'
     | '/refund-policy'
     | '/register'
     | '/services'
     | '/terms'
+    | '/admin/account-setup'
+    | '/admin/login'
+    | '/admin/onboarding'
+    | '/distributor/$'
+    | '/distributor/account-setup'
+    | '/distributor/dashboard'
+    | '/master-distributor/$'
+    | '/master-distributor/account-setup'
+    | '/master-distributor/dashboard'
+    | '/retailer/account-setup'
+    | '/retailer/dashboard'
+    | '/retailer/settings'
+    | '/admin/'
+    | '/distributor/'
+    | '/master-distributor/'
+    | '/admin/commissions/hierarchy'
+    | '/admin/profile/bank'
+    | '/admin/profile/kyc'
+    | '/distributor/aeps/balance-enquiry'
+    | '/distributor/aeps/cash-withdrawal'
+    | '/distributor/aeps/mini-statement'
+    | '/distributor/aeps/transactions'
+    | '/distributor/profile/bank'
+    | '/distributor/profile/kyc'
+    | '/distributor/wallet/transfer'
+    | '/master-distributor/profile/bank'
+    | '/master-distributor/profile/kyc'
+    | '/master-distributor/wallet/history'
+    | '/master-distributor/wallet/requests'
+    | '/master-distributor/wallet/transfer'
+    | '/retailer/wallet/transfer'
+    | '/admin/access/'
+    | '/admin/api-settings/'
+    | '/admin/banking/'
+    | '/admin/commissions/'
+    | '/admin/kyc/'
+    | '/admin/legal/'
+    | '/admin/merchants/'
+    | '/admin/profile/'
+    | '/admin/reports/'
+    | '/admin/settings/'
+    | '/admin/settlements/'
+    | '/admin/sms/'
+    | '/admin/transactions/'
+    | '/distributor/aeps/'
+    | '/distributor/commission/'
+    | '/distributor/profile/'
+    | '/distributor/reports/'
+    | '/distributor/retailers/'
+    | '/distributor/settings/'
+    | '/distributor/support/'
+    | '/distributor/wallet/'
+    | '/master-distributor/commission/'
+    | '/master-distributor/kyc/'
+    | '/master-distributor/notifications/'
+    | '/master-distributor/profile/'
+    | '/master-distributor/reports/'
+    | '/master-distributor/settings/'
+    | '/master-distributor/support/'
+    | '/master-distributor/transactions/'
+    | '/master-distributor/wallet/'
+    | '/retailer/aeps/'
+    | '/retailer/bank/'
+    | '/retailer/kyc/'
+    | '/retailer/transactions/'
+    | '/retailer/wallet/'
+    | '/admin/merchants/add/'
+    | '/admin/merchants/list/'
+    | '/distributor/retailers/add/'
+    | '/master-distributor/network/distributors/'
+    | '/master-distributor/network/retailers/'
+    | '/master-distributor/network/tree/'
+    | '/master-distributor/network/distributors/add/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/about'
-    | '/aeps'
-    | '/bank-accounts'
+    | '/activity'
     | '/contact'
-    | '/dashboard'
     | '/forgot-password'
-    | '/kyc'
     | '/login'
     | '/privacy'
     | '/refund-policy'
     | '/register'
     | '/services'
     | '/terms'
+    | '/admin/account-setup'
+    | '/admin/login'
+    | '/admin/onboarding'
+    | '/distributor/$'
+    | '/distributor/account-setup'
+    | '/distributor/dashboard'
+    | '/master-distributor/$'
+    | '/master-distributor/account-setup'
+    | '/master-distributor/dashboard'
+    | '/retailer/account-setup'
+    | '/retailer/dashboard'
+    | '/retailer/settings'
+    | '/admin'
+    | '/distributor'
+    | '/master-distributor'
+    | '/admin/commissions/hierarchy'
+    | '/admin/profile/bank'
+    | '/admin/profile/kyc'
+    | '/distributor/aeps/balance-enquiry'
+    | '/distributor/aeps/cash-withdrawal'
+    | '/distributor/aeps/mini-statement'
+    | '/distributor/aeps/transactions'
+    | '/distributor/profile/bank'
+    | '/distributor/profile/kyc'
+    | '/distributor/wallet/transfer'
+    | '/master-distributor/profile/bank'
+    | '/master-distributor/profile/kyc'
+    | '/master-distributor/wallet/history'
+    | '/master-distributor/wallet/requests'
+    | '/master-distributor/wallet/transfer'
+    | '/retailer/wallet/transfer'
+    | '/admin/access'
+    | '/admin/api-settings'
+    | '/admin/banking'
+    | '/admin/commissions'
+    | '/admin/kyc'
+    | '/admin/legal'
+    | '/admin/merchants'
+    | '/admin/profile'
+    | '/admin/reports'
+    | '/admin/settings'
+    | '/admin/settlements'
+    | '/admin/sms'
+    | '/admin/transactions'
+    | '/distributor/aeps'
+    | '/distributor/commission'
+    | '/distributor/profile'
+    | '/distributor/reports'
+    | '/distributor/retailers'
+    | '/distributor/settings'
+    | '/distributor/support'
+    | '/distributor/wallet'
+    | '/master-distributor/commission'
+    | '/master-distributor/kyc'
+    | '/master-distributor/notifications'
+    | '/master-distributor/profile'
+    | '/master-distributor/reports'
+    | '/master-distributor/settings'
+    | '/master-distributor/support'
+    | '/master-distributor/transactions'
+    | '/master-distributor/wallet'
+    | '/retailer/aeps'
+    | '/retailer/bank'
+    | '/retailer/kyc'
+    | '/retailer/transactions'
+    | '/retailer/wallet'
+    | '/admin/merchants/add'
+    | '/admin/merchants/list'
+    | '/distributor/retailers/add'
+    | '/master-distributor/network/distributors'
+    | '/master-distributor/network/retailers'
+    | '/master-distributor/network/tree'
+    | '/master-distributor/network/distributors/add'
   id:
     | '__root__'
     | '/'
     | '/about'
-    | '/aeps'
-    | '/bank-accounts'
+    | '/activity'
     | '/contact'
-    | '/dashboard'
     | '/forgot-password'
-    | '/kyc'
     | '/login'
     | '/privacy'
     | '/refund-policy'
     | '/register'
     | '/services'
     | '/terms'
+    | '/admin/account-setup'
+    | '/admin/login'
+    | '/admin/onboarding'
+    | '/distributor/$'
+    | '/distributor/account-setup'
+    | '/distributor/dashboard'
+    | '/master-distributor/$'
+    | '/master-distributor/account-setup'
+    | '/master-distributor/dashboard'
+    | '/retailer/account-setup'
+    | '/retailer/dashboard'
+    | '/retailer/settings'
+    | '/admin/'
+    | '/distributor/'
+    | '/master-distributor/'
+    | '/admin/commissions/hierarchy'
+    | '/admin/profile/bank'
+    | '/admin/profile/kyc'
+    | '/distributor/aeps/balance-enquiry'
+    | '/distributor/aeps/cash-withdrawal'
+    | '/distributor/aeps/mini-statement'
+    | '/distributor/aeps/transactions'
+    | '/distributor/profile/bank'
+    | '/distributor/profile/kyc'
+    | '/distributor/wallet/transfer'
+    | '/master-distributor/profile/bank'
+    | '/master-distributor/profile/kyc'
+    | '/master-distributor/wallet/history'
+    | '/master-distributor/wallet/requests'
+    | '/master-distributor/wallet/transfer'
+    | '/retailer/wallet/transfer'
+    | '/admin/access/'
+    | '/admin/api-settings/'
+    | '/admin/banking/'
+    | '/admin/commissions/'
+    | '/admin/kyc/'
+    | '/admin/legal/'
+    | '/admin/merchants/'
+    | '/admin/profile/'
+    | '/admin/reports/'
+    | '/admin/settings/'
+    | '/admin/settlements/'
+    | '/admin/sms/'
+    | '/admin/transactions/'
+    | '/distributor/aeps/'
+    | '/distributor/commission/'
+    | '/distributor/profile/'
+    | '/distributor/reports/'
+    | '/distributor/retailers/'
+    | '/distributor/settings/'
+    | '/distributor/support/'
+    | '/distributor/wallet/'
+    | '/master-distributor/commission/'
+    | '/master-distributor/kyc/'
+    | '/master-distributor/notifications/'
+    | '/master-distributor/profile/'
+    | '/master-distributor/reports/'
+    | '/master-distributor/settings/'
+    | '/master-distributor/support/'
+    | '/master-distributor/transactions/'
+    | '/master-distributor/wallet/'
+    | '/retailer/aeps/'
+    | '/retailer/bank/'
+    | '/retailer/kyc/'
+    | '/retailer/transactions/'
+    | '/retailer/wallet/'
+    | '/admin/merchants/add/'
+    | '/admin/merchants/list/'
+    | '/distributor/retailers/add/'
+    | '/master-distributor/network/distributors/'
+    | '/master-distributor/network/retailers/'
+    | '/master-distributor/network/tree/'
+    | '/master-distributor/network/distributors/add/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
-  AepsRoute: typeof AepsRoute
-  BankAccountsRoute: typeof BankAccountsRoute
+  ActivityRoute: typeof ActivityRoute
   ContactRoute: typeof ContactRoute
-  DashboardRoute: typeof DashboardRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
-  KycRoute: typeof KycRoute
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
   RefundPolicyRoute: typeof RefundPolicyRoute
   RegisterRoute: typeof RegisterRoute
   ServicesRoute: typeof ServicesRoute
   TermsRoute: typeof TermsRoute
+  AdminAccountSetupRoute: typeof AdminAccountSetupRoute
+  AdminLoginRoute: typeof AdminLoginRoute
+  AdminOnboardingRoute: typeof AdminOnboardingRoute
+  DistributorSplatRoute: typeof DistributorSplatRoute
+  DistributorAccountSetupRoute: typeof DistributorAccountSetupRoute
+  DistributorDashboardRoute: typeof DistributorDashboardRoute
+  MasterDistributorSplatRoute: typeof MasterDistributorSplatRoute
+  MasterDistributorAccountSetupRoute: typeof MasterDistributorAccountSetupRoute
+  MasterDistributorDashboardRoute: typeof MasterDistributorDashboardRoute
+  RetailerAccountSetupRoute: typeof RetailerAccountSetupRoute
+  RetailerDashboardRoute: typeof RetailerDashboardRoute
+  RetailerSettingsRoute: typeof RetailerSettingsRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+  DistributorIndexRoute: typeof DistributorIndexRoute
+  MasterDistributorIndexRoute: typeof MasterDistributorIndexRoute
+  AdminCommissionsHierarchyRoute: typeof AdminCommissionsHierarchyRoute
+  AdminProfileBankRoute: typeof AdminProfileBankRoute
+  AdminProfileKycRoute: typeof AdminProfileKycRoute
+  DistributorAepsBalanceEnquiryRoute: typeof DistributorAepsBalanceEnquiryRoute
+  DistributorAepsCashWithdrawalRoute: typeof DistributorAepsCashWithdrawalRoute
+  DistributorAepsMiniStatementRoute: typeof DistributorAepsMiniStatementRoute
+  DistributorAepsTransactionsRoute: typeof DistributorAepsTransactionsRoute
+  DistributorProfileBankRoute: typeof DistributorProfileBankRoute
+  DistributorProfileKycRoute: typeof DistributorProfileKycRoute
+  DistributorWalletTransferRoute: typeof DistributorWalletTransferRoute
+  MasterDistributorProfileBankRoute: typeof MasterDistributorProfileBankRoute
+  MasterDistributorProfileKycRoute: typeof MasterDistributorProfileKycRoute
+  MasterDistributorWalletHistoryRoute: typeof MasterDistributorWalletHistoryRoute
+  MasterDistributorWalletRequestsRoute: typeof MasterDistributorWalletRequestsRoute
+  MasterDistributorWalletTransferRoute: typeof MasterDistributorWalletTransferRoute
+  RetailerWalletTransferRoute: typeof RetailerWalletTransferRoute
+  AdminAccessIndexRoute: typeof AdminAccessIndexRoute
+  AdminApiSettingsIndexRoute: typeof AdminApiSettingsIndexRoute
+  AdminBankingIndexRoute: typeof AdminBankingIndexRoute
+  AdminCommissionsIndexRoute: typeof AdminCommissionsIndexRoute
+  AdminKycIndexRoute: typeof AdminKycIndexRoute
+  AdminLegalIndexRoute: typeof AdminLegalIndexRoute
+  AdminMerchantsIndexRoute: typeof AdminMerchantsIndexRoute
+  AdminProfileIndexRoute: typeof AdminProfileIndexRoute
+  AdminReportsIndexRoute: typeof AdminReportsIndexRoute
+  AdminSettingsIndexRoute: typeof AdminSettingsIndexRoute
+  AdminSettlementsIndexRoute: typeof AdminSettlementsIndexRoute
+  AdminSmsIndexRoute: typeof AdminSmsIndexRoute
+  AdminTransactionsIndexRoute: typeof AdminTransactionsIndexRoute
+  DistributorAepsIndexRoute: typeof DistributorAepsIndexRoute
+  DistributorCommissionIndexRoute: typeof DistributorCommissionIndexRoute
+  DistributorProfileIndexRoute: typeof DistributorProfileIndexRoute
+  DistributorReportsIndexRoute: typeof DistributorReportsIndexRoute
+  DistributorRetailersIndexRoute: typeof DistributorRetailersIndexRoute
+  DistributorSettingsIndexRoute: typeof DistributorSettingsIndexRoute
+  DistributorSupportIndexRoute: typeof DistributorSupportIndexRoute
+  DistributorWalletIndexRoute: typeof DistributorWalletIndexRoute
+  MasterDistributorCommissionIndexRoute: typeof MasterDistributorCommissionIndexRoute
+  MasterDistributorKycIndexRoute: typeof MasterDistributorKycIndexRoute
+  MasterDistributorNotificationsIndexRoute: typeof MasterDistributorNotificationsIndexRoute
+  MasterDistributorProfileIndexRoute: typeof MasterDistributorProfileIndexRoute
+  MasterDistributorReportsIndexRoute: typeof MasterDistributorReportsIndexRoute
+  MasterDistributorSettingsIndexRoute: typeof MasterDistributorSettingsIndexRoute
+  MasterDistributorSupportIndexRoute: typeof MasterDistributorSupportIndexRoute
+  MasterDistributorTransactionsIndexRoute: typeof MasterDistributorTransactionsIndexRoute
+  MasterDistributorWalletIndexRoute: typeof MasterDistributorWalletIndexRoute
+  RetailerAepsIndexRoute: typeof RetailerAepsIndexRoute
+  RetailerBankIndexRoute: typeof RetailerBankIndexRoute
+  RetailerKycIndexRoute: typeof RetailerKycIndexRoute
+  RetailerTransactionsIndexRoute: typeof RetailerTransactionsIndexRoute
+  RetailerWalletIndexRoute: typeof RetailerWalletIndexRoute
+  AdminMerchantsAddIndexRoute: typeof AdminMerchantsAddIndexRoute
+  AdminMerchantsListIndexRoute: typeof AdminMerchantsListIndexRoute
+  DistributorRetailersAddIndexRoute: typeof DistributorRetailersAddIndexRoute
+  MasterDistributorNetworkDistributorsIndexRoute: typeof MasterDistributorNetworkDistributorsIndexRoute
+  MasterDistributorNetworkRetailersIndexRoute: typeof MasterDistributorNetworkRetailersIndexRoute
+  MasterDistributorNetworkTreeIndexRoute: typeof MasterDistributorNetworkTreeIndexRoute
+  MasterDistributorNetworkDistributorsAddIndexRoute: typeof MasterDistributorNetworkDistributorsAddIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -228,18 +1169,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/aeps': {
-      id: '/aeps'
-      path: '/aeps'
-      fullPath: '/aeps'
-      preLoaderRoute: typeof AepsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/bank-accounts': {
-      id: '/bank-accounts'
-      path: '/bank-accounts'
-      fullPath: '/bank-accounts'
-      preLoaderRoute: typeof BankAccountsRouteImport
+    '/activity': {
+      id: '/activity'
+      path: '/activity'
+      fullPath: '/activity'
+      preLoaderRoute: typeof ActivityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contact': {
@@ -249,25 +1183,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/forgot-password': {
       id: '/forgot-password'
       path: '/forgot-password'
       fullPath: '/forgot-password'
       preLoaderRoute: typeof ForgotPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/kyc': {
-      id: '/kyc'
-      path: '/kyc'
-      fullPath: '/kyc'
-      preLoaderRoute: typeof KycRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -312,24 +1232,611 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/account-setup': {
+      id: '/admin/account-setup'
+      path: '/admin/account-setup'
+      fullPath: '/admin/account-setup'
+      preLoaderRoute: typeof AdminAccountSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/login': {
+      id: '/admin/login'
+      path: '/admin/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/onboarding': {
+      id: '/admin/onboarding'
+      path: '/admin/onboarding'
+      fullPath: '/admin/onboarding'
+      preLoaderRoute: typeof AdminOnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/': {
+      id: '/distributor/'
+      path: '/distributor'
+      fullPath: '/distributor/'
+      preLoaderRoute: typeof DistributorIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/$': {
+      id: '/distributor/$'
+      path: '/distributor/$'
+      fullPath: '/distributor/$'
+      preLoaderRoute: typeof DistributorSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/account-setup': {
+      id: '/distributor/account-setup'
+      path: '/distributor/account-setup'
+      fullPath: '/distributor/account-setup'
+      preLoaderRoute: typeof DistributorAccountSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/dashboard': {
+      id: '/distributor/dashboard'
+      path: '/distributor/dashboard'
+      fullPath: '/distributor/dashboard'
+      preLoaderRoute: typeof DistributorDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/': {
+      id: '/master-distributor/'
+      path: '/master-distributor'
+      fullPath: '/master-distributor/'
+      preLoaderRoute: typeof MasterDistributorIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/$': {
+      id: '/master-distributor/$'
+      path: '/master-distributor/$'
+      fullPath: '/master-distributor/$'
+      preLoaderRoute: typeof MasterDistributorSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/account-setup': {
+      id: '/master-distributor/account-setup'
+      path: '/master-distributor/account-setup'
+      fullPath: '/master-distributor/account-setup'
+      preLoaderRoute: typeof MasterDistributorAccountSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/dashboard': {
+      id: '/master-distributor/dashboard'
+      path: '/master-distributor/dashboard'
+      fullPath: '/master-distributor/dashboard'
+      preLoaderRoute: typeof MasterDistributorDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/account-setup': {
+      id: '/retailer/account-setup'
+      path: '/retailer/account-setup'
+      fullPath: '/retailer/account-setup'
+      preLoaderRoute: typeof RetailerAccountSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/dashboard': {
+      id: '/retailer/dashboard'
+      path: '/retailer/dashboard'
+      fullPath: '/retailer/dashboard'
+      preLoaderRoute: typeof RetailerDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/settings': {
+      id: '/retailer/settings'
+      path: '/retailer/settings'
+      fullPath: '/retailer/settings'
+      preLoaderRoute: typeof RetailerSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/access/': {
+      id: '/admin/access/'
+      path: '/admin/access'
+      fullPath: '/admin/access/'
+      preLoaderRoute: typeof AdminAccessIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/api-settings/': {
+      id: '/admin/api-settings/'
+      path: '/admin/api-settings'
+      fullPath: '/admin/api-settings/'
+      preLoaderRoute: typeof AdminApiSettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/banking/': {
+      id: '/admin/banking/'
+      path: '/admin/banking'
+      fullPath: '/admin/banking/'
+      preLoaderRoute: typeof AdminBankingIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/commissions/': {
+      id: '/admin/commissions/'
+      path: '/admin/commissions'
+      fullPath: '/admin/commissions/'
+      preLoaderRoute: typeof AdminCommissionsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/commissions/hierarchy': {
+      id: '/admin/commissions/hierarchy'
+      path: '/admin/commissions/hierarchy'
+      fullPath: '/admin/commissions/hierarchy'
+      preLoaderRoute: typeof AdminCommissionsHierarchyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/kyc/': {
+      id: '/admin/kyc/'
+      path: '/admin/kyc'
+      fullPath: '/admin/kyc/'
+      preLoaderRoute: typeof AdminKycIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/legal/': {
+      id: '/admin/legal/'
+      path: '/admin/legal'
+      fullPath: '/admin/legal/'
+      preLoaderRoute: typeof AdminLegalIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/merchants/': {
+      id: '/admin/merchants/'
+      path: '/admin/merchants'
+      fullPath: '/admin/merchants/'
+      preLoaderRoute: typeof AdminMerchantsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/profile/': {
+      id: '/admin/profile/'
+      path: '/admin/profile'
+      fullPath: '/admin/profile/'
+      preLoaderRoute: typeof AdminProfileIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/profile/bank': {
+      id: '/admin/profile/bank'
+      path: '/admin/profile/bank'
+      fullPath: '/admin/profile/bank'
+      preLoaderRoute: typeof AdminProfileBankRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/profile/kyc': {
+      id: '/admin/profile/kyc'
+      path: '/admin/profile/kyc'
+      fullPath: '/admin/profile/kyc'
+      preLoaderRoute: typeof AdminProfileKycRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/reports/': {
+      id: '/admin/reports/'
+      path: '/admin/reports'
+      fullPath: '/admin/reports/'
+      preLoaderRoute: typeof AdminReportsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/settings/': {
+      id: '/admin/settings/'
+      path: '/admin/settings'
+      fullPath: '/admin/settings/'
+      preLoaderRoute: typeof AdminSettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/settlements/': {
+      id: '/admin/settlements/'
+      path: '/admin/settlements'
+      fullPath: '/admin/settlements/'
+      preLoaderRoute: typeof AdminSettlementsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/sms/': {
+      id: '/admin/sms/'
+      path: '/admin/sms'
+      fullPath: '/admin/sms/'
+      preLoaderRoute: typeof AdminSmsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/transactions/': {
+      id: '/admin/transactions/'
+      path: '/admin/transactions'
+      fullPath: '/admin/transactions/'
+      preLoaderRoute: typeof AdminTransactionsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/aeps/': {
+      id: '/distributor/aeps/'
+      path: '/distributor/aeps'
+      fullPath: '/distributor/aeps/'
+      preLoaderRoute: typeof DistributorAepsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/aeps/balance-enquiry': {
+      id: '/distributor/aeps/balance-enquiry'
+      path: '/distributor/aeps/balance-enquiry'
+      fullPath: '/distributor/aeps/balance-enquiry'
+      preLoaderRoute: typeof DistributorAepsBalanceEnquiryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/aeps/cash-withdrawal': {
+      id: '/distributor/aeps/cash-withdrawal'
+      path: '/distributor/aeps/cash-withdrawal'
+      fullPath: '/distributor/aeps/cash-withdrawal'
+      preLoaderRoute: typeof DistributorAepsCashWithdrawalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/aeps/mini-statement': {
+      id: '/distributor/aeps/mini-statement'
+      path: '/distributor/aeps/mini-statement'
+      fullPath: '/distributor/aeps/mini-statement'
+      preLoaderRoute: typeof DistributorAepsMiniStatementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/aeps/transactions': {
+      id: '/distributor/aeps/transactions'
+      path: '/distributor/aeps/transactions'
+      fullPath: '/distributor/aeps/transactions'
+      preLoaderRoute: typeof DistributorAepsTransactionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/commission/': {
+      id: '/distributor/commission/'
+      path: '/distributor/commission'
+      fullPath: '/distributor/commission/'
+      preLoaderRoute: typeof DistributorCommissionIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/profile/': {
+      id: '/distributor/profile/'
+      path: '/distributor/profile'
+      fullPath: '/distributor/profile/'
+      preLoaderRoute: typeof DistributorProfileIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/profile/bank': {
+      id: '/distributor/profile/bank'
+      path: '/distributor/profile/bank'
+      fullPath: '/distributor/profile/bank'
+      preLoaderRoute: typeof DistributorProfileBankRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/profile/kyc': {
+      id: '/distributor/profile/kyc'
+      path: '/distributor/profile/kyc'
+      fullPath: '/distributor/profile/kyc'
+      preLoaderRoute: typeof DistributorProfileKycRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/reports/': {
+      id: '/distributor/reports/'
+      path: '/distributor/reports'
+      fullPath: '/distributor/reports/'
+      preLoaderRoute: typeof DistributorReportsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/retailers/': {
+      id: '/distributor/retailers/'
+      path: '/distributor/retailers'
+      fullPath: '/distributor/retailers/'
+      preLoaderRoute: typeof DistributorRetailersIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/settings/': {
+      id: '/distributor/settings/'
+      path: '/distributor/settings'
+      fullPath: '/distributor/settings/'
+      preLoaderRoute: typeof DistributorSettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/support/': {
+      id: '/distributor/support/'
+      path: '/distributor/support'
+      fullPath: '/distributor/support/'
+      preLoaderRoute: typeof DistributorSupportIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/wallet/': {
+      id: '/distributor/wallet/'
+      path: '/distributor/wallet'
+      fullPath: '/distributor/wallet/'
+      preLoaderRoute: typeof DistributorWalletIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/wallet/transfer': {
+      id: '/distributor/wallet/transfer'
+      path: '/distributor/wallet/transfer'
+      fullPath: '/distributor/wallet/transfer'
+      preLoaderRoute: typeof DistributorWalletTransferRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/commission/': {
+      id: '/master-distributor/commission/'
+      path: '/master-distributor/commission'
+      fullPath: '/master-distributor/commission/'
+      preLoaderRoute: typeof MasterDistributorCommissionIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/kyc/': {
+      id: '/master-distributor/kyc/'
+      path: '/master-distributor/kyc'
+      fullPath: '/master-distributor/kyc/'
+      preLoaderRoute: typeof MasterDistributorKycIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/notifications/': {
+      id: '/master-distributor/notifications/'
+      path: '/master-distributor/notifications'
+      fullPath: '/master-distributor/notifications/'
+      preLoaderRoute: typeof MasterDistributorNotificationsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/profile/': {
+      id: '/master-distributor/profile/'
+      path: '/master-distributor/profile'
+      fullPath: '/master-distributor/profile/'
+      preLoaderRoute: typeof MasterDistributorProfileIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/profile/bank': {
+      id: '/master-distributor/profile/bank'
+      path: '/master-distributor/profile/bank'
+      fullPath: '/master-distributor/profile/bank'
+      preLoaderRoute: typeof MasterDistributorProfileBankRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/profile/kyc': {
+      id: '/master-distributor/profile/kyc'
+      path: '/master-distributor/profile/kyc'
+      fullPath: '/master-distributor/profile/kyc'
+      preLoaderRoute: typeof MasterDistributorProfileKycRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/reports/': {
+      id: '/master-distributor/reports/'
+      path: '/master-distributor/reports'
+      fullPath: '/master-distributor/reports/'
+      preLoaderRoute: typeof MasterDistributorReportsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/settings/': {
+      id: '/master-distributor/settings/'
+      path: '/master-distributor/settings'
+      fullPath: '/master-distributor/settings/'
+      preLoaderRoute: typeof MasterDistributorSettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/support/': {
+      id: '/master-distributor/support/'
+      path: '/master-distributor/support'
+      fullPath: '/master-distributor/support/'
+      preLoaderRoute: typeof MasterDistributorSupportIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/transactions/': {
+      id: '/master-distributor/transactions/'
+      path: '/master-distributor/transactions'
+      fullPath: '/master-distributor/transactions/'
+      preLoaderRoute: typeof MasterDistributorTransactionsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/wallet/': {
+      id: '/master-distributor/wallet/'
+      path: '/master-distributor/wallet'
+      fullPath: '/master-distributor/wallet/'
+      preLoaderRoute: typeof MasterDistributorWalletIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/wallet/history': {
+      id: '/master-distributor/wallet/history'
+      path: '/master-distributor/wallet/history'
+      fullPath: '/master-distributor/wallet/history'
+      preLoaderRoute: typeof MasterDistributorWalletHistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/wallet/requests': {
+      id: '/master-distributor/wallet/requests'
+      path: '/master-distributor/wallet/requests'
+      fullPath: '/master-distributor/wallet/requests'
+      preLoaderRoute: typeof MasterDistributorWalletRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/wallet/transfer': {
+      id: '/master-distributor/wallet/transfer'
+      path: '/master-distributor/wallet/transfer'
+      fullPath: '/master-distributor/wallet/transfer'
+      preLoaderRoute: typeof MasterDistributorWalletTransferRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/aeps/': {
+      id: '/retailer/aeps/'
+      path: '/retailer/aeps'
+      fullPath: '/retailer/aeps/'
+      preLoaderRoute: typeof RetailerAepsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/bank/': {
+      id: '/retailer/bank/'
+      path: '/retailer/bank'
+      fullPath: '/retailer/bank/'
+      preLoaderRoute: typeof RetailerBankIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/kyc/': {
+      id: '/retailer/kyc/'
+      path: '/retailer/kyc'
+      fullPath: '/retailer/kyc/'
+      preLoaderRoute: typeof RetailerKycIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/transactions/': {
+      id: '/retailer/transactions/'
+      path: '/retailer/transactions'
+      fullPath: '/retailer/transactions/'
+      preLoaderRoute: typeof RetailerTransactionsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/wallet/': {
+      id: '/retailer/wallet/'
+      path: '/retailer/wallet'
+      fullPath: '/retailer/wallet/'
+      preLoaderRoute: typeof RetailerWalletIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/wallet/transfer': {
+      id: '/retailer/wallet/transfer'
+      path: '/retailer/wallet/transfer'
+      fullPath: '/retailer/wallet/transfer'
+      preLoaderRoute: typeof RetailerWalletTransferRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/merchants/add/': {
+      id: '/admin/merchants/add/'
+      path: '/admin/merchants/add'
+      fullPath: '/admin/merchants/add/'
+      preLoaderRoute: typeof AdminMerchantsAddIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/merchants/list/': {
+      id: '/admin/merchants/list/'
+      path: '/admin/merchants/list'
+      fullPath: '/admin/merchants/list/'
+      preLoaderRoute: typeof AdminMerchantsListIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/retailers/add/': {
+      id: '/distributor/retailers/add/'
+      path: '/distributor/retailers/add'
+      fullPath: '/distributor/retailers/add/'
+      preLoaderRoute: typeof DistributorRetailersAddIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/network/distributors/': {
+      id: '/master-distributor/network/distributors/'
+      path: '/master-distributor/network/distributors'
+      fullPath: '/master-distributor/network/distributors/'
+      preLoaderRoute: typeof MasterDistributorNetworkDistributorsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/network/retailers/': {
+      id: '/master-distributor/network/retailers/'
+      path: '/master-distributor/network/retailers'
+      fullPath: '/master-distributor/network/retailers/'
+      preLoaderRoute: typeof MasterDistributorNetworkRetailersIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/network/tree/': {
+      id: '/master-distributor/network/tree/'
+      path: '/master-distributor/network/tree'
+      fullPath: '/master-distributor/network/tree/'
+      preLoaderRoute: typeof MasterDistributorNetworkTreeIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/master-distributor/network/distributors/add/': {
+      id: '/master-distributor/network/distributors/add/'
+      path: '/master-distributor/network/distributors/add'
+      fullPath: '/master-distributor/network/distributors/add/'
+      preLoaderRoute: typeof MasterDistributorNetworkDistributorsAddIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
-  AepsRoute: AepsRoute,
-  BankAccountsRoute: BankAccountsRoute,
+  ActivityRoute: ActivityRoute,
   ContactRoute: ContactRoute,
-  DashboardRoute: DashboardRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
-  KycRoute: KycRoute,
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
   RefundPolicyRoute: RefundPolicyRoute,
   RegisterRoute: RegisterRoute,
   ServicesRoute: ServicesRoute,
   TermsRoute: TermsRoute,
+  AdminAccountSetupRoute: AdminAccountSetupRoute,
+  AdminLoginRoute: AdminLoginRoute,
+  AdminOnboardingRoute: AdminOnboardingRoute,
+  DistributorSplatRoute: DistributorSplatRoute,
+  DistributorAccountSetupRoute: DistributorAccountSetupRoute,
+  DistributorDashboardRoute: DistributorDashboardRoute,
+  MasterDistributorSplatRoute: MasterDistributorSplatRoute,
+  MasterDistributorAccountSetupRoute: MasterDistributorAccountSetupRoute,
+  MasterDistributorDashboardRoute: MasterDistributorDashboardRoute,
+  RetailerAccountSetupRoute: RetailerAccountSetupRoute,
+  RetailerDashboardRoute: RetailerDashboardRoute,
+  RetailerSettingsRoute: RetailerSettingsRoute,
+  AdminIndexRoute: AdminIndexRoute,
+  DistributorIndexRoute: DistributorIndexRoute,
+  MasterDistributorIndexRoute: MasterDistributorIndexRoute,
+  AdminCommissionsHierarchyRoute: AdminCommissionsHierarchyRoute,
+  AdminProfileBankRoute: AdminProfileBankRoute,
+  AdminProfileKycRoute: AdminProfileKycRoute,
+  DistributorAepsBalanceEnquiryRoute: DistributorAepsBalanceEnquiryRoute,
+  DistributorAepsCashWithdrawalRoute: DistributorAepsCashWithdrawalRoute,
+  DistributorAepsMiniStatementRoute: DistributorAepsMiniStatementRoute,
+  DistributorAepsTransactionsRoute: DistributorAepsTransactionsRoute,
+  DistributorProfileBankRoute: DistributorProfileBankRoute,
+  DistributorProfileKycRoute: DistributorProfileKycRoute,
+  DistributorWalletTransferRoute: DistributorWalletTransferRoute,
+  MasterDistributorProfileBankRoute: MasterDistributorProfileBankRoute,
+  MasterDistributorProfileKycRoute: MasterDistributorProfileKycRoute,
+  MasterDistributorWalletHistoryRoute: MasterDistributorWalletHistoryRoute,
+  MasterDistributorWalletRequestsRoute: MasterDistributorWalletRequestsRoute,
+  MasterDistributorWalletTransferRoute: MasterDistributorWalletTransferRoute,
+  RetailerWalletTransferRoute: RetailerWalletTransferRoute,
+  AdminAccessIndexRoute: AdminAccessIndexRoute,
+  AdminApiSettingsIndexRoute: AdminApiSettingsIndexRoute,
+  AdminBankingIndexRoute: AdminBankingIndexRoute,
+  AdminCommissionsIndexRoute: AdminCommissionsIndexRoute,
+  AdminKycIndexRoute: AdminKycIndexRoute,
+  AdminLegalIndexRoute: AdminLegalIndexRoute,
+  AdminMerchantsIndexRoute: AdminMerchantsIndexRoute,
+  AdminProfileIndexRoute: AdminProfileIndexRoute,
+  AdminReportsIndexRoute: AdminReportsIndexRoute,
+  AdminSettingsIndexRoute: AdminSettingsIndexRoute,
+  AdminSettlementsIndexRoute: AdminSettlementsIndexRoute,
+  AdminSmsIndexRoute: AdminSmsIndexRoute,
+  AdminTransactionsIndexRoute: AdminTransactionsIndexRoute,
+  DistributorAepsIndexRoute: DistributorAepsIndexRoute,
+  DistributorCommissionIndexRoute: DistributorCommissionIndexRoute,
+  DistributorProfileIndexRoute: DistributorProfileIndexRoute,
+  DistributorReportsIndexRoute: DistributorReportsIndexRoute,
+  DistributorRetailersIndexRoute: DistributorRetailersIndexRoute,
+  DistributorSettingsIndexRoute: DistributorSettingsIndexRoute,
+  DistributorSupportIndexRoute: DistributorSupportIndexRoute,
+  DistributorWalletIndexRoute: DistributorWalletIndexRoute,
+  MasterDistributorCommissionIndexRoute: MasterDistributorCommissionIndexRoute,
+  MasterDistributorKycIndexRoute: MasterDistributorKycIndexRoute,
+  MasterDistributorNotificationsIndexRoute:
+    MasterDistributorNotificationsIndexRoute,
+  MasterDistributorProfileIndexRoute: MasterDistributorProfileIndexRoute,
+  MasterDistributorReportsIndexRoute: MasterDistributorReportsIndexRoute,
+  MasterDistributorSettingsIndexRoute: MasterDistributorSettingsIndexRoute,
+  MasterDistributorSupportIndexRoute: MasterDistributorSupportIndexRoute,
+  MasterDistributorTransactionsIndexRoute:
+    MasterDistributorTransactionsIndexRoute,
+  MasterDistributorWalletIndexRoute: MasterDistributorWalletIndexRoute,
+  RetailerAepsIndexRoute: RetailerAepsIndexRoute,
+  RetailerBankIndexRoute: RetailerBankIndexRoute,
+  RetailerKycIndexRoute: RetailerKycIndexRoute,
+  RetailerTransactionsIndexRoute: RetailerTransactionsIndexRoute,
+  RetailerWalletIndexRoute: RetailerWalletIndexRoute,
+  AdminMerchantsAddIndexRoute: AdminMerchantsAddIndexRoute,
+  AdminMerchantsListIndexRoute: AdminMerchantsListIndexRoute,
+  DistributorRetailersAddIndexRoute: DistributorRetailersAddIndexRoute,
+  MasterDistributorNetworkDistributorsIndexRoute:
+    MasterDistributorNetworkDistributorsIndexRoute,
+  MasterDistributorNetworkRetailersIndexRoute:
+    MasterDistributorNetworkRetailersIndexRoute,
+  MasterDistributorNetworkTreeIndexRoute:
+    MasterDistributorNetworkTreeIndexRoute,
+  MasterDistributorNetworkDistributorsAddIndexRoute:
+    MasterDistributorNetworkDistributorsAddIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
