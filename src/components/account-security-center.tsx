@@ -79,7 +79,7 @@ type PendingAction =
 
 export function IdentitySecurityCenter() {
   return (
-    <div className="mt-6 grid gap-6 2xl:grid-cols-2">
+    <div className="grid gap-6 2xl:grid-cols-2">
       <ActiveSessionsPanel />
       <EffectiveAccessPanel />
     </div>

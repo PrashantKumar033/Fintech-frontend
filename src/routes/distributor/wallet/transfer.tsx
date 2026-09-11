@@ -13,7 +13,10 @@ import {
   WalletCards,
 } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
+import { ActionPermissionNotice } from "@/components/action-permission-notice";
 import { ApiError, getSession } from "@/lib/auth-api";
+import { useEffectiveAccess } from "@/hooks/use-effective-access";
+import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { distributorApi } from "@/lib/distributor-api";
 import {
   newTransferIdempotencyKey,
@@ -48,13 +51,18 @@ function normaliseAmountInput(value: string): string {
   if (firstDot === -1) return cleaned.replace(/^0+(?=\d)/, "");
 
   const integer = cleaned.slice(0, firstDot).replace(/^0+(?=\d)/, "") || "0";
-  const decimals = cleaned.slice(firstDot + 1).replace(/\./g, "").slice(0, 2);
+  const decimals = cleaned
+    .slice(firstDot + 1)
+    .replace(/\./g, "")
+    .slice(0, 2);
   return `${integer}.${decimals}`;
 }
 
 function DistributorWalletTransferPage() {
   const navigate = useNavigate();
   const session = getSession();
+  const { can } = useEffectiveAccess();
+  const canTransfer = can(UI_PERMISSION.WALLET_TRANSFER, ["DISTRIBUTOR"]);
   const [balances, setBalances] = useState<WalletBalances | null>(null);
   const [receiverLoginId, setReceiverLoginId] = useState("");
   const [amount, setAmount] = useState("");
@@ -169,6 +177,10 @@ function DistributorWalletTransferPage() {
 
   async function confirmTransfer() {
     if (!session || !review || submitting) return;
+    if (!canTransfer) {
+      setNotice({ ok: false, text: `Permission ${UI_PERMISSION.WALLET_TRANSFER} is required.` });
+      return;
+    }
 
     setSubmitting(true);
     setNotice(null);
@@ -228,6 +240,14 @@ function DistributorWalletTransferPage() {
       title="Transfer fund"
       description="Send money securely from your MAIN wallet to another active Distributor account."
     >
+      {!canTransfer && (
+        <div className="mb-5">
+          <ActionPermissionNotice
+            permission={UI_PERMISSION.WALLET_TRANSFER}
+            title="Wallet transfer is not enabled"
+          />
+        </div>
+      )}
       {notice && (
         <div
           role="status"
@@ -267,7 +287,7 @@ function DistributorWalletTransferPage() {
               <button
                 type="button"
                 onClick={() => void loadBalance()}
-                disabled={loadingBalance || submitting}
+                disabled={!canTransfer || loadingBalance || submitting}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-sm font-extrabold text-secondary transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RefreshCw className={loadingBalance ? "animate-spin" : ""} size={16} />
@@ -284,7 +304,8 @@ function DistributorWalletTransferPage() {
               <div>
                 <h2 className="text-xl font-black text-secondary">Distributor to Distributor</h2>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Enter the receiver&apos;s Distributor login ID. The backend checks the receiver role and account status before any debit happens.
+                  Enter the receiver&apos;s Distributor login ID. The backend checks the receiver
+                  role and account status before any debit happens.
                 </p>
               </div>
             </div>
@@ -309,7 +330,7 @@ function DistributorWalletTransferPage() {
                     minLength={3}
                     maxLength={50}
                     placeholder="Example: DST000123"
-                    disabled={submitting}
+                    disabled={!canTransfer || submitting}
                     className="mt-2 w-full rounded-xl border border-border bg-background px-4 py-3.5 text-sm font-semibold uppercase outline-none transition placeholder:normal-case placeholder:font-normal focus:border-primary focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
                   />
                   <span className="mt-2 block text-xs text-muted-foreground">
@@ -336,7 +357,7 @@ function DistributorWalletTransferPage() {
                         setResult(null);
                       }}
                       placeholder="0.00"
-                      disabled={submitting}
+                      disabled={!canTransfer || submitting}
                       className="w-full rounded-xl border border-border bg-background py-3.5 pl-10 pr-4 text-sm font-semibold outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
                     />
                   </div>
@@ -348,7 +369,9 @@ function DistributorWalletTransferPage() {
 
               <div className="mt-5 rounded-2xl bg-muted/70 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                  <span className="font-semibold text-muted-foreground">Balance after transfer</span>
+                  <span className="font-semibold text-muted-foreground">
+                    Balance after transfer
+                  </span>
                   <span className="font-black text-secondary">
                     {loadingBalance ? "—" : inr.format(amountAfterTransfer)}
                   </span>
@@ -357,7 +380,7 @@ function DistributorWalletTransferPage() {
 
               <button
                 type="submit"
-                disabled={loadingBalance || submitting}
+                disabled={!canTransfer || loadingBalance || submitting}
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 text-sm font-extrabold text-white shadow-md shadow-primary/20 transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Review transfer
@@ -372,7 +395,8 @@ function DistributorWalletTransferPage() {
                   <div>
                     <h3 className="text-lg font-black text-secondary">Confirm transfer</h3>
                     <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                      Check the details carefully. A successful wallet transfer is posted immediately.
+                      Check the details carefully. A successful wallet transfer is posted
+                      immediately.
                     </p>
                   </div>
                 </div>
@@ -380,15 +404,21 @@ function DistributorWalletTransferPage() {
                 <dl className="mt-5 divide-y divide-border rounded-xl border border-border bg-white px-4">
                   <div className="flex items-center justify-between gap-4 py-3.5">
                     <dt className="text-sm text-muted-foreground">From</dt>
-                    <dd className="text-right text-sm font-extrabold text-secondary">{selfLoginId}</dd>
+                    <dd className="text-right text-sm font-extrabold text-secondary">
+                      {selfLoginId}
+                    </dd>
                   </div>
                   <div className="flex items-center justify-between gap-4 py-3.5">
                     <dt className="text-sm text-muted-foreground">To Distributor</dt>
-                    <dd className="text-right text-sm font-extrabold text-secondary">{review.receiverLoginId}</dd>
+                    <dd className="text-right text-sm font-extrabold text-secondary">
+                      {review.receiverLoginId}
+                    </dd>
                   </div>
                   <div className="flex items-center justify-between gap-4 py-3.5">
                     <dt className="text-sm text-muted-foreground">Amount</dt>
-                    <dd className="text-right text-base font-black text-secondary">{inr.format(review.amount)}</dd>
+                    <dd className="text-right text-base font-black text-secondary">
+                      {inr.format(review.amount)}
+                    </dd>
                   </div>
                 </dl>
 
@@ -399,7 +429,7 @@ function DistributorWalletTransferPage() {
                       setReview(null);
                       idempotencyKeyRef.current = null;
                     }}
-                    disabled={submitting}
+                    disabled={!canTransfer || submitting}
                     className="rounded-xl border border-border bg-white px-5 py-3.5 text-sm font-extrabold text-secondary transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Edit details
@@ -407,7 +437,7 @@ function DistributorWalletTransferPage() {
                   <button
                     type="button"
                     onClick={() => void confirmTransfer()}
-                    disabled={submitting}
+                    disabled={!canTransfer || submitting}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-secondary px-5 py-3.5 text-sm font-extrabold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {submitting ? (
@@ -433,7 +463,8 @@ function DistributorWalletTransferPage() {
                   <div className="min-w-0">
                     <h3 className="text-lg font-black text-emerald-900">Transfer successful</h3>
                     <p className="mt-1 text-sm text-emerald-800">
-                      Reference: <span className="break-all font-extrabold">{result.transferReference}</span>
+                      Reference:{" "}
+                      <span className="break-all font-extrabold">{result.transferReference}</span>
                     </p>
                   </div>
                 </div>
@@ -446,7 +477,9 @@ function DistributorWalletTransferPage() {
                     </p>
                   </div>
                   <div className="rounded-xl bg-white/75 p-4">
-                    <p className="text-xs font-bold uppercase text-emerald-800/70">New MAIN balance</p>
+                    <p className="text-xs font-bold uppercase text-emerald-800/70">
+                      New MAIN balance
+                    </p>
                     <p className="mt-1 text-xl font-black text-emerald-950">
                       {inr.format(Number(result.senderTransaction.closingBalance))}
                     </p>
@@ -474,7 +507,10 @@ function DistributorWalletTransferPage() {
             <ul className="mt-4 space-y-4 text-sm leading-6 text-muted-foreground">
               <li className="flex gap-3">
                 <CheckCircle2 className="mt-1 shrink-0 text-emerald-600" size={16} />
-                <span>Receiver must have the same <strong className="text-secondary">DISTRIBUTOR</strong> role.</span>
+                <span>
+                  Receiver must have the same{" "}
+                  <strong className="text-secondary">DISTRIBUTOR</strong> role.
+                </span>
               </li>
               <li className="flex gap-3">
                 <CheckCircle2 className="mt-1 shrink-0 text-emerald-600" size={16} />
@@ -490,7 +526,9 @@ function DistributorWalletTransferPage() {
               </li>
               <li className="flex gap-3">
                 <CheckCircle2 className="mt-1 shrink-0 text-emerald-600" size={16} />
-                <span>Each confirmed request uses an idempotency key to reduce duplicate-transfer risk.</span>
+                <span>
+                  Each confirmed request uses an idempotency key to reduce duplicate-transfer risk.
+                </span>
               </li>
             </ul>
           </AdminPanel>
@@ -499,7 +537,9 @@ function DistributorWalletTransferPage() {
             <ShieldCheck size={24} />
             <h3 className="mt-4 text-lg font-black">Backend protected</h3>
             <p className="mt-2 text-sm leading-6 text-white/65">
-              The UI does not decide who is eligible. Your backend resolves both accounts, checks role and status, prevents self-transfer, checks available balance, and posts the debit and credit together.
+              The UI does not decide who is eligible. Your backend resolves both accounts, checks
+              role and status, prevents self-transfer, checks available balance, and posts the debit
+              and credit together.
             </p>
           </div>
         </div>

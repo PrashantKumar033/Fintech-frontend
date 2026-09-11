@@ -164,7 +164,8 @@ export function newIdempotencyKey(): string {
 }
 
 // Mock PID is opt-in and development-only. Production always calls the configured RD service.
-const USE_MOCK_FINGERPRINT = import.meta.env.DEV && import.meta.env.VITE_AEPS_USE_MOCK_PID === "true";
+const USE_MOCK_FINGERPRINT =
+  import.meta.env.DEV && import.meta.env.VITE_AEPS_USE_MOCK_PID === "true";
 
 export async function capturePid(rdUrl: string, otp?: string): Promise<string> {
   if (USE_MOCK_FINGERPRINT) {
@@ -173,19 +174,34 @@ export async function capturePid(rdUrl: string, otp?: string): Promise<string> {
   }
 
   let endpoint: URL;
-  try { endpoint = new URL(rdUrl); } catch { throw new Error("Enter a valid RD service capture URL."); }
-  if (!['http:', 'https:'].includes(endpoint.protocol)) throw new Error("RD service URL must use HTTP or HTTPS.");
+  try {
+    endpoint = new URL(rdUrl);
+  } catch {
+    throw new Error("Enter a valid RD service capture URL.");
+  }
+  if (!["http:", "https:"].includes(endpoint.protocol))
+    throw new Error("RD service URL must use HTTP or HTTPS.");
   if (otp && !/^\d{4,8}$/.test(otp)) throw new Error("RD provider OTP must contain 4 to 8 digits.");
   const options = `<?xml version="1.0"?><PidOptions ver="1.0"><Opts fCount="1" fType="2" iCount="0" pCount="0" format="0" pidVer="2.0" timeout="10000" otp="${otp || ""}" env="P" wadh="" posh="UNKNOWN"/></PidOptions>`;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12_000);
   let response: Response;
   try {
-    response = await fetch(endpoint.toString(), { method: "CAPTURE", headers: { "Content-Type": "text/xml" }, body: options, signal: controller.signal });
+    response = await fetch(endpoint.toString(), {
+      method: "CAPTURE",
+      headers: { "Content-Type": "text/xml" },
+      body: options,
+      signal: controller.signal,
+    });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") throw new Error("RD device capture timed out. Check the device and retry.");
-    throw new Error("Cannot connect to the RD service. Start the registered device service and confirm its capture URL.");
-  } finally { window.clearTimeout(timeout); }
+    if (error instanceof DOMException && error.name === "AbortError")
+      throw new Error("RD device capture timed out. Check the device and retry.");
+    throw new Error(
+      "Cannot connect to the RD service. Start the registered device service and confirm its capture URL.",
+    );
+  } finally {
+    window.clearTimeout(timeout);
+  }
   const xml = await response.text();
   if (!response.ok || !xml.includes("<PidData"))
     throw new Error("RD capture failed. Check the device service and try again.");

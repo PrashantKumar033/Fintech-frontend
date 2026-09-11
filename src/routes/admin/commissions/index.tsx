@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
 import { CommissionCalculator } from "@/components/admin/commission-calculator";
+import { useEffectiveAccess } from "@/hooks/use-effective-access";
+import { UI_PERMISSION } from "@/lib/ui-permissions";
 import {
   AdminApiError,
   adminApi,
@@ -33,7 +35,12 @@ import {
   type UpdateCommissionRuleInput,
 } from "@/lib/admin-api";
 
-export const Route = createFileRoute("/admin/commissions/")({ component: Commissions });
+export const Route = createFileRoute("/admin/commissions/")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    view: search.view === "distributions" ? ("distributions" as const) : ("rules" as const),
+  }),
+  component: Commissions,
+});
 
 const inputClass =
   "w-full rounded-xl border border-border bg-white px-3.5 py-3 text-sm text-secondary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground";
@@ -251,10 +258,24 @@ function distributionHealth(
 }
 
 function Commissions() {
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   const actor = getAdminActor();
-  const canManage = actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN";
+  const { can } = useEffectiveAccess();
+  const allowed = (code: string) => actor?.kind === "SUPER_ADMIN" || can(code, ["ADMIN"]);
+  const supportedAdminRole = actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN";
+  const canViewRules = supportedAdminRole && allowed(UI_PERMISSION.COMMISSION_RULE_VIEW);
+  const canViewDistributions =
+    supportedAdminRole && allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_VIEW);
+  const canManage = canViewRules || canViewDistributions;
+  const canCreateRule = allowed(UI_PERMISSION.COMMISSION_RULE_CREATE);
+  const canUpdateRule = allowed(UI_PERMISSION.COMMISSION_RULE_UPDATE);
+  const canDeactivateRule = allowed(UI_PERMISSION.COMMISSION_RULE_DEACTIVATE);
+  const canCreateDistribution = allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_CREATE);
+  const canUpdateDistribution = allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_UPDATE);
+  const canDeactivateDistribution = allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_DEACTIVATE);
 
-  const [view, setView] = useState<CommissionView>("RULES");
+  const view: CommissionView = search.view === "distributions" ? "DISTRIBUTIONS" : "RULES";
   const [rules, setRules] = useState<CommissionRule[]>([]);
   const [distributions, setDistributions] = useState<CommissionDistribution[]>([]);
   const [rulesLoading, setRulesLoading] = useState(canManage);
@@ -385,7 +406,10 @@ function Commissions() {
   );
 
   function switchView(nextView: CommissionView) {
-    setView(nextView);
+    void navigate({
+      search: { view: nextView === "DISTRIBUTIONS" ? "distributions" : "rules" },
+      replace: true,
+    });
     setError("");
     setNotice("");
     setPendingRuleStatus(null);
@@ -395,6 +419,8 @@ function Commissions() {
   }
 
   function startCreateRule() {
+    if (!canCreateRule)
+      return setError(`Permission ${UI_PERMISSION.COMMISSION_RULE_CREATE} is required.`);
     setEditingRuleId(null);
     setRuleDraft(emptyRuleDraft);
     setError("");
@@ -403,6 +429,8 @@ function Commissions() {
   }
 
   async function startEditRule(rule: CommissionRule) {
+    if (!canUpdateRule)
+      return setError(`Permission ${UI_PERMISSION.COMMISSION_RULE_UPDATE} is required.`);
     setRuleEditorOpen(true);
     setEditingRuleId(rule.id);
     setRuleDraft(draftFromRule(rule));
@@ -455,6 +483,11 @@ function Commissions() {
 
   async function submitRule(event: FormEvent) {
     event.preventDefault();
+    const required = editingRuleId
+      ? UI_PERMISSION.COMMISSION_RULE_UPDATE
+      : UI_PERMISSION.COMMISSION_RULE_CREATE;
+    if (editingRuleId ? !canUpdateRule : !canCreateRule)
+      return setError(`Permission ${required} is required.`);
     setError("");
     setNotice("");
     const validationError = validateRuleDraft();
@@ -509,6 +542,10 @@ function Commissions() {
   async function confirmRuleStatusChange() {
     if (!pendingRuleStatus) return;
     const { rule, nextActive } = pendingRuleStatus;
+    if (nextActive ? !canUpdateRule : !canDeactivateRule)
+      return setError(
+        `Permission ${nextActive ? UI_PERMISSION.COMMISSION_RULE_UPDATE : UI_PERMISSION.COMMISSION_RULE_DEACTIVATE} is required.`,
+      );
     setSaving(true);
     setError("");
     setNotice("");
@@ -534,6 +571,8 @@ function Commissions() {
   }
 
   function startCreateDistribution() {
+    if (!canCreateDistribution)
+      return setError(`Permission ${UI_PERMISSION.COMMISSION_DISTRIBUTION_CREATE} is required.`);
     if (!selectedRuleId) {
       setError("Create a commission rule first, then select it before adding a distribution.");
       return;
@@ -546,6 +585,8 @@ function Commissions() {
   }
 
   async function startEditDistribution(distribution: CommissionDistribution) {
+    if (!canUpdateDistribution)
+      return setError(`Permission ${UI_PERMISSION.COMMISSION_DISTRIBUTION_UPDATE} is required.`);
     setDistributionEditorOpen(true);
     setEditingDistributionId(distribution.id);
     setDistributionDraft(draftFromDistribution(distribution));
@@ -629,6 +670,11 @@ function Commissions() {
 
   async function submitDistribution(event: FormEvent) {
     event.preventDefault();
+    const required = editingDistributionId
+      ? UI_PERMISSION.COMMISSION_DISTRIBUTION_UPDATE
+      : UI_PERMISSION.COMMISSION_DISTRIBUTION_CREATE;
+    if (editingDistributionId ? !canUpdateDistribution : !canCreateDistribution)
+      return setError(`Permission ${required} is required.`);
     setError("");
     setNotice("");
     const validationError = validateDistributionDraft();
@@ -675,6 +721,10 @@ function Commissions() {
   async function confirmDistributionStatusChange() {
     if (!pendingDistributionStatus) return;
     const { distribution, nextActive } = pendingDistributionStatus;
+    if (nextActive ? !canUpdateDistribution : !canDeactivateDistribution)
+      return setError(
+        `Permission ${nextActive ? UI_PERMISSION.COMMISSION_DISTRIBUTION_UPDATE : UI_PERMISSION.COMMISSION_DISTRIBUTION_DEACTIVATE} is required.`,
+      );
     setError("");
     setNotice("");
 
@@ -1165,6 +1215,7 @@ function Commissions() {
               <button
                 type="button"
                 onClick={startCreateRule}
+                disabled={!canCreateRule}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-white"
               >
                 <Plus size={14} /> New rule
@@ -1241,6 +1292,7 @@ function Commissions() {
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
+                              disabled={!canUpdateRule}
                               onClick={() => void startEditRule(rule)}
                               className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 font-extrabold text-secondary hover:bg-muted"
                             >
@@ -1248,6 +1300,7 @@ function Commissions() {
                             </button>
                             <button
                               type="button"
+                              disabled={rule.isActive ? !canDeactivateRule : !canUpdateRule}
                               onClick={() =>
                                 setPendingRuleStatus({ rule, nextActive: !rule.isActive })
                               }
@@ -1338,7 +1391,7 @@ function Commissions() {
                 <button
                   type="button"
                   onClick={startCreateDistribution}
-                  disabled={!selectedRuleId}
+                  disabled={!canCreateDistribution || !selectedRuleId}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Plus size={14} /> New distribution
@@ -1700,6 +1753,7 @@ function Commissions() {
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
+                              disabled={!canUpdateDistribution}
                               onClick={() => void startEditDistribution(distribution)}
                               className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 font-extrabold text-secondary hover:bg-muted"
                             >
@@ -1707,6 +1761,11 @@ function Commissions() {
                             </button>
                             <button
                               type="button"
+                              disabled={
+                                distribution.isActive
+                                  ? !canDeactivateDistribution
+                                  : !canUpdateDistribution
+                              }
                               onClick={() =>
                                 setPendingDistributionStatus({
                                   distribution,

@@ -10,7 +10,10 @@ import {
   Trash2,
 } from "lucide-react";
 import { ServiceNotice } from "@/components/business-page";
+import { ActionPermissionNotice } from "@/components/action-permission-notice";
 import { RoleAwareAccountPage } from "@/components/role-aware-account-page";
+import { useEffectiveAccess } from "@/hooks/use-effective-access";
+import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { ApiError, getSession } from "@/lib/auth-api";
 import {
   credentialsPending,
@@ -36,6 +39,13 @@ const docs = [
   { type: "BUSINESS_PROOF", label: "Business proof", number: true },
 ] as const;
 function KycPage() {
+  const { can } = useEffectiveAccess();
+  const canManageKyc = can(UI_PERMISSION.KYC_MANAGE, [
+    "ADMIN",
+    "MASTER_DISTRIBUTOR",
+    "DISTRIBUTOR",
+    "RETAILER",
+  ]);
   const navigate = useNavigate(),
     [session, setSession] = useState<ReturnType<typeof getSession>>(null),
     [kyc, setKyc] = useState<KycProfile | null>(null),
@@ -83,6 +93,10 @@ function KycPage() {
     );
   const activeSession = session;
   async function run(name: string, task: () => Promise<unknown>, text: string) {
+    if (!canManageKyc) {
+      setMessage({ ok: false, text: `Permission ${UI_PERMISSION.KYC_MANAGE} is required.` });
+      return;
+    }
     setBusy(name);
     setMessage(null);
     try {
@@ -116,6 +130,15 @@ function KycPage() {
       title="KYC verification"
       description="Submit business documents and track approval status. KYC is the first prerequisite for AEPS."
     >
+      {!canManageKyc && (
+        <div className="mb-6">
+          <ActionPermissionNotice
+            permission={UI_PERMISSION.KYC_MANAGE}
+            title="KYC application is read-only"
+            text="Document changes and final submission are not enabled for your active package."
+          />
+        </div>
+      )}
       {message && (
         <div className="mb-6">
           <ServiceNotice ok={message.ok}>{message.text}</ServiceNotice>
@@ -138,7 +161,7 @@ function KycPage() {
               Create your KYC application, then upload the required documents securely.
             </p>
             <button
-              disabled={!!busy}
+              disabled={!canManageKyc || !!busy}
               onClick={() =>
                 run(
                   "create",
@@ -195,7 +218,7 @@ function KycPage() {
                           bundle?.documents.find((item) => item.documentType === d.type)
                             ?.documentNumber || ""
                         }
-                        disabled={!!busy}
+                        disabled={!canManageKyc || !!busy}
                         upload={(file, number) =>
                           run(
                             d.type,
@@ -228,7 +251,7 @@ function KycPage() {
                 </section>
                 <AadhaarCard
                   done={uploaded.has("AADHAAR_FRONT") && uploaded.has("AADHAAR_BACK")}
-                  disabled={!!busy}
+                  disabled={!canManageKyc || !!busy}
                   upload={(number, front, back) =>
                     run(
                       "aadhaar",
@@ -244,7 +267,7 @@ function KycPage() {
                 />
                 <VideoCard
                   done={!!bundle?.video}
-                  disabled={!!busy}
+                  disabled={!canManageKyc || !!busy}
                   upload={(file) =>
                     run(
                       "video",
@@ -262,8 +285,18 @@ function KycPage() {
                     <p className="mt-1">{missingItems.join(", ")}</p>
                   </div>
                 )}
+                {complete && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                    <p className="font-extrabold">All required uploads are complete.</p>
+                    <p className="mt-1">
+                      Your KYC is still a draft. Use the button below to submit it to the admin
+                      review queue.
+                    </p>
+                  </div>
+                )}
                 <button
-                  disabled={!complete || !!busy}
+                  type="button"
+                  disabled={!canManageKyc || !complete || !!busy}
                   onClick={() =>
                     run(
                       "submit",
@@ -273,7 +306,9 @@ function KycPage() {
                   }
                   className="w-full rounded-xl bg-primary py-4 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Submit application for review
+                  {busy === "submit"
+                    ? "Submitting KYC..."
+                    : "Submit KYC now — send to admin review"}
                 </button>
               </>
             )}
@@ -324,7 +359,7 @@ function KycPage() {
                           {document.documentType.replaceAll("_", " ")}
                         </span>
                         <button
-                          disabled={!!busy}
+                          disabled={!canManageKyc || !!busy}
                           aria-label={`Delete ${document.documentType}`}
                           onClick={() =>
                             run(
@@ -344,7 +379,7 @@ function KycPage() {
                         <Camera size={15} className="text-emerald-600" />
                         <span className="flex-1 font-semibold">Verification video</span>
                         <button
-                          disabled={!!busy}
+                          disabled={!canManageKyc || !!busy}
                           aria-label="Delete verification video"
                           onClick={() =>
                             run(

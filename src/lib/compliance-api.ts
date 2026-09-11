@@ -1,4 +1,5 @@
 import { ApiError, authenticatedRequest } from "./auth-api";
+import { createIdempotencyKey } from "./idempotency-key";
 
 export type BankAccountType = "SAVINGS" | "CURRENT" | "SALARY";
 export type BankAccountPurpose = "PAYOUT" | "DMT";
@@ -76,7 +77,6 @@ export type KycBundle = {
   };
 };
 
-const idempotencyKey = () => crypto.randomUUID();
 const form = (fields: Record<string, string>, files: Record<string, File>) => {
   const data = new FormData();
   Object.entries(fields).forEach(([key, value]) => value && data.append(key, value));
@@ -116,7 +116,8 @@ export const complianceApi = {
       { method: "PATCH" },
       token,
     ),
-  getKyc: (token: string) => authenticatedRequest<KycProfile>("/kyc/me", {}, token),
+  getKyc: (token: string) =>
+    authenticatedRequest<KycProfile>("/kyc/me", { cache: "no-store" }, token),
   createKyc: (token: string) =>
     authenticatedRequest<KycProfile>(
       "/kyc/create",
@@ -124,13 +125,17 @@ export const complianceApi = {
       token,
     ),
   bundle: (token: string) =>
-    authenticatedRequest<KycBundle>("/kyc/me/documents?page=1&limit=100", {}, token),
+    authenticatedRequest<KycBundle>(
+      "/kyc/me/documents?page=1&limit=100",
+      { cache: "no-store" },
+      token,
+    ),
   uploadDocument: (token: string, documentType: string, documentNumber: string, file: File) =>
     authenticatedRequest(
       "/kyc/document",
       {
         method: "POST",
-        headers: { "Idempotency-Key": idempotencyKey() },
+        headers: { "Idempotency-Key": createIdempotencyKey("kyc-document") },
         body: form({ documentType, documentNumber }, { file }),
       },
       token,
@@ -140,7 +145,7 @@ export const complianceApi = {
       "/kyc/aadhaar",
       {
         method: "POST",
-        headers: { "Idempotency-Key": idempotencyKey() },
+        headers: { "Idempotency-Key": createIdempotencyKey("kyc-aadhaar") },
         body: form({ documentNumber }, { frontImage, backImage }),
       },
       token,
@@ -150,7 +155,7 @@ export const complianceApi = {
       "/kyc/video",
       {
         method: "POST",
-        headers: { "Idempotency-Key": idempotencyKey() },
+        headers: { "Idempotency-Key": createIdempotencyKey("kyc-video") },
         body: form({}, { file }),
       },
       token,
@@ -195,7 +200,7 @@ export const complianceApi = {
       "/kyc/submit",
       {
         method: "POST",
-        headers: { "Idempotency-Key": idempotencyKey() },
+        headers: { "Idempotency-Key": createIdempotencyKey("kyc-submit") },
         body: JSON.stringify({}),
       },
       token,

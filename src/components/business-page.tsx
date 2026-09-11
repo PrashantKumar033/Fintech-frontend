@@ -21,11 +21,16 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { logout, type Identity } from "@/lib/auth-api";
+import { useEffectiveAccess } from "@/hooks/use-effective-access";
+import { PermissionBoundary } from "@/components/permission-boundary";
+import { canAccessUiArea, type UiArea } from "@/lib/ui-permissions";
 import { useServiceReadiness } from "@/lib/service-readiness";
 import { credentialsPending } from "@/lib/role-hierarchy";
 import { SectionTabs, type SectionTab } from "@/components/section-tabs";
 
-const retailerSectionTabs: Partial<Record<"aeps"|"transactions"|"wallet"|"reports"|"settings",SectionTab[]>> = {
+const retailerSectionTabs: Partial<
+  Record<"aeps" | "transactions" | "wallet" | "reports" | "settings", SectionTab[]>
+> = {
   aeps: [
     { label: "AEPS Services", href: "/retailer/aeps" },
     { label: "Cash Withdrawal", href: "/retailer/aeps?service=cash-withdrawal" },
@@ -68,14 +73,7 @@ export function BusinessPage({
 }: {
   identity: Identity;
   active:
-    | "dashboard"
-    | "bank"
-    | "kyc"
-    | "aeps"
-    | "wallet"
-    | "transactions"
-    | "reports"
-    | "settings";
+    "dashboard" | "bank" | "kyc" | "aeps" | "wallet" | "transactions" | "reports" | "settings";
   eyebrow?: string;
   title?: string;
   description?: string;
@@ -85,7 +83,10 @@ export function BusinessPage({
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const securityLocked = credentialsPending(identity);
-  const readiness = useServiceReadiness();
+  // The KYC page owns its profile request. Avoid asking for the same missing
+  // singleton from the sidebar while that screen is already loading it.
+  const readiness = useServiceReadiness(active !== "kyc");
+  const { access } = useEffectiveAccess();
   useEffect(() => {
     if (securityLocked && active !== "settings") window.location.replace("/retailer/settings");
   }, [active, securityLocked]);
@@ -116,6 +117,7 @@ export function BusinessPage({
       | "/activity";
     icon: LucideIcon;
     locked: boolean;
+    area?: UiArea;
     status?: string;
   }> = [
     {
@@ -124,6 +126,7 @@ export function BusinessPage({
       to: "/retailer/dashboard",
       icon: LayoutDashboard,
       locked: false,
+      area: "dashboard",
     },
     {
       key: "kyc",
@@ -131,11 +134,17 @@ export function BusinessPage({
       to: "/retailer/kyc",
       icon: ShieldCheck,
       locked: false,
+      area: "kyc",
       status: readiness.data?.kycStatus?.replaceAll("_", " "),
     },
     {
-      key: "bank",label: "Bank accounts",to: "/retailer/bank",icon: Landmark,
-      locked: false,status: readiness.data?.hasVerifiedBank ? "VERIFIED" : undefined,
+      key: "bank",
+      label: "Bank accounts",
+      to: "/retailer/bank",
+      icon: Landmark,
+      locked: false,
+      area: "banking",
+      status: readiness.data?.hasVerifiedBank ? "VERIFIED" : undefined,
     },
     {
       key: "aeps",
@@ -143,13 +152,48 @@ export function BusinessPage({
       to: "/retailer/aeps",
       icon: Fingerprint,
       locked: !readiness.data?.aepsUnlocked,
+      area: "aeps",
     },
-    { key: "members", label: "Member management", icon: Users, locked: true },
-    { key: "wallet", label: "Wallet & transfer", to: "/retailer/wallet", icon: Wallet, locked: false },
-    { key: "transactions", label: "Transactions", to: "/retailer/transactions", icon: Receipt, locked: false },
-    { key: "reports", label: "Account activity", to: "/activity", icon: FileBarChart, locked: false },
-    { key: "commission", label: "Commission", icon: CircleDollarSign, locked: true },
-    { key: "settings", label: "Settings", to: "/retailer/settings", icon: Settings, locked: false },
+    { key: "members", label: "Member management", icon: Users, locked: true, area: "members" },
+    {
+      key: "wallet",
+      label: "Wallet & transfer",
+      to: "/retailer/wallet",
+      icon: Wallet,
+      locked: false,
+      area: "wallet",
+    },
+    {
+      key: "transactions",
+      label: "Transactions",
+      to: "/retailer/transactions",
+      icon: Receipt,
+      locked: false,
+      area: "transactions",
+    },
+    {
+      key: "reports",
+      label: "Account activity",
+      to: "/activity",
+      icon: FileBarChart,
+      locked: false,
+      area: "reports",
+    },
+    {
+      key: "commission",
+      label: "Commission",
+      icon: CircleDollarSign,
+      locked: true,
+      area: "commissions",
+    },
+    {
+      key: "settings",
+      label: "Settings",
+      to: "/retailer/settings",
+      icon: Settings,
+      locked: false,
+      area: "settings",
+    },
   ];
   async function signOut() {
     setMobileMenuOpen(false);
@@ -232,10 +276,13 @@ export function BusinessPage({
             </div>
           </div>
           <nav className="space-y-1 overflow-y-auto">
-            {nav.map(({ key, label, icon: Icon, locked, status, to }) => {
-              const itemLocked = (securityLocked && key !== "settings") || locked;
-              return (
-              key === "settings" && onSettingsClick ? (
+            {nav.map(({ key, label, icon: Icon, locked, status, to, area }) => {
+              const permissionDenied = area
+                ? !canAccessUiArea(area, { role: identity.role, access })
+                : false;
+              const itemLocked =
+                (securityLocked && key !== "settings") || locked || permissionDenied;
+              return key === "settings" && onSettingsClick ? (
                 <button
                   key={key}
                   type="button"
@@ -252,9 +299,13 @@ export function BusinessPage({
                 <div
                   key={key}
                   title={
-                    key === "aeps"
-                      ? "KYC approval and verified bank account required"
-                      : securityLocked ? "Change temporary password and MPIN in Settings to unlock" : "Coming soon"
+                    permissionDenied
+                      ? "Your active packages do not grant this section"
+                      : key === "aeps"
+                        ? "KYC approval and verified bank account required"
+                        : securityLocked
+                          ? "Change temporary password and MPIN in Settings to unlock"
+                          : "Coming soon"
                   }
                   className="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-muted-foreground/55"
                 >
@@ -277,7 +328,7 @@ export function BusinessPage({
                     </span>
                   )}
                 </Link>
-              ));
+              );
             })}
           </nav>
           <button
@@ -290,44 +341,72 @@ export function BusinessPage({
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
           <div className="mx-auto max-w-[1500px]">
             {showPageHeader && (
-            <div className="mb-7">
-              <div className="mb-4 flex gap-2 overflow-x-auto lg:hidden">
-                <Link
-                  to="/retailer/kyc"
-                  className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "kyc" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
-                >
-                  KYC
-                </Link>
-                <Link
-                  to="/retailer/bank"
-                  className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "bank" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
-                >
-                  Bank Accounts
-                </Link>
-                <Link to="/retailer/wallet" className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "wallet" ? "bg-secondary text-white" : "bg-card text-secondary"}`}>Wallet</Link>
-                <Link to="/retailer/transactions" className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "transactions" ? "bg-secondary text-white" : "bg-card text-secondary"}`}>Transactions</Link>
-                {readiness.data?.aepsUnlocked ? (
+              <div className="mb-7">
+                <div className="mb-4 flex gap-2 overflow-x-auto lg:hidden">
                   <Link
-                    to="/retailer/aeps"
-                    className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "aeps" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
+                    to="/retailer/kyc"
+                    className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "kyc" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
                   >
-                    AEPS
+                    KYC
                   </Link>
-                ) : (
-                  <span className="flex min-w-max items-center gap-2 rounded-xl bg-muted px-4 py-2 text-xs font-bold text-muted-foreground">
-                    <Lock size={12} /> AEPS
-                  </span>
-                )}
+                  <Link
+                    to="/retailer/bank"
+                    className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "bank" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
+                  >
+                    Bank Accounts
+                  </Link>
+                  <Link
+                    to="/retailer/wallet"
+                    className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "wallet" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
+                  >
+                    Wallet
+                  </Link>
+                  <Link
+                    to="/retailer/transactions"
+                    className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "transactions" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
+                  >
+                    Transactions
+                  </Link>
+                  {readiness.data?.aepsUnlocked ? (
+                    <Link
+                      to="/retailer/aeps"
+                      className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "aeps" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
+                    >
+                      AEPS
+                    </Link>
+                  ) : (
+                    <span className="flex min-w-max items-center gap-2 rounded-xl bg-muted px-4 py-2 text-xs font-bold text-muted-foreground">
+                      <Lock size={12} /> AEPS
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs font-extrabold uppercase tracking-[.2em] text-primary">
+                  {eyebrow}
+                </p>
+                <h1 className="mt-1 text-3xl font-extrabold text-secondary">{title}</h1>
+                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
               </div>
-              <p className="text-xs font-extrabold uppercase tracking-[.2em] text-primary">
-                {eyebrow}
-              </p>
-              <h1 className="mt-1 text-3xl font-extrabold text-secondary">{title}</h1>
-              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
-            </div>
             )}
-            {showPageHeader && <SectionTabs tabs={retailerSectionTabs[active as keyof typeof retailerSectionTabs] || []} />}
-            {children}
+            {showPageHeader && (
+              <SectionTabs
+                tabs={retailerSectionTabs[active as keyof typeof retailerSectionTabs] || []}
+              />
+            )}
+            <PermissionBoundary
+              area={
+                (active === "bank"
+                  ? "banking"
+                  : active === "transactions"
+                    ? "transactions"
+                    : active === "reports"
+                      ? "reports"
+                      : active) as UiArea
+              }
+              role={identity.role}
+              access={access}
+            >
+              {children}
+            </PermissionBoundary>
           </div>
         </main>
       </div>

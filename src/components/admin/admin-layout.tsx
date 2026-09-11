@@ -1,8 +1,11 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Bell, Menu, Search } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { getAdminActor, getAdminSession } from "@/lib/admin-api";
 import { getSession } from "@/lib/auth-api";
+import { useEffectiveAccess } from "@/hooks/use-effective-access";
+import { PermissionBoundary } from "@/components/permission-boundary";
+import type { UiArea } from "@/lib/ui-permissions";
 import {
   credentialsPending,
   identityVerificationPending,
@@ -12,6 +15,11 @@ import {
 import { AdminSidebar, type AdminArea } from "./admin-sidebar";
 import { SectionTabs } from "@/components/section-tabs";
 import { managementSectionTabs } from "@/lib/management-section-tabs";
+
+// Child admin routes currently own their page metadata and therefore mount the
+// shell component independently. Remember a successful client-side guard pass
+// so SPA navigation never replaces the whole workspace with a loading screen.
+let adminWorkspaceReady = false;
 
 export function AdminLayout({
   active,
@@ -26,35 +34,35 @@ export function AdminLayout({
   description: string;
   children: ReactNode;
 }) {
-  const clientReady = useSyncExternalStore(
-    () => () => undefined,
-    () => true,
-    () => false,
-  );
+  const [ready, setReady] = useState(adminWorkspaceReady);
   const [menu, setMenu] = useState(false);
   const actor = getAdminActor();
   const identity = getSession()?.identity;
-  const identitySession = getSession();
-  const base = managementBasePath(identitySession?.identity.role);
-  const currentPath = typeof window === "undefined" ? "" : window.location.pathname;
-  const redirectTo = !actor
-    ? "/login"
-    : getAdminSession()?.onboardingRequired
-      ? "/admin/onboarding"
-      : base !== "/admin" && currentPath.startsWith("/admin")
-        ? `${base}${currentPath.slice("/admin".length)}`
-        : identitySession &&
-            isManagementRole(identitySession.identity.role) &&
-            credentialsPending(identitySession.identity) &&
-            active !== "settings"
-          ? identityVerificationPending(identitySession)
-            ? `${base}/account-setup`
-            : `${base}/settings`
-          : null;
+  const { access } = useEffectiveAccess();
 
   useEffect(() => {
-    if (redirectTo && window.location.pathname !== redirectTo) window.location.replace(redirectTo);
-  }, [redirectTo]);
+    if (!getAdminActor()) return window.location.replace("/login");
+    if (getAdminSession()?.onboardingRequired) return window.location.replace("/admin/onboarding");
+    const identitySession = getSession();
+    const base = managementBasePath(identitySession?.identity.role);
+    if (base !== "/admin" && window.location.pathname.startsWith("/admin")) {
+      return window.location.replace(`${base}${window.location.pathname.slice("/admin".length)}`);
+    }
+    if (
+      identitySession &&
+      isManagementRole(identitySession.identity.role) &&
+      credentialsPending(identitySession.identity)
+    ) {
+      if (active !== "settings")
+        return window.location.replace(
+          identityVerificationPending(identitySession)
+            ? `${base}/account-setup`
+            : `${base}/settings`,
+        );
+    }
+    adminWorkspaceReady = true;
+    setReady(true);
+  }, [active]);
   useEffect(() => {
     document.body.style.overflow = menu ? "hidden" : "";
     return () => {
@@ -62,12 +70,32 @@ export function AdminLayout({
     };
   }, [menu]);
 
-  if (!clientReady || redirectTo)
+  if (!ready)
     return (
       <div className="grid min-h-screen place-items-center bg-[#f3f8f6] text-sm font-bold text-secondary">
         Loading secure workspace...
       </div>
     );
+
+  const permissionArea: Record<AdminArea, UiArea> = {
+    dashboard: "dashboard",
+    profile: "profile",
+    merchants: "members",
+    transactions: "transactions",
+    banking: "banking",
+    kyc: "kyc",
+    commissions: "commissions",
+    settlements: "settlements",
+    access: "access",
+    reports: "reports",
+    api: "api",
+    settings: "settings",
+    legal: "legal",
+    sms:
+      identity?.role === "DISTRIBUTOR" || identity?.role === "MASTER_DISTRIBUTOR"
+        ? "support"
+        : "sms",
+  };
 
   return (
     <div className="min-h-screen bg-[#f3f8f6] text-secondary">
@@ -120,7 +148,14 @@ export function AdminLayout({
               <SectionTabs tabs={managementSectionTabs(identity?.role, active)} />
             </div>
             <div className={managementSectionTabs(identity?.role, active).length ? "" : "mt-7"}>
-              {children}
+              <PermissionBoundary
+                area={permissionArea[active]}
+                role={identity?.role || actor?.role}
+                access={actor?.kind === "IDENTITY_ADMIN" ? access : null}
+                dedicatedSuperAdmin={actor?.kind === "SUPER_ADMIN"}
+              >
+                {children}
+              </PermissionBoundary>
             </div>
           </div>
         </main>

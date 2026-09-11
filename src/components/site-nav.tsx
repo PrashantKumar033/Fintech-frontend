@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { Menu, X } from "lucide-react";
 import logo from "../assets/logo.png";
 import { getSession, logout } from "@/lib/auth-api";
+import { signedInHome } from "@/lib/role-hierarchy";
 
 const links = [
   { to: "/", label: "Home" },
@@ -14,9 +15,12 @@ const links = [
 export function SiteNav() {
   const [open, setOpen] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [dashboardHref, setDashboardHref] = useState("/retailer/dashboard");
 
   useEffect(() => {
-    setLoggedIn(!!getSession());
+    const session = getSession();
+    setLoggedIn(!!session);
+    if (session) setDashboardHref(signedInHome(session));
   }, []);
 
   return (
@@ -42,12 +46,12 @@ export function SiteNav() {
         <div className="hidden items-center gap-3 md:flex">
           {loggedIn ? (
             <>
-              <Link
-            to="/retailer/dashboard"
+              <a
+                href={dashboardHref}
                 className="rounded-full border border-secondary/20 px-5 py-2 text-sm font-semibold text-secondary transition-colors hover:bg-secondary hover:text-secondary-foreground"
               >
                 Dashboard
-              </Link>
+              </a>
               <button
                 onClick={async () => {
                   await logout();
@@ -100,13 +104,13 @@ export function SiteNav() {
             ))}
             {loggedIn ? (
               <>
-                <Link
-              to="/retailer/dashboard"
+                <a
+                  href={dashboardHref}
                   onClick={() => setOpen(false)}
                   className="mt-2 rounded-lg px-4 py-3 text-sm font-medium text-foreground hover:bg-mint"
                 >
                   Dashboard
-                </Link>
+                </a>
                 <button
                   onClick={async () => {
                     await logout();

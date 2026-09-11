@@ -12,7 +12,10 @@ import {
   Trash2,
 } from "lucide-react";
 import { ServiceNotice } from "@/components/business-page";
+import { ActionPermissionNotice } from "@/components/action-permission-notice";
 import { RoleAwareAccountPage } from "@/components/role-aware-account-page";
+import { useEffectiveAccess } from "@/hooks/use-effective-access";
+import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { getSession } from "@/lib/auth-api";
 import {
   credentialsPending,
@@ -37,6 +40,13 @@ const initial = {
   purposes: ["PAYOUT"] as Array<"PAYOUT" | "DMT">,
 };
 function BankAccountsPage() {
+  const { can } = useEffectiveAccess();
+  const canManageBank = can(UI_PERMISSION.BANK_MANAGE, [
+    "ADMIN",
+    "MASTER_DISTRIBUTOR",
+    "DISTRIBUTOR",
+    "RETAILER",
+  ]);
   const navigate = useNavigate(),
     [session, setSession] = useState<ReturnType<typeof getSession>>(null),
     [accounts, setAccounts] = useState<BankAccount[]>([]),
@@ -125,6 +135,11 @@ function BankAccountsPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setMessage(null);
+    if (!canManageBank)
+      return setMessage({
+        ok: false,
+        text: `Permission ${UI_PERMISSION.BANK_MANAGE} is required.`,
+      });
     if (form.accountNumber && form.accountNumber !== form.confirm)
       return setMessage({ ok: false, text: "Account numbers do not match." });
     if (!form.purposes.length)
@@ -176,6 +191,15 @@ function BankAccountsPage() {
       title="Bank accounts"
       description="Manage verified settlement accounts independently from KYC and AEPS services."
     >
+      {!canManageBank && (
+        <div className="mb-5">
+          <ActionPermissionNotice
+            permission={UI_PERMISSION.BANK_MANAGE}
+            title="Bank accounts are read-only"
+            text="Add, edit, primary-bank and remove actions are not enabled for your active package."
+          />
+        </div>
+      )}
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <section className="rounded-2xl border border-border bg-card p-5 shadow-soft sm:p-7">
           <div className="flex items-center justify-between">
@@ -186,12 +210,13 @@ function BankAccountsPage() {
               </p>
             </div>
             <button
+              disabled={!canManageBank}
               onClick={() => {
                 setEditingId(null);
                 setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
                 setAdding(!adding);
               }}
-              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white"
+              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus size={16} /> Add account
             </button>
@@ -261,13 +286,14 @@ function BankAccountsPage() {
                             setBusy(false);
                           }
                         }}
-                        disabled={busy}
+                        disabled={!canManageBank || busy}
                         className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-primary"
                       >
                         <Edit3 size={12} /> Edit
                       </button>
                       {!a.isDefault && a.status === "ACTIVE" && (
                         <button
+                          disabled={!canManageBank || busy}
                           onClick={async () => {
                             try {
                               await complianceApi.setPrimary(session.accessToken, a.id);
@@ -277,13 +303,14 @@ function BankAccountsPage() {
                               setMessage({ ok: false, text: complianceMessage(error) });
                             }
                           }}
-                          className="ml-3 mt-2 text-xs font-bold text-primary"
+                          className="ml-3 mt-2 text-xs font-bold text-primary disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Set as primary
                         </button>
                       )}
                       {!a.isDefault && (
                         <button
+                          disabled={!canManageBank || busy}
                           onClick={async () => {
                             if (
                               !window.confirm(
@@ -400,7 +427,7 @@ function BankAccountsPage() {
                 </div>
               </fieldset>
               <button
-                disabled={busy}
+                disabled={!canManageBank || busy}
                 className="self-end rounded-xl bg-secondary py-3 text-sm font-bold text-white disabled:opacity-50"
               >
                 {busy ? "Saving account…" : editingId ? "Save and re-verify" : "Verify and save"}

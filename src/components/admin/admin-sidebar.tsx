@@ -20,12 +20,14 @@ import {
   X,
 } from "lucide-react";
 import { adminAuthApi, getAdminActor } from "@/lib/admin-api";
-import { getEffectiveAccess, getSession } from "@/lib/auth-api";
+import { getSession } from "@/lib/auth-api";
+import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import {
   credentialsPending as hasPendingCredentials,
   managementBasePath,
   normalizeRole,
 } from "@/lib/role-hierarchy";
+import { canAccessUiArea, type UiArea } from "@/lib/ui-permissions";
 
 export type AdminArea =
   | "dashboard"
@@ -95,18 +97,21 @@ const masterDistributorItems: typeof items = [
   { area: "settings", label: "Settings", to: "/admin/settings", icon: Settings },
 ];
 
-const permissionTerms: Partial<Record<AdminArea, string[]>> = {
-  merchants: ["MEMBER", "MERCHANT", "ACCOUNT", "IDENTITY"],
-  transactions: ["TRANSACTION", "RECONCILIATION", "REVERSAL", "AEPS"],
-  banking: ["BANK"],
-  kyc: ["KYC"],
-  commissions: ["COMMISSION"],
-  settlements: ["WALLET", "SETTLEMENT", "FUND"],
-  access: ["ROLE", "PERMISSION", "PACKAGE", "ACCESS"],
-  reports: ["REPORT", "AUDIT"],
-  api: ["API"],
-  legal: ["LEGAL"],
-  sms: ["SMS", "SUPPORT"],
+const permissionArea: Record<AdminArea, UiArea> = {
+  dashboard: "dashboard",
+  profile: "profile",
+  merchants: "members",
+  transactions: "transactions",
+  banking: "banking",
+  kyc: "kyc",
+  commissions: "commissions",
+  settlements: "settlements",
+  access: "access",
+  reports: "reports",
+  api: "api",
+  settings: "settings",
+  legal: "legal",
+  sms: "sms",
 };
 
 export function AdminSidebar({
@@ -123,8 +128,8 @@ export function AdminSidebar({
   const role = normalizeRole(identity?.role);
   const base = managementBasePath(role);
   const actor = getAdminActor();
-  const effectiveAccess = actor?.kind === "IDENTITY_ADMIN" ? getEffectiveAccess() : null;
-  const permissionCodes = effectiveAccess?.permissionCodes?.map((code) => code.toUpperCase()) || [];
+  const { access } = useEffectiveAccess();
+
   async function logout() {
     const destination = getAdminActor()?.kind === "SUPER_ADMIN" ? "/admin/login" : "/login";
     try {
@@ -133,6 +138,13 @@ export function AdminSidebar({
       window.location.assign(destination);
     }
   }
+
+  const visibleItems =
+    role === "DISTRIBUTOR"
+      ? distributorItems
+      : role === "MASTER_DISTRIBUTOR"
+        ? masterDistributorItems
+        : items;
 
   return (
     <aside
@@ -162,20 +174,19 @@ export function AdminSidebar({
         aria-label="Admin navigation"
         className="mt-6 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1"
       >
-        {(role === "DISTRIBUTOR"
-          ? distributorItems
-          : role === "MASTER_DISTRIBUTOR"
-            ? masterDistributorItems
-            : items
-        ).map(({ area, label, to, icon: Icon }) => {
-          const terms = permissionTerms[area];
-          const permissionDenied = Boolean(
-            effectiveAccess &&
-            terms?.length &&
-            !permissionCodes.some((code) => terms.some((term) => code.includes(term))),
-          );
+        {visibleItems.map(({ area, label, to, icon: Icon }) => {
+          const uiArea =
+            area === "sms" && (role === "DISTRIBUTOR" || role === "MASTER_DISTRIBUTOR")
+              ? "support"
+              : permissionArea[area];
+          const permissionDenied = !canAccessUiArea(uiArea, {
+            role: role || actor?.role,
+            access: actor?.kind === "IDENTITY_ADMIN" ? access : null,
+            dedicatedSuperAdmin: actor?.kind === "SUPER_ADMIN",
+          });
           const locked = (credentialsPending && area !== "settings") || permissionDenied;
           const destination = `${base}${to.slice("/admin".length)}`;
+
           return locked ? (
             <div
               key={area}

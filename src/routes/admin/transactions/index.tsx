@@ -11,6 +11,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
+import { ActionPermissionNotice } from "@/components/action-permission-notice";
+import { useEffectiveAccess } from "@/hooks/use-effective-access";
+import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { AdminTransactionOperations } from "@/components/admin/admin-transaction-operations";
 import {
   AdminApiError,
@@ -20,7 +23,6 @@ import {
   type ReconciliationResolution,
   type TransactionDetail,
 } from "@/lib/admin-api";
-import { getEffectiveAccess, hasPermission } from "@/lib/auth-api";
 
 export const Route = createFileRoute("/admin/transactions/")({ component: Transactions });
 const inputClass =
@@ -46,14 +48,16 @@ function amount(value?: string | number) {
 
 function Transactions() {
   const actor = getAdminActor();
-  const permissionLoaded = Boolean(getEffectiveAccess());
+  const { can } = useEffectiveAccess();
+  const identityAdminContract = actor?.kind === "IDENTITY_ADMIN";
+  const canViewTransaction =
+    identityAdminContract && can(UI_PERMISSION.TRANSACTION_VIEW, ["ADMIN"]);
+  const canViewReconciliation =
+    identityAdminContract && can(UI_PERMISSION.TRANSACTION_RECONCILIATION_VIEW, ["ADMIN"]);
   const canResolve =
-    actor?.kind === "SUPER_ADMIN" ||
-    (permissionLoaded && hasPermission("transaction.reconciliation.resolve"));
+    identityAdminContract && can(UI_PERMISSION.TRANSACTION_RECONCILIATION_RESOLVE, ["ADMIN"]);
   const canReverse =
-    actor?.kind === "SUPER_ADMIN" ||
-    !permissionLoaded ||
-    hasPermission("transaction.reversal.request");
+    identityAdminContract && can(UI_PERMISSION.TRANSACTION_REVERSAL_REQUEST, ["ADMIN"]);
   const [items, setItems] = useState<ReconciliationItem[]>([]),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false);
@@ -74,7 +78,7 @@ function Transactions() {
     [rrn, setRrn] = useState("");
 
   async function load(targetPage = page) {
-    if (actor?.kind !== "IDENTITY_ADMIN") {
+    if (!canViewReconciliation) {
       setLoading(false);
       return;
     }
@@ -96,8 +100,9 @@ function Transactions() {
     }
   }
   useEffect(() => {
-    void load(1);
-  }, [status, operation]);
+    if (canViewReconciliation) void load(1);
+    else setLoading(false);
+  }, [status, operation, canViewReconciliation]);
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return needle
@@ -109,6 +114,8 @@ function Transactions() {
       : items;
   }, [items, query]);
   async function inspect(referenceId: string) {
+    if (!canViewTransaction)
+      return setError(`Permission ${UI_PERMISSION.TRANSACTION_VIEW} is required.`);
     setDetailBusy(true);
     setError("");
     try {
@@ -120,6 +127,12 @@ function Transactions() {
     }
   }
   function openAction(kind: "resolve" | "reverse", item: ReconciliationItem) {
+    if (kind === "resolve" && !canResolve)
+      return setError(
+        `Permission ${UI_PERMISSION.TRANSACTION_RECONCILIATION_RESOLVE} is required.`,
+      );
+    if (kind === "reverse" && !canReverse)
+      return setError(`Permission ${UI_PERMISSION.TRANSACTION_REVERSAL_REQUEST} is required.`);
     setAction({ kind, item });
     setResolution("SUCCESS");
     setNote("");
@@ -131,6 +144,12 @@ function Transactions() {
   async function submitAction(event: FormEvent) {
     event.preventDefault();
     if (!action) return;
+    if (action.kind === "resolve" && !canResolve)
+      return setError(
+        `Permission ${UI_PERMISSION.TRANSACTION_RECONCILIATION_RESOLVE} is required.`,
+      );
+    if (action.kind === "reverse" && !canReverse)
+      return setError(`Permission ${UI_PERMISSION.TRANSACTION_REVERSAL_REQUEST} is required.`);
     if (!note.trim())
       return setError(
         action.kind === "reverse"
@@ -192,6 +211,14 @@ function Transactions() {
       description="Search uncertain provider transactions, inspect the full record, resolve reconciliation and request controlled reversals."
     >
       <AdminTransactionOperations />
+      {!canViewReconciliation && (
+        <div className="mb-6">
+          <ActionPermissionNotice
+            permission={UI_PERMISSION.TRANSACTION_RECONCILIATION_VIEW}
+            title="Reconciliation queue is not enabled"
+          />
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-3">
         <Summary label="Queue total" value={String(total)} />
         <Summary

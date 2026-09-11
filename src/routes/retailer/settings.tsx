@@ -3,7 +3,6 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   BadgeCheck,
   Bell,
-  ChevronRight,
   Eye,
   EyeOff,
   KeyRound,
@@ -114,24 +113,36 @@ function SettingsPage({
           Manage your profile, security and preferences.
         </p>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-        <aside className="flex h-fit gap-1 overflow-x-auto rounded-2xl border border-border bg-card p-2 shadow-soft lg:block">
+      <div>
+        <nav
+          aria-label="Settings sections"
+          className="mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-border bg-card p-2 shadow-soft"
+        >
           {tabs.map(([key, Icon, label]) => (
             <button
+              type="button"
               key={key}
               onClick={() => setTab(key)}
-              className={`flex min-w-max items-center gap-3 rounded-xl mb-2 px-2 py-3 text-sm font-semibold lg:w-full ${tab === key ? "bg-secondary text-secondary-foreground" : "text-secondary hover:bg-mint"}`}
+              aria-current={tab === key ? "page" : undefined}
+              className={`flex min-w-max flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${tab === key ? "bg-secondary text-secondary-foreground shadow-sm" : "text-secondary hover:bg-mint"}`}
             >
               <Icon size={17} />
               {label}
-              <ChevronRight size={14} className="ml-auto" />
             </button>
           ))}
-        </aside>
-        <div>
+        </nav>
+        <div className="min-w-0 flex gap-6 sm:flex-row sm:gap-6">
           {tab === "profile" && <ProfileSettings identity={identity} />}
           {tab === "security" && (
-            <><SecuritySettings identity={identity} accessToken={accessToken} onIdentityChange={onIdentityChange} onUnlocked={onUnlocked} /><ContactVerificationCenter identity={identity} /></>
+            <>
+              <SecuritySettings
+                identity={identity}
+                accessToken={accessToken}
+                onIdentityChange={onIdentityChange}
+                onUnlocked={onUnlocked}
+              />
+              <ContactVerificationCenter identity={identity} />
+            </>
           )}
           {tab === "access" && <IdentitySecurityCenter />}
           {tab === "preferences" && <PreferenceSettings identity={identity} />}
@@ -150,7 +161,7 @@ function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-card p-5 shadow-soft sm:p-7">
+    <section className="rounded-2xl w-full border border-border bg-card p-5 shadow-soft sm:p-7">
       <h2 className="text-xl font-extrabold text-secondary">{title}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       <div className="mt-6">{children}</div>

@@ -73,6 +73,9 @@ export type AuditLog = {
   resourceType?: string | null;
   resourceId?: string | null;
   errorMessage?: string | null;
+  httpMethod?: string | null;
+  endpoint?: string | null;
+  statusCode?: number | null;
   metadata?: Record<string, unknown> | null;
   createdAt?: string;
 };
@@ -237,6 +240,133 @@ export type ProviderReversalDetail = {
   commissionFailureReason?: string | null;
   processedBy?: string | null;
   providerTransaction?: ProviderTransaction;
+};
+
+export type KycReviewAccountType = "IDENTITY" | "SUPER_ADMIN";
+export type KycReviewStatus = "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
+export type KycReviewListItem = {
+  id: string;
+  identityId: string;
+  accountType: KycReviewAccountType;
+  status: KycReviewStatus;
+  submittedAt?: string | null;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+  remarks?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { documents?: number };
+  video?: { id: string; status: string } | null;
+};
+export type KycReviewDocument = {
+  id: string;
+  documentType: string;
+  documentNumber?: string | null;
+  status: string;
+  verificationStatus?: string | null;
+  source?: string | null;
+  rejectionReason?: string | null;
+  previewUrl?: string | null;
+};
+export type KycReviewDetail = KycReviewListItem & {
+  documents: KycReviewDocument[];
+  video?: {
+    id: string;
+    status: string;
+    rejectionReason?: string | null;
+    previewUrl?: string | null;
+  } | null;
+};
+export type KycReviewPage = {
+  data: KycReviewListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrevious: boolean;
+  };
+};
+
+export type AdminDashboardSummary = {
+  members: { total: number; active: number; suspended: number; blocked: number };
+  kyc: { approved: number; rejected: number; notStarted: number; pendingOrInProgress: number };
+  aeps: { active: number; blocked: number; notStarted: number; other: number };
+  bankAccounts: { total: number; active: number; pending: number; verified: number };
+  generatedAt: string;
+};
+
+export type AdminMember = {
+  id: string;
+  loginId: string;
+  fullName: string;
+  username: string;
+  email: string;
+  phoneNumber?: string | null;
+  status: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  shopName?: string | null;
+  shopCity?: string | null;
+  shopState?: string | null;
+  onboardingStatus?: string;
+  lastLoginAt?: string | null;
+  createdAt?: string;
+  role: { id: string; name: string; authorityLevel?: number; isActive?: boolean };
+  kycStatus: string;
+  aeps: {
+    provider: string;
+    providerMerchantId?: string | null;
+    status: string;
+    serviceActivated?: boolean;
+    statusReason?: string | null;
+  };
+};
+
+export type AdminMemberPage = {
+  data: AdminMember[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+};
+
+export type AdminMemberDetail = {
+  identity: AdminMember & Record<string, unknown>;
+  kyc?: Record<string, unknown> | null;
+  bankAccounts?: unknown;
+  aeps?: Record<string, unknown> | null;
+  wallets?: unknown;
+  partialErrors?: string[];
+};
+
+export type AdminBankAccount = {
+  id: string;
+  identityId: string;
+  bankName: string;
+  bankCode?: string | null;
+  ifsc: string;
+  branchName?: string | null;
+  accountHolderName: string;
+  accountNumberLast4: string;
+  accountType: string;
+  purposes: string[];
+  status: string;
+  verificationStatus: string;
+  ownershipStatus: string;
+  verifiedAt?: string | null;
+  isDefault: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type AdminBankAccountDetail = AdminBankAccount & {
+  userBankStatusAudits?: Array<Record<string, unknown>>;
+  bankAccountVerifications?: Array<Record<string, unknown>>;
+};
+
+export type AdminBankAccountPage = {
+  data: AdminBankAccount[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
 };
 
 export type CommissionRuleType = "FIXED" | "PERCENTAGE";
@@ -534,8 +664,34 @@ export function updateAdminOnboarding(nextStep: string | null, onboardingStatus?
 }
 
 export const adminApi = {
+  operations: {
+    dashboardSummary: () =>
+      call<AdminDashboardSummary>("/admin/dashboard/summary", { cache: "no-store" }),
+    members: (query = "") =>
+      call<AdminMemberPage>(`/admin/members${query ? `?${query}` : ""}`, {
+        cache: "no-store",
+      }),
+    member: (identityId: string) =>
+      call<AdminMemberDetail>(`/admin/members/${encodeURIComponent(identityId)}`, {
+        cache: "no-store",
+      }),
+    updateMemberStatus: (identityId: string, status: string, reason?: string) =>
+      call<AdminMember>(
+        `/admin/members/${encodeURIComponent(identityId)}/status`,
+        json("PATCH", { status, ...(reason?.trim() ? { reason: reason.trim() } : {}) }),
+      ),
+    bankAccounts: (query = "") =>
+      call<AdminBankAccountPage>(`/admin/bank-accounts${query ? `?${query}` : ""}`, {
+        cache: "no-store",
+      }),
+    bankAccount: (bankId: string) =>
+      call<AdminBankAccountDetail>(`/admin/bank-accounts/${encodeURIComponent(bankId)}`, {
+        cache: "no-store",
+      }),
+  },
   roles: {
     list: () => call<unknown>("/roles"),
+    get: (id: string) => call<AdminEntity>(`/roles/${encodeURIComponent(id)}`),
     create: (body: unknown) => call("/roles", json("POST", body)),
     update: (id: string, body: unknown) => call(`/roles/${id}`, json("PATCH", body)),
     status: (id: string, isActive: boolean) =>
@@ -564,6 +720,7 @@ export const adminApi = {
   },
   permissions: {
     list: () => call<unknown>("/permissions"),
+    get: (id: string) => call<AdminEntity>(`/permissions/${encodeURIComponent(id)}`),
     create: (body: unknown) => call("/permissions", json("POST", body)),
     update: (id: string, body: unknown) => call(`/permissions/${id}`, json("PATCH", body)),
     status: (id: string, isActive: boolean) =>
@@ -571,6 +728,7 @@ export const adminApi = {
   },
   packages: {
     list: () => call<unknown>("/packages"),
+    get: (id: string) => call<AdminEntity>(`/packages/${encodeURIComponent(id)}`),
     create: (body: unknown) => call("/packages", json("POST", body)),
     update: (id: string, body: unknown) => call(`/packages/${id}`, json("PATCH", body)),
     status: (id: string, isActive: boolean) =>
@@ -599,8 +757,7 @@ export const adminApi = {
     const path = getAdminActor()?.kind === "SUPER_ADMIN" ? "/audit" : "/audit/me";
     return call<AuditPage>(`${path}${query ? `?${query}` : ""}`);
   },
-  auditLog: (auditId: string) =>
-    call<AuditLog>(`/audit/me/${encodeURIComponent(auditId)}`),
+  auditLog: (auditId: string) => call<AuditLog>(`/audit/me/${encodeURIComponent(auditId)}`),
   transaction: (referenceId: string) =>
     call<TransactionDetail>(`/admin/transactions/provider/${encodeURIComponent(referenceId)}`),
   providerTransactions: (query = "") =>
@@ -642,6 +799,46 @@ export const adminApi = {
       `/admin/transactions/reversals/${encodeURIComponent(referenceId)}/process`,
       { method: "POST" },
     ),
+  kycReview: {
+    list: (query = "") =>
+      call<KycReviewPage>(`/kyc/review${query ? `?${query}` : ""}`, { cache: "no-store" }),
+    get: (identityId: string, accountType: KycReviewAccountType) =>
+      call<KycReviewDetail>(
+        `/kyc/review/${encodeURIComponent(identityId)}?accountType=${accountType}`,
+        { cache: "no-store" },
+      ),
+    document: (
+      identityId: string,
+      accountType: KycReviewAccountType,
+      documentId: string,
+      status: "APPROVED" | "REJECTED",
+      rejectionReason?: string,
+    ) =>
+      call(
+        `/kyc/review/${encodeURIComponent(identityId)}/documents/${encodeURIComponent(documentId)}?accountType=${accountType}`,
+        json("PATCH", { status, ...(rejectionReason ? { rejectionReason } : {}) }),
+      ),
+    video: (
+      identityId: string,
+      accountType: KycReviewAccountType,
+      status: "APPROVED" | "REJECTED",
+      rejectionReason?: string,
+    ) =>
+      call(
+        `/kyc/review/${encodeURIComponent(identityId)}/video?accountType=${accountType}`,
+        json("PATCH", { status, ...(rejectionReason ? { rejectionReason } : {}) }),
+      ),
+    approve: (identityId: string, accountType: KycReviewAccountType, remarks?: string) =>
+      call(
+        `/kyc/review/${encodeURIComponent(identityId)}/approve?accountType=${accountType}`,
+        json("POST", { ...(remarks ? { remarks } : {}) }),
+      ),
+    reject: (identityId: string, accountType: KycReviewAccountType, remarks: string) =>
+      call(
+        `/kyc/review/${encodeURIComponent(identityId)}/reject?accountType=${accountType}`,
+        json("POST", { remarks }),
+      ),
+  },
   commissionRules: {
     list: () => call<CommissionRule[]>("/commission-rules"),
     get: (id: string) => call<CommissionRule>(`/commission-rules/${encodeURIComponent(id)}`),
@@ -700,6 +897,12 @@ export const adminApi = {
       call<CommissionHierarchy[]>(
         `/commission-hierarchy/child/${encodeURIComponent(childUserId)}/parents${serviceType ? `?serviceType=${encodeURIComponent(serviceType)}` : ""}`,
       ),
+    children: (parentUserId: string) =>
+      call<CommissionHierarchy[]>(
+        `/commission-hierarchy/parent/${encodeURIComponent(parentUserId)}/children`,
+      ),
+    get: (id: string) =>
+      call<CommissionHierarchy>(`/commission-hierarchy/${encodeURIComponent(id)}`),
   },
 };
 

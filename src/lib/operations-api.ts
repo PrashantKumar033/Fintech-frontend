@@ -40,13 +40,7 @@ export type WalletTransferResult = {
 
 export type ProviderOperation = "BE" | "MS" | "CW" | "AP" | "CD";
 export type ProviderTransactionStatus =
-  | "INITIATED"
-  | "PROCESSING"
-  | "SUCCESS"
-  | "FAILED"
-  | "PENDING"
-  | "UNKNOWN"
-  | "REVERSED";
+  "INITIATED" | "PROCESSING" | "SUCCESS" | "FAILED" | "PENDING" | "UNKNOWN" | "REVERSED";
 
 export type ProviderTransaction = {
   id: string;
@@ -154,6 +148,9 @@ function createIdempotencyKey(): string {
 }
 
 export const operationsApi = {
+  balance: (token: string, walletType: "MAIN" | "AEPS" | "PROFIT") =>
+    authenticatedRequest<number>(`/transactions/balance/${walletType}`, {}, token),
+
   balances: (token: string, userId: string) =>
     authenticatedRequest<WalletBalances>(
       `/wallet/balances/${encodeURIComponent(userId)}`,
@@ -161,16 +158,32 @@ export const operationsApi = {
       token,
     ),
 
-  transfer: (
-    token: string,
-    body: WalletTransferInput,
-    idempotencyKey = createIdempotencyKey(),
-  ) =>
+  transfer: (token: string, body: WalletTransferInput, idempotencyKey = createIdempotencyKey()) =>
     authenticatedRequest<WalletTransferResult>(
       "/wallet/transfer",
       {
         method: "POST",
         headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(body),
+      },
+      token,
+    ),
+
+  calculateCommission: (
+    token: string,
+    body: {
+      userId: string;
+      role: string;
+      serviceType: string;
+      operator?: string;
+      transactionAmount: number;
+      idempotencyKey: string;
+    },
+  ) =>
+    authenticatedRequest<Record<string, unknown>>(
+      "/wallet/calculate-commission",
+      {
+        method: "POST",
         body: JSON.stringify(body),
       },
       token,
@@ -237,11 +250,7 @@ export const operationsApi = {
     ),
 
   audit: (token: string, auditId: string) =>
-    authenticatedRequest<AuditLog>(
-      `/audit/me/${encodeURIComponent(auditId)}`,
-      {},
-      token,
-    ),
+    authenticatedRequest<AuditLog>(`/audit/me/${encodeURIComponent(auditId)}`, {}, token),
 };
 
 export function newTransferIdempotencyKey(): string {

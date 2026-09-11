@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useCallback, useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
@@ -15,7 +16,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
-import { getAdminActor } from "@/lib/admin-api";
+import { adminApi, getAdminActor, type AdminDashboardSummary } from "@/lib/admin-api";
 import { managementBasePath } from "@/lib/role-hierarchy";
 
 export const Route = createFileRoute("/admin/")({
@@ -24,37 +25,37 @@ export const Route = createFileRoute("/admin/")({
 });
 
 const metrics: Array<{
+  key: "members" | "kyc" | "aeps" | "banks";
   label: string;
-  value: string;
   detail: string;
   icon: LucideIcon;
   tone: string;
 }> = [
   {
+    key: "members",
     label: "Total merchants",
-    value: "—",
     detail: "Network-wide accounts",
     icon: Users,
     tone: "bg-blue-50 text-blue-700",
   },
   {
-    label: "Today's transactions",
-    value: "—",
-    detail: "Across all services",
+    key: "kyc",
+    label: "Pending KYC",
+    detail: "Pending or under review",
     icon: Activity,
     tone: "bg-emerald-50 text-emerald-700",
   },
   {
-    label: "Today's volume",
-    value: "₹—",
-    detail: "Processed amount",
+    key: "aeps",
+    label: "Active AEPS",
+    detail: "Activated merchants",
     icon: IndianRupee,
     tone: "bg-orange-50 text-orange-700",
   },
   {
-    label: "Pending reviews",
-    value: "—",
-    detail: "KYC and bank queues",
+    key: "banks",
+    label: "Pending bank accounts",
+    detail: "Bank operations queue",
     icon: Clock3,
     tone: "bg-amber-50 text-amber-700",
   },
@@ -108,6 +109,30 @@ const bars = [38, 54, 46, 68, 59, 77, 65, 88, 73, 92, 81, 96];
 
 export function AdminDashboard() {
   const base = managementBasePath(getAdminActor()?.role);
+  const [summary, setSummary] = useState<AdminDashboardSummary | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [summaryError, setSummaryError] = useState("");
+  const loadSummary = useCallback(async () => {
+    setLoadingSummary(true);
+    setSummaryError("");
+    try {
+      setSummary(await adminApi.operations.dashboardSummary());
+    } catch (value) {
+      setSummaryError(value instanceof Error ? value.message : "Dashboard summary could not load.");
+    } finally {
+      setLoadingSummary(false);
+    }
+  }, []);
+  useEffect(() => {
+    void loadSummary();
+  }, [loadSummary]);
+  const metricValue = (key: (typeof metrics)[number]["key"]) => {
+    if (!summary) return "—";
+    if (key === "members") return String(summary.members.total);
+    if (key === "kyc") return String(summary.kyc.pendingOrInProgress);
+    if (key === "aeps") return String(summary.aeps.active);
+    return String(summary.bankAccounts.pending);
+  };
   return (
     <AdminLayout
       active="dashboard"
@@ -126,20 +151,34 @@ export function AdminDashboard() {
               UMOBIPAY operations at a glance
             </h2>
             <p className="mt-3 text-sm leading-6 text-white/65">
-              Live totals will populate from summary APIs as they become available. Operational
-              modules and authenticated workflows remain available below.
+              Live member, KYC, AEPS and bank-account totals from the admin summary service.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:flex">
-            <HeroStat label="Main wallet" value="₹—" />
-            <HeroStat label="AEPS wallet" value="₹—" />
+            <HeroStat
+              label="Active members"
+              value={summary ? String(summary.members.active) : "—"}
+            />
+            <HeroStat label="KYC approved" value={summary ? String(summary.kyc.approved) : "—"} />
             <HeroStat label="Platform status" value="Online" />
           </div>
         </div>
       </section>
 
+      {summaryError && (
+        <div className="mt-5 flex items-center justify-between gap-3 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">
+          <span>{summaryError}</span>
+          <button
+            type="button"
+            onClick={() => void loadSummary()}
+            className="rounded-lg border border-red-200 px-3 py-2"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map(({ label, value, detail, icon: Icon, tone }) => (
+        {metrics.map(({ key, label, detail, icon: Icon, tone }) => (
           <AdminPanel key={label} className="min-h-44">
             <div className="flex items-start justify-between">
               <span className={`grid h-11 w-11 place-items-center rounded-xl ${tone}`}>
@@ -152,7 +191,7 @@ export function AdminDashboard() {
             <p className="mt-5 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">
               {label}
             </p>
-            <p className="mt-1 text-2xl font-black">{value}</p>
+            <p className="mt-1 text-2xl font-black">{loadingSummary ? "…" : metricValue(key)}</p>
             <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
           </AdminPanel>
         ))}

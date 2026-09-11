@@ -1,3 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AdminSettings } from "@/routes/admin/settings";
-export const Route = createFileRoute("/master-distributor/settings/")({ component: AdminSettings });
+import { AdminSettingsPage } from "@/components/admin/admin-settings-page";
+export const Route = createFileRoute("/master-distributor/settings/")({
+  component: AdminSettingsPage,
+});

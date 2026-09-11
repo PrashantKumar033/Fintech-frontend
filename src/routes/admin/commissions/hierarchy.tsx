@@ -2,7 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { GitBranch, Loader2, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
-import { adminApi, type CommissionHierarchy } from "@/lib/admin-api";
+import { ActionPermissionNotice } from "@/components/action-permission-notice";
+import { useEffectiveAccess } from "@/hooks/use-effective-access";
+import { UI_PERMISSION } from "@/lib/ui-permissions";
+import { adminApi, getAdminActor, type CommissionHierarchy } from "@/lib/admin-api";
 
 export const Route = createFileRoute("/admin/commissions/hierarchy")({ component: Hierarchy });
 const inputClass =
@@ -16,6 +19,13 @@ const empty = {
   isActive: true,
 };
 function Hierarchy() {
+  const actor = getAdminActor();
+  const { can } = useEffectiveAccess();
+  const allowed = (code: string) => actor?.kind === "SUPER_ADMIN" || can(code, ["ADMIN"]);
+  const canViewHierarchy = allowed(UI_PERMISSION.COMMISSION_HIERARCHY_VIEW);
+  const canCreateHierarchy = allowed(UI_PERMISSION.COMMISSION_HIERARCHY_CREATE);
+  const canUpdateHierarchy = allowed(UI_PERMISSION.COMMISSION_HIERARCHY_UPDATE);
+  const canDeleteHierarchy = allowed(UI_PERMISSION.COMMISSION_HIERARCHY_DELETE);
   const [items, setItems] = useState<CommissionHierarchy[]>([]),
     [draft, setDraft] = useState(empty),
     [query, setQuery] = useState(""),
@@ -27,6 +37,8 @@ function Hierarchy() {
     [diagnosticService, setDiagnosticService] = useState("AEPS"),
     [diagnosticResult, setDiagnosticResult] = useState<unknown>(null);
   async function diagnose(kind: "resolve" | "parents" | "children" | "record") {
+    if (!canViewHierarchy)
+      return setError(`Permission ${UI_PERMISSION.COMMISSION_HIERARCHY_VIEW} is required.`);
     if (!diagnosticUser.trim()) return setError("Enter a user ID for hierarchy diagnostics.");
     setBusy(true);
     setError("");
@@ -53,6 +65,10 @@ function Hierarchy() {
     }
   }
   async function load() {
+    if (!canViewHierarchy) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -64,10 +80,13 @@ function Hierarchy() {
     }
   }
   useEffect(() => {
-    void load();
-  }, []);
+    if (canViewHierarchy) void load();
+    else setLoading(false);
+  }, [canViewHierarchy]);
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (!canCreateHierarchy)
+      return setError(`Permission ${UI_PERMISSION.COMMISSION_HIERARCHY_CREATE} is required.`);
     if (draft.parentUserId.trim() === draft.childUserId.trim())
       return setError("Parent and child user must be different.");
     setBusy(true);
@@ -89,6 +108,8 @@ function Hierarchy() {
     }
   }
   async function toggle(item: CommissionHierarchy) {
+    if (!canUpdateHierarchy)
+      return setError(`Permission ${UI_PERMISSION.COMMISSION_HIERARCHY_UPDATE} is required.`);
     const nextActive = !item.isActive;
     setBusy(true);
     setError("");
@@ -105,6 +126,8 @@ function Hierarchy() {
     }
   }
   async function remove(item: CommissionHierarchy) {
+    if (!canDeleteHierarchy)
+      return setError(`Permission ${UI_PERMISSION.COMMISSION_HIERARCHY_DELETE} is required.`);
     if (!confirm("Delete this hierarchy link? Existing commission ledger records are not changed."))
       return;
     setBusy(true);
@@ -135,12 +158,28 @@ function Hierarchy() {
       title="Commission hierarchy"
       description="Define and maintain parent-child commission paths, with optional service-specific routing."
     >
+      {!canViewHierarchy && (
+        <div className="mb-5">
+          <ActionPermissionNotice
+            permission={UI_PERMISSION.COMMISSION_HIERARCHY_VIEW}
+            title="Commission hierarchy is not enabled"
+          />
+        </div>
+      )}
       <div className="mb-5 inline-flex rounded-xl border border-border bg-white p-1">
         <Link
           to="/admin/commissions"
+          search={{ view: "rules" }}
           className="rounded-lg px-4 py-2.5 text-xs font-extrabold text-muted-foreground"
         >
-          Rules & distribution
+          Commission Rules
+        </Link>
+        <Link
+          to="/admin/commissions"
+          search={{ view: "distributions" }}
+          className="rounded-lg px-4 py-2.5 text-xs font-extrabold text-muted-foreground"
+        >
+          Distribution Setup
         </Link>
         <span className="rounded-lg bg-secondary px-4 py-2.5 text-xs font-extrabold text-white">
           Hierarchy
@@ -273,7 +312,7 @@ function Hierarchy() {
               />
             </Field>
             <button
-              disabled={busy}
+              disabled={!canCreateHierarchy || busy}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-xs font-extrabold text-white"
             >
               <Plus size={14} />
@@ -330,14 +369,14 @@ function Hierarchy() {
                       </p>
                     </div>
                     <button
-                      disabled={busy}
+                      disabled={!canUpdateHierarchy || busy}
                       onClick={() => void toggle(item)}
                       className="rounded-lg border border-border px-3 py-2 text-xs font-bold"
                     >
                       {item.isActive ? "Deactivate" : "Activate"}
                     </button>
                     <button
-                      disabled={busy}
+                      disabled={!canDeleteHierarchy || busy}
                       onClick={() => void remove(item)}
                       className="rounded-lg border border-red-200 p-2 text-red-700"
                     >

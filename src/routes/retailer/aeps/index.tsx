@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
-  ArrowLeft,
   BadgeIndianRupee,
   Banknote,
   CheckCircle2,
+  Circle,
+  Clock3,
   Fingerprint,
   Landmark,
   Loader2,
@@ -31,6 +32,9 @@ import {
   type TransactionResult,
 } from "@/lib/aeps-api";
 import { BusinessPage } from "@/components/business-page";
+import { ActionPermissionNotice } from "@/components/action-permission-notice";
+import { useEffectiveAccess } from "@/hooks/use-effective-access";
+import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { useServiceReadiness } from "@/lib/service-readiness";
 
 export const Route = createFileRoute("/retailer/aeps/")({
@@ -49,12 +53,172 @@ const actionCopy: Record<AepsNextAction, string> = {
   CONTACT_SUPPORT: "Contact support",
 };
 
+type AepsActionAccess = {
+  onboarding: boolean;
+  services: Record<AepsTxnCode, boolean>;
+};
+
+const onboardingSteps = [
+  { key: "REGISTER", label: "Register" },
+  { key: "OTP_SEND", label: "Send OTP" },
+  { key: "OTP_VERIFY", label: "Verify OTP" },
+  { key: "EKYC", label: "E-KYC" },
+  { key: "TWO_FACTOR_AUTH", label: "2FA" },
+  { key: "AEPS_TRANSACTION", label: "AEPS services" },
+] as const;
+
+function completedJourneySteps(status: AepsStatus, otpSent: boolean) {
+  const providerStep = status.onboardingStep || "NOT_STARTED";
+  const afterOtp = [
+    "OTP_VERIFIED",
+    "EKYC_PENDING",
+    "EKYC_COMPLETED",
+    "TWO_FA_PENDING",
+    "ACTIVE",
+  ].includes(providerStep);
+  const afterEkyc = ["EKYC_COMPLETED", "TWO_FA_PENDING", "ACTIVE"].includes(providerStep);
+  const registrationComplete = ![
+    "NOT_STARTED",
+    "REGISTRATION_PENDING",
+    "REJECTED",
+    "FAILED",
+  ].includes(providerStep);
+
+  return new Set([
+    ...(registrationComplete ? ["REGISTER"] : []),
+    ...(otpSent || afterOtp ? ["OTP_SEND"] : []),
+    ...(afterOtp ? ["OTP_VERIFY"] : []),
+    ...(afterEkyc ? ["EKYC"] : []),
+    ...(status.nextAction === "AEPS_TRANSACTION" ? ["TWO_FACTOR_AUTH"] : []),
+  ]);
+}
+
+function activeJourneyStep(status: AepsStatus, otpSent: boolean) {
+  switch (status.nextAction) {
+    case "REGISTER":
+    case "RETRY_REGISTRATION":
+    case "WAIT":
+      return "REGISTER";
+    case "OTP":
+      return otpSent ? "OTP_VERIFY" : "OTP_SEND";
+    case "EKYC":
+      return "EKYC";
+    case "TWO_FACTOR_AUTH":
+      return "TWO_FACTOR_AUTH";
+    case "AEPS_TRANSACTION":
+      return "AEPS_TRANSACTION";
+    default:
+      return "REGISTER";
+  }
+}
+
+function AepsJourney({ status, otpSent }: { status: AepsStatus; otpSent: boolean }) {
+  const completed = completedJourneySteps(status, otpSent);
+  const active = activeJourneyStep(status, otpSent);
+  return (
+    <section className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-soft">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-extrabold uppercase tracking-wider text-primary">
+            Guided activation
+          </p>
+          <h2 className="mt-1 text-lg font-extrabold text-secondary">Your AEPS setup journey</h2>
+        </div>
+        {status.lastTwoFactorAuthAt && (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock3 size={14} /> Last 2FA: {new Date(status.lastTwoFactorAuthAt).toLocaleString()}
+          </p>
+        )}
+      </div>
+      <ol className="mt-5 grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        {onboardingSteps.map((step, index) => {
+          const done = completed.has(step.key);
+          const current = step.key === active;
+          return (
+            <li
+              key={step.key}
+              aria-current={current ? "step" : undefined}
+              className={`rounded-xl border p-3 ${
+                current
+                  ? "border-primary bg-primary/5"
+                  : done
+                    ? "border-emerald-200 bg-emerald-50"
+                    : "border-border bg-background"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {done ? (
+                  <CheckCircle2 size={17} className="text-emerald-600" />
+                ) : (
+                  <Circle
+                    size={17}
+                    className={current ? "text-primary" : "text-muted-foreground"}
+                  />
+                )}
+                <span className="text-[10px] font-black uppercase text-muted-foreground">
+                  Step {index + 1}
+                </span>
+              </div>
+              <p
+                className={`mt-2 text-sm font-extrabold ${current ? "text-primary" : "text-secondary"}`}
+              >
+                {step.label}
+              </p>
+              <p className="mt-0.5 text-[10px] font-bold uppercase text-muted-foreground">
+                {done ? "Complete" : current ? "Do this now" : "Locked"}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
+function PrerequisiteNotice({ kycReady, bankReady }: { kycReady: boolean; bankReady: boolean }) {
+  return (
+    <section className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
+      <h2 className="font-extrabold">Complete the AEPS prerequisites</h2>
+      <p className="mt-1 text-sm">
+        Registration unlocks after an approved KYC profile and one active, ownership-verified bank
+        account.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Link
+          to="/retailer/kyc"
+          className={`rounded-xl px-4 py-2.5 text-sm font-bold ${kycReady ? "bg-emerald-100 text-emerald-800" : "bg-white text-secondary shadow-sm"}`}
+        >
+          {kycReady ? "KYC approved ✓" : "Complete KYC"}
+        </Link>
+        <Link
+          to="/retailer/bank"
+          className={`rounded-xl px-4 py-2.5 text-sm font-bold ${bankReady ? "bg-emerald-100 text-emerald-800" : "bg-white text-secondary shadow-sm"}`}
+        >
+          {bankReady ? "Bank verified ✓" : "Verify bank account"}
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 function AepsPage() {
   const navigate = useNavigate();
+  const { can } = useEffectiveAccess();
+  const actionAccess: AepsActionAccess = {
+    onboarding: can(UI_PERMISSION.AEPS_ONBOARDING, ["RETAILER"]),
+    services: {
+      BE: can(UI_PERMISSION.AEPS_BALANCE_ENQUIRY, ["RETAILER"]),
+      MS: can(UI_PERMISSION.AEPS_MINI_STATEMENT, ["RETAILER"]),
+      CW: can(UI_PERMISSION.AEPS_CASH_WITHDRAWAL, ["RETAILER"]),
+      AP: can(UI_PERMISSION.AEPS_AADHAAR_PAY, ["RETAILER"]),
+      CD: can(UI_PERMISSION.AEPS_CASH_DEPOSIT, ["RETAILER"]),
+    },
+  };
   const [session, setSession] = useState<ReturnType<typeof getSession>>(null);
   const [status, setStatus] = useState<AepsStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const readiness = useServiceReadiness(!!session);
   const refresh = useCallback(async () => {
     const current = getSession();
@@ -83,8 +247,17 @@ function AepsPage() {
     void refresh();
   }, [navigate, refresh]);
   useEffect(() => {
-    if (readiness.isSuccess && !readiness.data.aepsUnlocked) navigate({ to: "/retailer/dashboard" });
-  }, [navigate, readiness.data, readiness.isSuccess]);
+    if (!session) return;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [refresh, session]);
   if (!session) return null;
   return (
     <BusinessPage
@@ -97,9 +270,10 @@ function AepsPage() {
       <div className="mb-5 flex justify-end">
         <button
           onClick={refresh}
-          className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold"
+          disabled={loading}
+          className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <RefreshCw size={14} /> Refresh status
+          <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Refresh status
         </button>
       </div>
       <div className="mb-6 rounded-2xl bg-secondary p-5 text-secondary-foreground shadow-elegant">
@@ -125,10 +299,33 @@ function AepsPage() {
         </div>
       </div>
       {error && <Notice tone="error">{error}</Notice>}
+      {status && <AepsJourney status={status} otpSent={otpSent} />}
+      {status &&
+        ["REGISTER", "RETRY_REGISTRATION"].includes(status.nextAction) &&
+        readiness.isSuccess &&
+        !readiness.data.aepsUnlocked && (
+          <PrerequisiteNotice
+            kycReady={readiness.data.kycStatus === "APPROVED"}
+            bankReady={readiness.data.hasVerifiedBank}
+          />
+        )}
       {loading ? (
         <Loading />
+      ) : status ? (
+        <AepsFlow
+          token={session.accessToken}
+          status={status}
+          refresh={refresh}
+          access={actionAccess}
+          onOtpSent={() => setOtpSent(true)}
+        />
       ) : (
-        status && <AepsFlow token={session.accessToken} status={status} refresh={refresh} />
+        <StateCard
+          icon={<ShieldAlert />}
+          title="AEPS status is unavailable"
+          text="The onboarding status could not be loaded. Check the message above and try again."
+          action={refresh}
+        />
       )}
     </BusinessPage>
   );
@@ -138,11 +335,28 @@ function AepsFlow({
   token,
   status,
   refresh,
+  access,
+  onOtpSent,
 }: {
   token: string;
   status: AepsStatus;
   refresh: () => Promise<void>;
+  access: AepsActionAccess;
+  onOtpSent: () => void;
 }) {
+  if (
+    ["REGISTER", "RETRY_REGISTRATION", "OTP", "EKYC", "TWO_FACTOR_AUTH"].includes(
+      status.nextAction,
+    ) &&
+    !access.onboarding
+  ) {
+    return (
+      <ActionPermissionNotice
+        permission={UI_PERMISSION.AEPS_ONBOARDING}
+        title="AEPS onboarding is not enabled"
+      />
+    );
+  }
   switch (status.nextAction) {
     case "REGISTER":
     case "RETRY_REGISTRATION":
@@ -154,7 +368,7 @@ function AepsFlow({
         />
       );
     case "OTP":
-      return <OnboardingOtp token={token} done={refresh} />;
+      return <OnboardingOtp token={token} done={refresh} onSent={onOtpSent} />;
     case "EKYC":
       return (
         <BiometricStep
@@ -167,7 +381,17 @@ function AepsFlow({
     case "TWO_FACTOR_AUTH":
       return <DailyTwoFactor token={token} done={refresh} />;
     case "AEPS_TRANSACTION":
-      return <TransactionWorkspace token={token} />;
+      if (!status.serviceActivated) {
+        return (
+          <StateCard
+            icon={<Loader2 className="animate-spin" />}
+            title="Waiting for AEPS activation"
+            text="VimoPay onboarding is complete, but transaction activation has not been confirmed yet. Refresh the status before starting a transaction."
+            action={refresh}
+          />
+        );
+      }
+      return <TransactionWorkspace token={token} access={access} />;
     case "WAIT":
       return (
         <StateCard
@@ -220,6 +444,61 @@ const emptyRegistration = {
   shopLong: "",
 };
 
+type RegistrationField = keyof typeof emptyRegistration;
+type RegistrationErrors = Partial<Record<RegistrationField, string>>;
+
+function validateRegistration(form: typeof emptyRegistration): RegistrationErrors {
+  const errors: RegistrationErrors = {};
+  const requiredFields: RegistrationField[] = [
+    "bankAccountId",
+    "vimopayBankCode",
+    "lat",
+    "long",
+    "firstName",
+    "lastName",
+    "dob",
+    "emailId",
+    "merchantPhoneNumber",
+    "merchantAddress1",
+    "merchantState",
+    "merchantDistrict",
+    "gender",
+    "merchantPinCode",
+    "merchantPan",
+    "aadhaarNumber",
+    "shopPan",
+    "shopAddress",
+    "shopDistrict",
+    "shopState",
+    "shopPincode",
+    "shopLat",
+    "shopLong",
+  ];
+  for (const field of requiredFields) {
+    if (!form[field].trim()) errors[field] = "This field is required.";
+  }
+  if (form.dob && !/^\d{2}-\d{2}-\d{4}$/.test(form.dob)) errors.dob = "Use DD-MM-YYYY format.";
+  if (form.emailId && !/^\S+@\S+\.\S+$/.test(form.emailId))
+    errors.emailId = "Enter a valid merchant email address.";
+  if (form.merchantPhoneNumber && !/^\d{10}$/.test(form.merchantPhoneNumber))
+    errors.merchantPhoneNumber = "Enter exactly 10 digits.";
+  if (form.merchantPinCode && !/^\d{6}$/.test(form.merchantPinCode))
+    errors.merchantPinCode = "Enter exactly 6 digits.";
+  if (form.shopPincode && !/^\d{6}$/.test(form.shopPincode))
+    errors.shopPincode = "Enter exactly 6 digits.";
+  if (form.merchantPan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(form.merchantPan))
+    errors.merchantPan = "Use PAN format ABCDE1234F.";
+  if (form.shopPan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(form.shopPan))
+    errors.shopPan = "Use PAN format ABCDE1234F.";
+  if (form.aadhaarNumber && !/^\d{12}$/.test(form.aadhaarNumber))
+    errors.aadhaarNumber = "Enter exactly 12 digits.";
+  for (const field of ["lat", "long", "shopLat", "shopLong"] as const) {
+    if (form[field] && !/^-?\d+(\.\d+)?$/.test(form[field]))
+      errors[field] = "Enter a valid coordinate.";
+  }
+  return errors;
+}
+
 function Registration({
   token,
   retry,
@@ -239,7 +518,9 @@ function Registration({
     [prerequisiteErrors, setPrerequisiteErrors] = useState<string[]>([]),
     [loadingPrerequisites, setLoadingPrerequisites] = useState(true),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [locationError, setLocationError] = useState(""),
+    [fieldErrors, setFieldErrors] = useState<RegistrationErrors>({});
   useEffect(() => {
     let active = true;
     Promise.allSettled([
@@ -297,24 +578,69 @@ function Registration({
       .then(setShopDistricts)
       .catch((e) => setError(messageOf(e)));
   }, [form.shopState, token]);
-  const set = (name: keyof typeof form, value: string) => setForm((f) => ({ ...f, [name]: value }));
-  const locate = () =>
-    navigator.geolocation?.getCurrentPosition(
+  const set = (name: RegistrationField, value: string) => {
+    setForm((current) => ({ ...current, [name]: value }));
+    setFieldErrors((current) => {
+      if (!current[name]) return current;
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
+  };
+  const locate = () => {
+    setLocationError("");
+    if (!window.isSecureContext) {
+      setLocationError(
+        "Chrome blocks automatic location on a LAN HTTP address. Open the site through HTTPS (or localhost on this computer), or enter the coordinates manually.",
+      );
+      return;
+    }
+    if (!navigator.geolocation) {
+      setLocationError(
+        "This browser does not support automatic location. Enter the coordinates manually.",
+      );
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
       (p) =>
-        setForm((f) => ({
-          ...f,
-          lat: String(p.coords.latitude),
-          long: String(p.coords.longitude),
-          shopLat: f.shopLat || String(p.coords.latitude),
-          shopLong: f.shopLong || String(p.coords.longitude),
-        })),
-      () => setError("Location permission is required for AEPS registration."),
+        setForm((f) => {
+          setFieldErrors((current) => {
+            const next = { ...current };
+            delete next.lat;
+            delete next.long;
+            delete next.shopLat;
+            delete next.shopLong;
+            return next;
+          });
+          return {
+            ...f,
+            lat: String(p.coords.latitude),
+            long: String(p.coords.longitude),
+            shopLat: f.shopLat || String(p.coords.latitude),
+            shopLong: f.shopLong || String(p.coords.longitude),
+          };
+        }),
+      (reason) =>
+        setLocationError(
+          reason.code === reason.PERMISSION_DENIED
+            ? "Location access was denied. Allow Location in browser site settings and try again, or enter coordinates manually."
+            : "Current location could not be determined. Check GPS/network and try again, or enter coordinates manually.",
+        ),
       { enableHighAccuracy: true },
     );
+  };
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setError("");
+    const validationErrors = validateRegistration(form);
+    if (Object.keys(validationErrors).length) {
+      setFieldErrors(validationErrors);
+      const firstInvalidField = Object.keys(validationErrors)[0];
+      document.getElementById(`aeps-${firstInvalidField}`)?.focus();
+      return;
+    }
+    setFieldErrors({});
+    setBusy(true);
     try {
       await aepsApi.register(
         token,
@@ -348,7 +674,7 @@ function Registration({
       title={retry ? "Retry VimoPay registration" : "Merchant registration"}
       description="Use a verified bank account and approved KYC profile. Sensitive identity details stay only in this form until submission."
     >
-      <form onSubmit={submit} className="space-y-6">
+      <form onSubmit={submit} noValidate className="space-y-6">
         {error && <Notice tone="error">{error}</Notice>}
         {loadingPrerequisites && (
           <Notice tone="info">
@@ -363,6 +689,24 @@ function Registration({
                 <li key={issue}>{issue}</li>
               ))}
             </ul>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {kyc?.status !== "APPROVED" && (
+                <Link
+                  to="/retailer/kyc"
+                  className="rounded-lg bg-white px-3 py-2 font-bold shadow-sm"
+                >
+                  Open KYC
+                </Link>
+              )}
+              {!saved.length && (
+                <Link
+                  to="/retailer/bank"
+                  className="rounded-lg bg-white px-3 py-2 font-bold shadow-sm"
+                >
+                  Open bank accounts
+                </Link>
+              )}
+            </div>
           </div>
         )}
         {kyc?.status === "APPROVED" && (
@@ -375,6 +719,8 @@ function Registration({
             label="Verified settlement bank"
             value={form.bankAccountId}
             onChange={(v) => set("bankAccountId", v)}
+            fieldId="aeps-bankAccountId"
+            error={fieldErrors.bankAccountId}
             options={saved.map((b) => ({
               value: b.id,
               label: `${b.bankName || "Bank account"} ••••${b.accountNumberLast4 || ""} (${b.accountType || ""})`,
@@ -384,6 +730,8 @@ function Registration({
             label="VimoPay registration bank"
             value={form.vimopayBankCode}
             onChange={(v) => set("vimopayBankCode", v)}
+            fieldId="aeps-vimopayBankCode"
+            error={fieldErrors.vimopayBankCode}
             options={banks.map((b) => ({ value: b.code || "", label: b.description }))}
           />
           {fields.map(([name, label, placeholder]) => (
@@ -392,6 +740,8 @@ function Registration({
               label={label}
               value={form[name]}
               placeholder={placeholder}
+              fieldId={`aeps-${name}`}
+              error={fieldErrors[name]}
               onChange={(v) =>
                 set(name, sensitive(name) ? digits(v) : pan(name) ? v.toUpperCase() : v)
               }
@@ -402,6 +752,8 @@ function Registration({
             label="Gender"
             value={form.gender}
             onChange={(v) => set("gender", v)}
+            fieldId="aeps-gender"
+            error={fieldErrors.gender}
             options={[
               { value: "M", label: "Male" },
               { value: "F", label: "Female" },
@@ -411,6 +763,8 @@ function Registration({
           <SelectField
             label="Residence state"
             value={form.merchantState}
+            fieldId="aeps-merchantState"
+            error={fieldErrors.merchantState}
             onChange={(v) => {
               set("merchantState", v);
               set("merchantDistrict", "");
@@ -421,11 +775,15 @@ function Registration({
             label="Residence district"
             value={form.merchantDistrict}
             onChange={(v) => set("merchantDistrict", v)}
+            fieldId="aeps-merchantDistrict"
+            error={fieldErrors.merchantDistrict}
             options={districts.map(masterOption)}
           />
           <SelectField
             label="Shop state"
             value={form.shopState}
+            fieldId="aeps-shopState"
+            error={fieldErrors.shopState}
             onChange={(v) => {
               set("shopState", v);
               set("shopDistrict", "");
@@ -436,15 +794,37 @@ function Registration({
             label="Shop district"
             value={form.shopDistrict}
             onChange={(v) => set("shopDistrict", v)}
+            fieldId="aeps-shopDistrict"
+            error={fieldErrors.shopDistrict}
             options={shopDistricts.map(masterOption)}
           />
-          <Field label="Current latitude" value={form.lat} onChange={(v) => set("lat", v)} />
-          <Field label="Current longitude" value={form.long} onChange={(v) => set("long", v)} />
-          <Field label="Shop latitude" value={form.shopLat} onChange={(v) => set("shopLat", v)} />
+          <Field
+            label="Current latitude"
+            value={form.lat}
+            onChange={(v) => set("lat", v)}
+            fieldId="aeps-lat"
+            error={fieldErrors.lat}
+          />
+          <Field
+            label="Current longitude"
+            value={form.long}
+            onChange={(v) => set("long", v)}
+            fieldId="aeps-long"
+            error={fieldErrors.long}
+          />
+          <Field
+            label="Shop latitude"
+            value={form.shopLat}
+            onChange={(v) => set("shopLat", v)}
+            fieldId="aeps-shopLat"
+            error={fieldErrors.shopLat}
+          />
           <Field
             label="Shop longitude"
             value={form.shopLong}
             onChange={(v) => set("shopLong", v)}
+            fieldId="aeps-shopLong"
+            error={fieldErrors.shopLong}
           />
         </div>
         <button
@@ -454,6 +834,11 @@ function Registration({
         >
           <MapPin size={16} /> Use current location
         </button>
+        {locationError && (
+          <p role="alert" className="-mt-4 text-xs font-semibold text-red-700">
+            {locationError}
+          </p>
+        )}
         <Submit busy={busy || loadingPrerequisites || prerequisiteErrors.length > 0}>
           Submit registration
         </Submit>
@@ -462,7 +847,15 @@ function Registration({
   );
 }
 
-function OnboardingOtp({ token, done }: { token: string; done: () => Promise<void> }) {
+function OnboardingOtp({
+  token,
+  done,
+  onSent,
+}: {
+  token: string;
+  done: () => Promise<void>;
+  onSent: () => void;
+}) {
   const [otp, setOtp] = useState(""),
     [sent, setSent] = useState(false),
     [busy, setBusy] = useState(false),
@@ -473,6 +866,7 @@ function OnboardingOtp({ token, done }: { token: string; done: () => Promise<voi
     try {
       await aepsApi.sendOtp(token, resend);
       setSent(true);
+      onSent();
     } catch (e) {
       setError(messageOf(e));
     } finally {
@@ -499,36 +893,52 @@ function OnboardingOtp({ token, done }: { token: string; done: () => Promise<voi
       description="Send the onboarding OTP to the registered merchant mobile, then verify it here."
     >
       {error && <Notice tone="error">{error}</Notice>}
+      <div className="mb-5 grid gap-3 sm:grid-cols-2">
+        <div
+          className={`rounded-xl border p-4 ${sent ? "border-emerald-200 bg-emerald-50" : "border-primary bg-primary/5"}`}
+        >
+          <p className="text-xs font-black uppercase text-muted-foreground">1. Send OTP</p>
+          <p className="mt-1 text-sm font-bold text-secondary">
+            {sent ? "OTP request sent successfully" : "Request an OTP from VimoPay"}
+          </p>
+        </div>
+        <div
+          className={`rounded-xl border p-4 ${sent ? "border-primary bg-primary/5" : "border-border bg-muted/40"}`}
+        >
+          <p className="text-xs font-black uppercase text-muted-foreground">2. Verify OTP</p>
+          <p className="mt-1 text-sm font-bold text-secondary">
+            Enter the OTP received by the merchant
+          </p>
+        </div>
+      </div>
       <form onSubmit={verify} className="mt-5 max-w-md space-y-4">
         <Field
           label="OTP"
           value={otp}
-          onChange={(v) => setOtp(digits(v))}
+          onChange={(v) => setOtp(digits(v).slice(0, 8))}
           placeholder="Enter provider OTP"
           required
         />
-        {!sent ? (
+        <div className="grid gap-3 sm:grid-cols-2">
           <button
             type="button"
             disabled={busy}
-            onClick={() => send()}
-            className="w-full rounded-xl bg-secondary py-3 text-sm font-bold text-white"
+            onClick={() => send(sent)}
+            className="cursor-pointer rounded-xl border border-secondary py-3 text-sm font-bold text-secondary disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Send OTP
+            {sent ? "Resend OTP" : "Send OTP"}
           </button>
-        ) : (
-          <>
-            <Submit busy={busy}>Verify OTP</Submit>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => send(true)}
-              className="w-full text-sm font-bold text-primary"
-            >
-              Resend OTP
-            </button>
-          </>
-        )}
+          <button
+            disabled={busy || !otp}
+            className="cursor-pointer rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? "Please wait…" : "Verify OTP"}
+          </button>
+        </div>
+        <p className="text-xs leading-5 text-muted-foreground">
+          Already received an OTP before reopening this page? Enter it directly and select Verify
+          OTP.
+        </p>
       </form>
     </Panel>
   );
@@ -585,15 +995,31 @@ function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<vo
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   useEffect(() => {
-    navigator.geolocation?.getCurrentPosition((p) => {
-      setLat(String(p.coords.latitude));
-      setLong(String(p.coords.longitude));
-    });
+    navigator.geolocation?.getCurrentPosition(
+      (p) => {
+        setLat(String(p.coords.latitude));
+        setLong(String(p.coords.longitude));
+      },
+      () => setError("Location access is required for daily AEPS verification."),
+      { enableHighAccuracy: true },
+    );
   }, []);
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setError("");
+    if (!/^\d{12}$/.test(aadhaar)) {
+      setError("Merchant Aadhaar number must contain exactly 12 digits.");
+      return;
+    }
+    if (!deviceType.trim() || !pid) {
+      setError("Select the RD device and capture a fresh biometric PID.");
+      return;
+    }
+    if (!/^-?\d+(\.\d+)?$/.test(lat) || !/^-?\d+(\.\d+)?$/.test(long)) {
+      setError("Allow location access or enter valid coordinates.");
+      return;
+    }
+    setBusy(true);
     try {
       await aepsApi.twoFactor(token, {
         aadhaarNumber: aadhaar,
@@ -641,15 +1067,46 @@ const services: Array<{
   title: string;
   icon: typeof Banknote;
   financial: boolean;
+  permission: string;
 }> = [
-  { code: "BE", title: "Balance Enquiry", icon: WalletCards, financial: false },
-  { code: "MS", title: "Mini Statement", icon: ReceiptText, financial: false },
-  { code: "CW", title: "Cash Withdrawal", icon: Banknote, financial: true },
-  { code: "AP", title: "Aadhaar Pay", icon: BadgeIndianRupee, financial: true },
-  { code: "CD", title: "Cash Deposit", icon: Landmark, financial: true },
+  {
+    code: "BE",
+    title: "Balance Enquiry",
+    icon: WalletCards,
+    financial: false,
+    permission: UI_PERMISSION.AEPS_BALANCE_ENQUIRY,
+  },
+  {
+    code: "MS",
+    title: "Mini Statement",
+    icon: ReceiptText,
+    financial: false,
+    permission: UI_PERMISSION.AEPS_MINI_STATEMENT,
+  },
+  {
+    code: "CW",
+    title: "Cash Withdrawal",
+    icon: Banknote,
+    financial: true,
+    permission: UI_PERMISSION.AEPS_CASH_WITHDRAWAL,
+  },
+  {
+    code: "AP",
+    title: "Aadhaar Pay",
+    icon: BadgeIndianRupee,
+    financial: true,
+    permission: UI_PERMISSION.AEPS_AADHAAR_PAY,
+  },
+  {
+    code: "CD",
+    title: "Cash Deposit",
+    icon: Landmark,
+    financial: true,
+    permission: UI_PERMISSION.AEPS_CASH_DEPOSIT,
+  },
 ];
 
-function TransactionWorkspace({ token }: { token: string }) {
+function TransactionWorkspace({ token, access }: { token: string; access: AepsActionAccess }) {
   const [operation, setOperation] = useState<AepsTxnCode | null>(null),
     [result, setResult] = useState<TransactionResult | null>(null);
   if (result)
@@ -669,6 +1126,7 @@ function TransactionWorkspace({ token }: { token: string }) {
         operation={operation}
         done={setResult}
         cancel={() => setOperation(null)}
+        allowed={access.services[operation]}
       />
     );
   return (
@@ -677,11 +1135,14 @@ function TransactionWorkspace({ token }: { token: string }) {
       description="Choose a service. Every biometric capture must be fresh for the current transaction."
     >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {services.map(({ code, title, icon: Icon, financial }) => (
+        {services.map(({ code, title, icon: Icon, financial, permission }) => (
           <button
             key={code}
-            onClick={() => setOperation(code)}
-            className="group rounded-2xl border border-border bg-background p-5 text-left transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-soft"
+            type="button"
+            disabled={!access.services[code]}
+            title={access.services[code] ? title : `Requires ${permission}`}
+            onClick={() => access.services[code] && setOperation(code)}
+            className="group rounded-2xl border border-border bg-background p-5 text-left transition enabled:hover:-translate-y-0.5 enabled:hover:border-primary/50 enabled:hover:shadow-soft disabled:cursor-not-allowed disabled:opacity-45"
           >
             <span className="grid h-12 w-12 place-items-center rounded-xl bg-mint text-secondary group-hover:bg-primary group-hover:text-white">
               <Icon />
@@ -708,11 +1169,13 @@ function TransactionForm({
   operation,
   done,
   cancel,
+  allowed,
 }: {
   token: string;
   operation: AepsTxnCode;
   done: (r: TransactionResult) => void;
   cancel: () => void;
+  allowed: boolean;
 }) {
   const service = services.find((x) => x.code === operation)!;
   const needsAmount = service.financial;
@@ -748,8 +1211,13 @@ function TransactionForm({
   const set = (key: keyof typeof form, value: string) => {
     setForm((f) => ({ ...f, [key]: value }));
     setIntentKey("");
+    if (key !== "pidData" && key !== "deviceType") {
+      setAuth(null);
+      setOtp("");
+    }
   };
   const requestOtp = async () => {
+    if (!allowed) return setError(`Permission ${service.permission} is required.`);
     setBusy(true);
     setError("");
     try {
@@ -773,6 +1241,7 @@ function TransactionForm({
   };
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (!allowed) return setError(`Permission ${service.permission} is required.`);
     const amount = Number(form.amount);
     if (needsAmount && (!Number.isFinite(amount) || amount < 100 || amount > 10_000)) {
       setError("Amount must be between ₹100 and ₹10,000.");
@@ -788,6 +1257,12 @@ function TransactionForm({
     }
     if (highValue && !auth) {
       await requestOtp();
+      return;
+    }
+    if (auth && new Date(auth.expiresAt).getTime() <= Date.now()) {
+      setAuth(null);
+      setOtp("");
+      setError("The transaction authorization expired. Request a new OTP before continuing.");
       return;
     }
     setBusy(true);
@@ -842,10 +1317,7 @@ function TransactionForm({
             label="Authentication"
             value={authType}
             onChange={(v) => setAuthType(v as AuthType)}
-            options={[
-              { value: "BA", label: "Fingerprint / biometric" },
-              { value: "FA", label: "Face authentication" },
-            ]}
+            options={[{ value: "BA", label: "Fingerprint / biometric" }]}
           />
           <SelectField
             label="Customer bank"
@@ -901,7 +1373,7 @@ function TransactionForm({
             Cancel
           </button>
           <button
-            disabled={busy || ((!highValue || !!auth) && !form.pidData)}
+            disabled={!allowed || busy || ((!highValue || !!auth) && !form.pidData)}
             className="flex-[2] rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground disabled:opacity-50"
           >
             {busy
@@ -1081,24 +1553,41 @@ function Field({
   onChange,
   placeholder,
   required,
+  fieldId,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   required?: boolean;
+  fieldId?: string;
+  error?: string;
 }) {
+  const errorId = fieldId ? `${fieldId}-error` : undefined;
   return (
     <label className="block">
       <span className="text-xs font-bold text-muted-foreground">{label}</span>
       <input
+        id={fieldId}
         required={required}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         autoComplete="off"
-        className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+        aria-invalid={!!error}
+        aria-describedby={error ? errorId : undefined}
+        className={`mt-1.5 w-full rounded-xl border bg-background px-3 py-3 text-sm outline-none focus:ring-2 ${
+          error
+            ? "border-red-500 focus:border-red-500 focus:ring-red-100"
+            : "border-border focus:border-primary focus:ring-primary/10"
+        }`}
       />
+      {error && (
+        <span id={errorId} role="alert" className="mt-1.5 block text-xs font-semibold text-red-700">
+          {error}
+        </span>
+      )}
     </label>
   );
 }
@@ -1107,20 +1596,30 @@ function SelectField({
   value,
   onChange,
   options,
+  fieldId,
+  error,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: Array<{ value: string; label: string }>;
+  fieldId?: string;
+  error?: string;
 }) {
+  const errorId = fieldId ? `${fieldId}-error` : undefined;
   return (
     <label className="block">
       <span className="text-xs font-bold text-muted-foreground">{label}</span>
       <select
+        id={fieldId}
         required
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-3 text-sm outline-none focus:border-primary"
+        aria-invalid={!!error}
+        aria-describedby={error ? errorId : undefined}
+        className={`mt-1.5 w-full rounded-xl border bg-background px-3 py-3 text-sm outline-none ${
+          error ? "border-red-500 focus:border-red-500" : "border-border focus:border-primary"
+        }`}
       >
         <option value="">Select…</option>
         {options.map((o) => (
@@ -1129,6 +1628,11 @@ function SelectField({
           </option>
         ))}
       </select>
+      {error && (
+        <span id={errorId} role="alert" className="mt-1.5 block text-xs font-semibold text-red-700">
+          {error}
+        </span>
+      )}
     </label>
   );
 }

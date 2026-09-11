@@ -1,0 +1,94 @@
+import { KeyRound, LockKeyhole, Mail, ShieldCheck, UserCircle } from "lucide-react";
+import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
+import { getAdminActor } from "@/lib/admin-api";
+export function AdminProfilePage() {
+  const actor = getAdminActor();
+  return (
+    <AdminLayout
+      active="profile"
+      eyebrow="Account"
+      title="My profile"
+      description="Administrator identity, security and access information in one dedicated workspace."
+    >
+      <div className="grid gap-6 xl:grid-cols-[340px_1fr]">
+        <AdminPanel className="h-fit text-center">
+          <span className="mx-auto grid h-24 w-24 place-items-center rounded-3xl bg-secondary text-3xl font-black text-white">
+            {actor?.name?.charAt(0).toUpperCase() || "A"}
+          </span>
+          <h2 className="mt-5 text-2xl font-black">{actor?.name || "Administrator"}</h2>
+          <p className="mt-1 text-xs font-extrabold uppercase tracking-wider text-primary">
+            {actor?.role || "ADMIN"}
+          </p>
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <ProfileStat label="Session" value="Active" />
+            <ProfileStat label="Account" value="Verified" />
+          </div>
+        </AdminPanel>
+        <div className="space-y-6">
+          <AdminPanel>
+            <h2 className="text-xl font-black">Account overview</h2>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <Detail
+                icon={UserCircle}
+                label="Display name"
+                value={actor?.name || "Administrator"}
+              />
+              <Detail icon={ShieldCheck} label="Access level" value={actor?.role || "ADMIN"} />
+              <Detail
+                icon={Mail}
+                label="Account type"
+                value={
+                  actor?.kind === "SUPER_ADMIN" ? "Dedicated Super Admin" : "Identity Administrator"
+                }
+              />
+              <Detail icon={KeyRound} label="Authentication" value="Password or MPIN" />
+            </div>
+          </AdminPanel>
+          <AdminPanel>
+            <div className="flex items-start gap-4">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+                <LockKeyhole size={20} />
+              </span>
+              <div>
+                <h2 className="font-black">Security controls</h2>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  Password, MPIN, device verification and session-management actions will appear
+                  here when their role-specific backend contracts are exposed.
+                </p>
+              </div>
+            </div>
+          </AdminPanel>
+        </div>
+      </div>
+    </AdminLayout>
+  );
+}
+function ProfileStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-muted p-3">
+      <p className="text-[10px] font-bold uppercase text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-black">{value}</p>
+    </div>
+  );
+}
+function Detail({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof UserCircle;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border p-4">
+      <span className="grid h-9 w-9 place-items-center rounded-lg bg-primary/10 text-primary">
+        <Icon size={17} />
+      </span>
+      <div>
+        <p className="text-[10px] font-bold uppercase text-muted-foreground">{label}</p>
+        <p className="mt-0.5 text-sm font-extrabold">{value}</p>
+      </div>
+    </div>
+  );
+}

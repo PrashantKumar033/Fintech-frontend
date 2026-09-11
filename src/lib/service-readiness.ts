@@ -14,6 +14,9 @@ export function useServiceReadiness(enabled = true) {
     queryKey: ["service-readiness", session?.identity.id],
     enabled: enabled && !!session,
     staleTime: 60_000,
+    // KYC and bank changes happen on separate routes. Always re-check when a user
+    // returns so AEPS navigation and prerequisites never show stale lock state.
+    refetchOnMount: "always",
     gcTime: 10 * 60_000,
     queryFn: async (): Promise<ServiceReadiness> => {
       const token = getSession()?.accessToken;

@@ -58,7 +58,7 @@ export function ContactVerificationCenter({ identity }: { identity: Identity }) 
   }
 
   return (
-    <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-soft sm:p-7">
+    <section className="rounded-2xl border border-border bg-card p-5 shadow-soft sm:p-7">
       <div className="flex items-start gap-3">
         <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary"><ShieldCheck size={20} /></span>
         <div><h2 className="text-xl font-extrabold text-secondary">Contact OTP verification</h2><p className="mt-1 text-sm text-muted-foreground">Send and verify a fresh OTP for the registered phone number or email address.</p></div>

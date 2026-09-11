@@ -1,12 +1,6 @@
 import { useEffect, useState } from "react";
-import {
-  Eye,
-  Loader2,
-  RefreshCw,
-  RotateCcw,
-  WalletCards,
-  X,
-} from "lucide-react";
+import { Eye, Loader2, RefreshCw, RotateCcw, WalletCards, X } from "lucide-react";
+import { useCallback } from "react";
 import { AdminPanel } from "@/components/admin/admin-layout";
 import {
   adminApi,
@@ -17,7 +11,9 @@ import {
   type ProviderReversalDetail,
   type TransactionDetail,
 } from "@/lib/admin-api";
-import { getEffectiveAccess, hasPermission } from "@/lib/auth-api";
+import { useEffectiveAccess } from "@/hooks/use-effective-access";
+import { UI_PERMISSION } from "@/lib/ui-permissions";
+import { createIdempotencyKey } from "@/lib/idempotency-key";
 
 type View = "transactions" | "income" | "reversals";
 
@@ -34,16 +30,16 @@ const inputClass =
 
 export function AdminTransactionOperations() {
   const actor = getAdminActor();
-  const permissionLoaded = Boolean(getEffectiveAccess());
+  const { can } = useEffectiveAccess();
   const allowed = (code: string) =>
-    actor?.kind === "SUPER_ADMIN" || (permissionLoaded && hasPermission(code));
-
-  const canView = allowed("transaction.view");
-  const canViewIncome = allowed("transaction.provider-income.view");
-  const canReconcileIncome = allowed("transaction.provider-income.reconcile");
-  const canRequestReversal = allowed("transaction.reversal.request");
-  const canProcessReversal = allowed("transaction.reversal.process");
-  const canRecover = allowed("transaction.financial-recovery");
+    actor?.kind === "SUPER_ADMIN" ||
+    (actor?.kind === "IDENTITY_ADMIN" && can(code, ["SUPER_ADMIN", "ADMIN"]));
+  const canView = allowed(UI_PERMISSION.TRANSACTION_VIEW);
+  const canViewIncome = allowed(UI_PERMISSION.TRANSACTION_PROVIDER_INCOME_VIEW);
+  const canReconcileIncome = allowed(UI_PERMISSION.TRANSACTION_PROVIDER_INCOME_RECONCILE);
+  const canRequestReversal = allowed(UI_PERMISSION.TRANSACTION_REVERSAL_REQUEST);
+  const canProcessReversal = allowed(UI_PERMISSION.TRANSACTION_REVERSAL_PROCESS);
+  const canRecover = allowed(UI_PERMISSION.TRANSACTION_FINANCIAL_RECOVERY);
 
   const [view, setView] = useState<View>("transactions");
   const [transactions, setTransactions] = useState<AdminProviderTransaction[]>([]);
@@ -63,7 +59,20 @@ export function AdminTransactionOperations() {
   const [reversalDetail, setReversalDetail] = useState<ProviderReversalDetail | null>(null);
   const [reversalDetailLoading, setReversalDetailLoading] = useState(false);
 
-  async function load() {
+  useEffect(() => {
+    if (view === "transactions" && !canView) {
+      if (canViewIncome) setView("income");
+      else if (canProcessReversal || canRequestReversal) setView("reversals");
+    } else if (view === "income" && !canViewIncome) {
+      if (canView) setView("transactions");
+      else if (canProcessReversal || canRequestReversal) setView("reversals");
+    } else if (view === "reversals" && !canProcessReversal && !canRequestReversal) {
+      if (canView) setView("transactions");
+      else if (canViewIncome) setView("income");
+    }
+  }, [view, canView, canViewIncome, canProcessReversal, canRequestReversal]);
+
+  const load = useCallback(async () => {
     if (
       (view === "transactions" && !canView) ||
       (view === "income" && !canViewIncome) ||
@@ -90,13 +99,14 @@ export function AdminTransactionOperations() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [view, status, canView, canViewIncome, canProcessReversal, canRequestReversal]);
 
   useEffect(() => {
     void load();
-  }, [view, status]);
+  }, [load]);
 
   async function inspect(referenceId: string) {
+    if (!canView) return setError(`Permission ${UI_PERMISSION.TRANSACTION_VIEW} is required.`);
     setBusy(true);
     setError("");
     try {
@@ -109,6 +119,8 @@ export function AdminTransactionOperations() {
   }
 
   async function inspectReversal(referenceId: string) {
+    if (!canRequestReversal && !canProcessReversal)
+      return setError("Reversal access is not granted for this account.");
     setReversalDetailLoading(true);
     setReversalDetail(null);
     setError("");
@@ -122,6 +134,8 @@ export function AdminTransactionOperations() {
   }
 
   async function requestReversal() {
+    if (!canRequestReversal)
+      return setError(`Permission ${UI_PERMISSION.TRANSACTION_REVERSAL_REQUEST} is required.`);
     if (!reverseTarget || !reason.trim()) {
       setError("A reversal reason is required.");
       return;
@@ -130,7 +144,11 @@ export function AdminTransactionOperations() {
     setBusy(true);
     setError("");
     try {
-      await adminApi.requestReversal(reverseTarget.referenceId, reason.trim(), crypto.randomUUID());
+      await adminApi.requestReversal(
+        reverseTarget.referenceId,
+        reason.trim(),
+        createIdempotencyKey("admin-reversal"),
+      );
       setNotice(`Reversal requested for ${reverseTarget.referenceId}.`);
       setReverseTarget(null);
       setReason("");
@@ -143,6 +161,10 @@ export function AdminTransactionOperations() {
   }
 
   async function reconcileIncome() {
+    if (!canReconcileIncome)
+      return setError(
+        `Permission ${UI_PERMISSION.TRANSACTION_PROVIDER_INCOME_RECONCILE} is required.`,
+      );
     if (!incomeTarget) return;
 
     setBusy(true);
@@ -160,6 +182,8 @@ export function AdminTransactionOperations() {
   }
 
   async function processReversal(item: ProviderReversal) {
+    if (!canProcessReversal)
+      return setError(`Permission ${UI_PERMISSION.TRANSACTION_REVERSAL_PROCESS} is required.`);
     if (
       !window.confirm(
         `${item.status === "FAILED" ? "Retry" : "Process"} reversal ${item.referenceId}?`,
@@ -183,6 +207,8 @@ export function AdminTransactionOperations() {
   }
 
   async function recover(item: AdminProviderTransaction) {
+    if (!canRecover)
+      return setError(`Permission ${UI_PERMISSION.TRANSACTION_FINANCIAL_RECOVERY} is required.`);
     if (!window.confirm(`Retry financial effects for ${item.referenceId}?`)) return;
 
     setBusy(true);
@@ -244,7 +270,10 @@ export function AdminTransactionOperations() {
       </div>
 
       {error && (
-        <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">
+        <p
+          role="alert"
+          className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700"
+        >
           {error}
         </p>
       )}
@@ -302,7 +331,11 @@ export function AdminTransactionOperations() {
         <div className="mt-4 rounded-xl border border-primary/30 p-4">
           <div className="flex justify-between">
             <h3 className="font-black">Transaction detail</h3>
-            <button type="button" onClick={() => setDetail(null)} aria-label="Close transaction detail">
+            <button
+              type="button"
+              onClick={() => setDetail(null)}
+              aria-label="Close transaction detail"
+            >
               <X size={18} />
             </button>
           </div>
@@ -600,26 +633,27 @@ function ReversalDetailDialog({
   ];
 
   const transaction = detail.providerTransaction;
-  const transactionFields: Array<[string, string | number | boolean | null | undefined]> = transaction
-    ? [
-        ["Transaction Reference", transaction.referenceId],
-        ["Provider", transaction.provider],
-        ["Service", transaction.serviceType],
-        ["Operation", transaction.operation],
-        ["Original Amount", money(transaction.amount)],
-        ["Transaction Status", transaction.status],
-        ["Settlement Status", transaction.settlementStatus],
-        ["Commission Status", transaction.commissionStatus],
-        ["Commission Amount", transaction.commissionAmount],
-        ["Provider Transaction Ref", transaction.providerTxnRefId],
-        ["RRN", transaction.rrn],
-        ["NPCI Code", transaction.npciCode],
-        ["NPCI Message", transaction.npciMessage],
-        ["Needs Reconciliation", transaction.needsReconciliation],
-        ["Created At", time(transaction.createdAt)],
-        ["Completed At", time(transaction.completedAt)],
-      ]
-    : [];
+  const transactionFields: Array<[string, string | number | boolean | null | undefined]> =
+    transaction
+      ? [
+          ["Transaction Reference", transaction.referenceId],
+          ["Provider", transaction.provider],
+          ["Service", transaction.serviceType],
+          ["Operation", transaction.operation],
+          ["Original Amount", money(transaction.amount)],
+          ["Transaction Status", transaction.status],
+          ["Settlement Status", transaction.settlementStatus],
+          ["Commission Status", transaction.commissionStatus],
+          ["Commission Amount", transaction.commissionAmount],
+          ["Provider Transaction Ref", transaction.providerTxnRefId],
+          ["RRN", transaction.rrn],
+          ["NPCI Code", transaction.npciCode],
+          ["NPCI Message", transaction.npciMessage],
+          ["Needs Reconciliation", transaction.needsReconciliation],
+          ["Created At", time(transaction.createdAt)],
+          ["Completed At", time(transaction.completedAt)],
+        ]
+      : [];
 
   return (
     <div className="fixed inset-0 z-[110] grid place-items-center bg-secondary/60 p-4">
@@ -652,13 +686,27 @@ function ReversalDetailDialog({
           ))}
         </div>
 
-        {(detail.failedReason || detail.principalFailureReason || detail.commissionFailureReason) && (
+        {(detail.failedReason ||
+          detail.principalFailureReason ||
+          detail.commissionFailureReason) && (
           <div className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4">
             <h3 className="text-sm font-black text-red-800">Failure information</h3>
             <div className="mt-3 grid gap-2 text-xs text-red-800">
-              {detail.failedReason && <p><strong>Reversal:</strong> {detail.failedReason}</p>}
-              {detail.principalFailureReason && <p><strong>Principal:</strong> {detail.principalFailureReason}</p>}
-              {detail.commissionFailureReason && <p><strong>Commission:</strong> {detail.commissionFailureReason}</p>}
+              {detail.failedReason && (
+                <p>
+                  <strong>Reversal:</strong> {detail.failedReason}
+                </p>
+              )}
+              {detail.principalFailureReason && (
+                <p>
+                  <strong>Principal:</strong> {detail.principalFailureReason}
+                </p>
+              )}
+              {detail.commissionFailureReason && (
+                <p>
+                  <strong>Commission:</strong> {detail.commissionFailureReason}
+                </p>
+              )}
             </div>
           </div>
         )}
