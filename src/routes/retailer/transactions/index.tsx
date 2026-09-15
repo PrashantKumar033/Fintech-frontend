@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Receipt, RefreshCw, Search } from "lucide-react";
 import { BusinessPage, ServiceNotice } from "@/components/business-page";
 import { TransactionDetailDialog } from "@/components/transaction-detail-dialog";
@@ -12,40 +12,58 @@ import {
   type ProviderTransactionStatus,
 } from "@/lib/operations-api";
 
+const allowedStatuses = new Set<ProviderTransactionStatus>([
+  "INITIATED",
+  "PROCESSING",
+  "SUCCESS",
+  "FAILED",
+  "PENDING",
+  "UNKNOWN",
+  "REVERSED",
+]);
+
 export const Route = createFileRoute("/retailer/transactions/")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    status:
+      typeof search.status === "string" &&
+      allowedStatuses.has(search.status as ProviderTransactionStatus)
+        ? (search.status as ProviderTransactionStatus)
+        : undefined,
+  }),
   head: () => ({ meta: [{ title: "Transaction History — UMOBIPAY" }] }),
   component: TransactionsPage,
 });
 
 function TransactionsPage() {
-  const initialStatus = (
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("status") : ""
-  ) as ProviderTransactionStatus | "";
+  const { status: routeStatus } = Route.useSearch();
+  const status = routeStatus ?? "";
   const navigate = useNavigate();
   const [session, setSession] = useState<ReturnType<typeof getSession>>(null);
   const [page, setPage] = useState<ProviderTransactionPage | null>(null);
-  const [status, setStatus] = useState<ProviderTransactionStatus | "">(initialStatus);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedReference, setSelectedReference] = useState<string | null>(null);
-  async function load(token: string, selectedStatus = status) {
-    setLoading(true);
-    setError("");
-    try {
-      setPage(
-        await operationsApi.transactions(token, {
-          page: 1,
-          limit: 50,
-          status: selectedStatus || undefined,
-        }),
-      );
-    } catch (e) {
-      setError(operationsMessage(e));
-    } finally {
-      setLoading(false);
-    }
-  }
+  const load = useCallback(
+    async (token: string, selectedStatus: ProviderTransactionStatus | "") => {
+      setLoading(true);
+      setError("");
+      try {
+        setPage(
+          await operationsApi.transactions(token, {
+            page: 1,
+            limit: 50,
+            status: selectedStatus || undefined,
+          }),
+        );
+      } catch (e) {
+        setError(operationsMessage(e));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
   useEffect(() => {
     const value = getSession();
     if (!value) {
@@ -57,12 +75,15 @@ function TransactionsPage() {
       return;
     }
     setSession(value);
-    void load(value.accessToken, initialStatus);
   }, [navigate]);
+  useEffect(() => {
+    if (!session) return;
+    void load(session.accessToken, status);
+  }, [load, session, status]);
   const rows = useMemo(
     () =>
       (page?.data ?? []).filter((item) =>
-        `${item.referenceId} ${item.provider} ${item.operation} ${item.rrn ?? ""}`
+        `${item.referenceId} ${item.serviceType || "AEPS"} ${item.provider} ${item.operation} ${item.rrn ?? ""}`
           .toLowerCase()
           .includes(query.toLowerCase()),
       ),
@@ -76,13 +97,16 @@ function TransactionsPage() {
     );
   function exportCsv() {
     const csv = [
-      "Reference,Provider,Operation,Amount,Status,RRN,Created",
+      "Reference,Service,Provider,Operation,Amount,Commission,Commission Status,Status,RRN,Created",
       ...rows.map((row) =>
         [
           row.referenceId,
+          row.serviceType || "AEPS",
           row.provider,
           row.operation,
           row.amount,
+          row.commissionAmount ?? "",
+          row.commissionStatus ?? "",
           row.status,
           row.rrn ?? "",
           row.createdAt,
@@ -126,8 +150,10 @@ function TransactionsPage() {
             value={status}
             onChange={(e) => {
               const value = e.target.value as ProviderTransactionStatus | "";
-              setStatus(value);
-              void load(session.accessToken, value);
+              void navigate({
+                to: "/retailer/transactions",
+                search: value ? { status: value } : {},
+              });
             }}
             className="rounded-xl border border-border bg-background px-4 text-sm"
           >
@@ -152,7 +178,7 @@ function TransactionsPage() {
           </div>
         ) : rows.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left">
+            <table className="w-full min-w-[1050px] text-left">
               <thead>
                 <tr className="bg-muted text-[10px] uppercase text-muted-foreground">
                   {[
@@ -161,6 +187,7 @@ function TransactionsPage() {
                     "Provider",
                     "Operation",
                     "Amount",
+                    "Commission",
                     "Status",
                     "RRN",
                     "Created",
@@ -173,7 +200,7 @@ function TransactionsPage() {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id} className="border-t border-border text-xs">
+                  <tr key={row.id || row.referenceId} className="border-t border-border text-xs">
                     <td className="px-5 py-4">
                       <button
                         type="button"
@@ -183,11 +210,24 @@ function TransactionsPage() {
                         {row.referenceId}
                       </button>
                     </td>
-                    <td className="px-5 py-4">{row.serviceType}</td>
+                    <td className="px-5 py-4">{row.serviceType || "AEPS"}</td>
                     <td className="px-5 py-4">{row.provider}</td>
                     <td className="px-5 py-4">{operationLabel(row.operation)}</td>
                     <td className="px-5 py-4 font-extrabold">
                       ₹{Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="font-extrabold text-secondary">
+                        {row.commissionAmount !== null && row.commissionAmount !== undefined
+                          ? new Intl.NumberFormat("en-IN", {
+                              style: "currency",
+                              currency: "INR",
+                            }).format(Number(row.commissionAmount))
+                          : "—"}
+                      </p>
+                      <p className="mt-1 text-[10px] font-semibold text-muted-foreground">
+                        {commissionLabel(row.commissionStatus)}
+                      </p>
                     </td>
                     <td className="px-5 py-4">
                       <span
@@ -238,4 +278,11 @@ function operationLabel(value: string) {
       } as Record<string, string>
     )[value] || value
   );
+}
+
+function commissionLabel(status?: string) {
+  if (!status) return "Status unavailable";
+  if (status === "SETTLED") return "Credited";
+  if (status === "NOT_REQUIRED") return "Not applicable";
+  return status.replaceAll("_", " ").toLowerCase();
 }

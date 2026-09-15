@@ -26,13 +26,17 @@ export const UI_PERMISSION = {
   WALLET_VIEW: "WALLET.VIEW",
   WALLET_TRANSFER: "WALLET.TRANSFER",
 
-  AEPS_VIEW: "AEPS.VIEW",
-  AEPS_ONBOARDING: "AEPS.ONBOARDING",
-  AEPS_BALANCE_ENQUIRY: "AEPS.BALANCE_ENQUIRY",
-  AEPS_MINI_STATEMENT: "AEPS.MINI_STATEMENT",
-  AEPS_CASH_WITHDRAWAL: "AEPS.CASH_WITHDRAWAL",
-  AEPS_AADHAAR_PAY: "AEPS.AADHAAR_PAY",
-  AEPS_CASH_DEPOSIT: "AEPS.CASH_DEPOSIT",
+  AEPS_VIEW: "AEPS.VIMOPAY.STATUS.VIEW",
+  AEPS_BANKS_VIEW: "AEPS.VIMOPAY.BANKS.VIEW",
+  AEPS_STATES_VIEW: "AEPS.VIMOPAY.STATUS.VIEW",
+  AEPS_DISTRICTS_VIEW: "AEPS.VIMOPAY.DISTRICTS.VIEW",
+  AEPS_BANK_IINS_VIEW: "AEPS.VIMOPAY.BANK_IINS.VIEW",
+  AEPS_ONBOARDING: "AEPS.VIMOPAY.ONBOARDING.REGISTER",
+  AEPS_BALANCE_ENQUIRY: "AEPS.BALANCE_ENQUIRY.CREATE",
+  AEPS_MINI_STATEMENT: "AEPS.MINI_STATEMENT.CREATE",
+  AEPS_CASH_WITHDRAWAL: "AEPS.CASH_WITHDRAWAL.CREATE",
+  AEPS_AADHAAR_PAY: "AEPS.AADHAAR_PAY.CREATE",
+  AEPS_CASH_DEPOSIT: "AEPS.CASH_DEPOSIT.CREATE",
 
   ACCOUNT_CREATE: "ACCOUNT.CREATE",
   MEMBER_LIST: "MEMBER.LIST",
@@ -43,6 +47,10 @@ export const UI_PERMISSION = {
   BANK_ACCOUNT_VIEW: "BANK_ACCOUNT.VIEW",
   PROVIDER_INCOME_VIEW: "PROVIDER_INCOME.VIEW",
   PROVIDER_INCOME_RECONCILE: "PROVIDER_INCOME.RECONCILE",
+  AEPS_MERCHANT_STATUS_UPDATE: "AEPS.MERCHANT.STATUS.UPDATE",
+  WALLET_LEDGER_VIEW: "WALLET.LEDGER.VIEW",
+  AEPS_PROVIDER_STATUS_VIEW: "AEPS.PROVIDER.STATUS.VIEW",
+  AEPS_PROVIDER_SERVICE_STATUS_UPDATE: "AEPS.PROVIDER.SERVICE.STATUS.UPDATE",
 
   COMMISSION_RULE_VIEW: "COMMISSION.RULE.VIEW",
   COMMISSION_RULE_CREATE: "COMMISSION.RULE.CREATE",
@@ -80,6 +88,7 @@ export type UiArea =
   | "kyc"
   | "aeps"
   | "wallet"
+  | "earnings"
   | "commissions"
   | "settlements"
   | "access"
@@ -130,15 +139,31 @@ const areaRules: Record<UiArea, AreaRule> = {
   aeps: {
     anyOf: [
       UI_PERMISSION.AEPS_VIEW,
+      UI_PERMISSION.AEPS_BANKS_VIEW,
+      UI_PERMISSION.AEPS_STATES_VIEW,
+      UI_PERMISSION.AEPS_DISTRICTS_VIEW,
+      UI_PERMISSION.AEPS_BANK_IINS_VIEW,
       UI_PERMISSION.AEPS_ONBOARDING,
       UI_PERMISSION.AEPS_BALANCE_ENQUIRY,
       UI_PERMISSION.AEPS_MINI_STATEMENT,
       UI_PERMISSION.AEPS_CASH_WITHDRAWAL,
       UI_PERMISSION.AEPS_AADHAAR_PAY,
       UI_PERMISSION.AEPS_CASH_DEPOSIT,
+      UI_PERMISSION.AEPS_MERCHANT_STATUS_UPDATE,
+      UI_PERMISSION.AEPS_PROVIDER_STATUS_VIEW,
+      UI_PERMISSION.AEPS_PROVIDER_SERVICE_STATUS_UPDATE,
     ],
   },
-  wallet: { anyOf: [UI_PERMISSION.WALLET_VIEW, UI_PERMISSION.WALLET_TRANSFER] },
+  wallet: {
+    anyOf: [
+      UI_PERMISSION.WALLET_VIEW,
+      UI_PERMISSION.WALLET_TRANSFER,
+      UI_PERMISSION.WALLET_LEDGER_VIEW,
+    ],
+  },
+  earnings: {
+    anyOf: [UI_PERMISSION.TRANSACTION_VIEW, UI_PERMISSION.WALLET_VIEW],
+  },
   commissions: {
     anyOf: [
       UI_PERMISSION.COMMISSION_RULE_VIEW,
@@ -174,6 +199,7 @@ const compatRoleAreas: Record<PlatformRole, readonly UiArea[]> = {
     "kyc",
     "aeps",
     "wallet",
+    "earnings",
     "commissions",
     "settlements",
     "access",
@@ -191,7 +217,9 @@ const compatRoleAreas: Record<PlatformRole, readonly UiArea[]> = {
     "transactions",
     "banking",
     "kyc",
+    "aeps",
     "wallet",
+    "earnings",
     "commissions",
     "settlements",
     "reports",
@@ -202,8 +230,11 @@ const compatRoleAreas: Record<PlatformRole, readonly UiArea[]> = {
     "profile",
     "members",
     "transactions",
+    "banking",
     "kyc",
+    "aeps",
     "wallet",
+    "earnings",
     "commissions",
     "reports",
     "settings",
@@ -214,8 +245,10 @@ const compatRoleAreas: Record<PlatformRole, readonly UiArea[]> = {
     "profile",
     "members",
     "transactions",
+    "banking",
     "aeps",
     "wallet",
+    "earnings",
     "commissions",
     "reports",
     "settings",
@@ -229,6 +262,7 @@ const compatRoleAreas: Record<PlatformRole, readonly UiArea[]> = {
     "kyc",
     "aeps",
     "wallet",
+    "earnings",
     "reports",
     "settings",
   ],
@@ -242,6 +276,13 @@ export function normalizePermissionCode(value: string): string {
 // while permission management accepts uppercase dot/underscore notation.
 // Treat both spellings as equivalent during the backend migration.
 const permissionAliases: Record<string, readonly string[]> = {
+  "AEPS.VIMOPAY.STATUS.VIEW": ["AEPS.VIEW"],
+  "AEPS.VIMOPAY.ONBOARDING.REGISTER": ["AEPS.ONBOARDING"],
+  "AEPS.BALANCE_ENQUIRY.CREATE": ["AEPS.BALANCE_ENQUIRY"],
+  "AEPS.MINI_STATEMENT.CREATE": ["AEPS.MINI_STATEMENT"],
+  "AEPS.CASH_WITHDRAWAL.CREATE": ["AEPS.CASH_WITHDRAWAL"],
+  "AEPS.AADHAAR_PAY.CREATE": ["AEPS.AADHAAR_PAY"],
+  "AEPS.CASH_DEPOSIT.CREATE": ["AEPS.CASH_DEPOSIT"],
   "TRANSACTION.FINANCIAL_RECOVERY": ["TRANSACTION.FINANCIAL-RECOVERY"],
   "TRANSACTION.FINANCIAL-RECOVERY": ["TRANSACTION.FINANCIAL_RECOVERY"],
   "TRANSACTION.PROVIDER-INCOME.VIEW": ["TRANSACTION.PROVIDER_INCOME.VIEW"],
@@ -307,6 +348,13 @@ export function canAccessUiArea(
   if (area === "dashboard" || area === "profile" || area === "settings") return true;
 
   const rule = areaRules[area];
+  // AEPS contains regulated biometric and financial actions. Once access is
+  // evaluated, it must never fall back to a broad role-based grant.
+  if (area === "aeps") {
+    if (!options.access) return false;
+    if (rule.allOf?.length && !hasAllPermissions(options.access, rule.allOf)) return false;
+    return !rule.anyOf?.length || hasAnyPermission(options.access, rule.anyOf);
+  }
   if (options.access) {
     if (rule.allOf?.length && !hasAllPermissions(options.access, rule.allOf)) return false;
     if (!rule.anyOf?.length || hasAnyPermission(options.access, rule.anyOf)) return true;

@@ -9,7 +9,7 @@ export const masterDistributorApi = {
       `/commission-hierarchy/parent/${encodeURIComponent(id)}/children`,
     ),
   transactions: (query = "page=1&limit=50") =>
-    authenticatedRequest<ProviderTransactionPage>(`/aeps/transactions?${query}`),
+    authenticatedRequest<ProviderTransactionPage>(`/aeps/network-transactions?${query}`),
   audits: () => authenticatedRequest<AuditPage>("/audit/me?page=1&limit=50"),
   commissions: () => authenticatedRequest<unknown>("/commission-distributions/distributions"),
 };

@@ -29,13 +29,15 @@ import { credentialsPending } from "@/lib/role-hierarchy";
 import { SectionTabs, type SectionTab } from "@/components/section-tabs";
 
 const retailerSectionTabs: Partial<
-  Record<"aeps" | "transactions" | "wallet" | "reports" | "settings", SectionTab[]>
+  Record<"aeps" | "transactions" | "wallet" | "reports" | "commission" | "settings", SectionTab[]>
 > = {
   aeps: [
     { label: "AEPS Services", href: "/retailer/aeps" },
     { label: "Cash Withdrawal", href: "/retailer/aeps?service=cash-withdrawal" },
     { label: "Balance Enquiry", href: "/retailer/aeps?service=balance-enquiry" },
     { label: "Mini Statement", href: "/retailer/aeps?service=mini-statement" },
+    { label: "Aadhaar Pay", href: "/retailer/aeps?service=aadhaar-pay" },
+    { label: "Cash Deposit", href: "/retailer/aeps?service=cash-deposit" },
     { label: "Transaction Status", href: "/retailer/transactions" },
   ],
   transactions: [
@@ -53,6 +55,11 @@ const retailerSectionTabs: Partial<
     { label: "AEPS Report", href: "/activity?view=aeps" },
     { label: "Wallet Report", href: "/activity?view=wallet" },
     { label: "Commission Report", href: "/activity?view=commission" },
+  ],
+  commission: [
+    { label: "Commission summary", href: "/retailer/commission" },
+    { label: "Commission transactions", href: "/retailer/transactions" },
+    { label: "Commission activity", href: "/activity?view=commission" },
   ],
   settings: [
     { label: "Personal Details", href: "/retailer/settings?tab=profile" },
@@ -73,7 +80,16 @@ export function BusinessPage({
 }: {
   identity: Identity;
   active:
-    "dashboard" | "bank" | "kyc" | "aeps" | "wallet" | "transactions" | "reports" | "settings";
+    | "dashboard"
+    | "bank"
+    | "kyc"
+    | "aeps"
+    | "members"
+    | "wallet"
+    | "transactions"
+    | "reports"
+    | "commission"
+    | "settings";
   eyebrow?: string;
   title?: string;
   description?: string;
@@ -82,6 +98,7 @@ export function BusinessPage({
   children: ReactNode;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const securityLocked = credentialsPending(identity);
   // The KYC page owns its profile request. Avoid asking for the same missing
   // singleton from the sidebar while that screen is already loading it.
@@ -111,8 +128,10 @@ export function BusinessPage({
       | "/retailer/kyc"
       | "/retailer/bank"
       | "/retailer/aeps"
+      | "/retailer/members"
       | "/retailer/wallet"
       | "/retailer/transactions"
+      | "/retailer/commission"
       | "/retailer/settings"
       | "/activity";
     icon: LucideIcon;
@@ -154,7 +173,14 @@ export function BusinessPage({
       locked: !readiness.data?.aepsUnlocked,
       area: "aeps",
     },
-    { key: "members", label: "Member management", icon: Users, locked: true, area: "members" },
+    {
+      key: "members",
+      label: "Member management",
+      to: "/retailer/members",
+      icon: Users,
+      locked: false,
+      area: "members",
+    },
     {
       key: "wallet",
       label: "Wallet & transfer",
@@ -182,9 +208,10 @@ export function BusinessPage({
     {
       key: "commission",
       label: "Commission",
+      to: "/retailer/commission",
       icon: CircleDollarSign,
-      locked: true,
-      area: "commissions",
+      locked: false,
+      area: "earnings",
     },
     {
       key: "settings",
@@ -219,13 +246,49 @@ export function BusinessPage({
           </Link>
           <div className="ml-auto flex items-center gap-2">
             <button
+              type="button"
+              onClick={() => setNotificationsOpen((open) => !open)}
               className="relative grid h-10 w-10 place-items-center rounded-xl border border-border bg-background text-secondary"
               aria-label="Notifications"
+              aria-expanded={notificationsOpen}
             >
               <Bell size={18} />
               <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-primary" />
             </button>
-            <div className="hidden items-center gap-3 rounded-xl border border-border px-3 py-1.5 sm:flex">
+            {notificationsOpen && (
+              <div className="absolute right-4 top-14 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-border bg-card p-4 shadow-xl lg:right-6">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-extrabold text-secondary">Notifications</p>
+                  <button
+                    type="button"
+                    onClick={() => setNotificationsOpen(false)}
+                    className="grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
+                    aria-label="Close notifications"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+                <div className="mt-3 rounded-xl bg-muted/60 p-4 text-center">
+                  <Bell size={20} className="mx-auto text-muted-foreground" />
+                  <p className="mt-2 text-sm font-bold text-secondary">No new notifications</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Account and transaction alerts will appear here.
+                  </p>
+                </div>
+                <Link
+                  to="/retailer/settings"
+                  onClick={() => setNotificationsOpen(false)}
+                  className="mt-3 flex w-full items-center justify-center rounded-xl border border-border px-4 py-2.5 text-xs font-bold text-secondary hover:bg-muted"
+                >
+                  Notification preferences
+                </Link>
+              </div>
+            )}
+            <Link
+              to="/retailer/settings"
+              aria-label="Open profile settings"
+              className="hidden items-center gap-3 rounded-xl border border-border px-3 py-1.5 transition hover:bg-muted sm:flex"
+            >
               <span className="grid h-8 w-8 place-items-center rounded-lg bg-secondary font-bold text-white">
                 {identity.fullName?.[0] || "U"}
               </span>
@@ -233,7 +296,7 @@ export function BusinessPage({
                 <p className="truncate text-xs font-bold text-secondary">{identity.fullName}</p>
                 <p className="truncate text-[10px] text-muted-foreground">{identity.loginId}</p>
               </div>
-            </div>
+            </Link>
           </div>
         </div>
       </header>
@@ -400,7 +463,9 @@ export function BusinessPage({
                     ? "transactions"
                     : active === "reports"
                       ? "reports"
-                      : active) as UiArea
+                      : active === "commission"
+                        ? "earnings"
+                        : active) as UiArea
               }
               role={identity.role}
               access={access}

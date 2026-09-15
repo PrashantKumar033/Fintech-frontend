@@ -11,6 +11,7 @@ export function managementSectionTabs(roleValue:string|undefined,area:AdminArea)
     const map:Partial<Record<AdminArea,SectionTab[]>>={
       merchants:tabs(base,[["Distributors","/network/distributors"],["Retailers","/network/retailers"],["Network Tree","/network/tree"]]),
       transactions:tabs(base,[["All Transactions","/transactions"],["Successful","/transactions?status=SUCCESS"],["Pending","/transactions?status=PENDING"],["Failed","/transactions?status=FAILED"]]),
+      aeps:tabs(base,[["My AEPS","/aeps"],["Network transactions","/transactions"],["Successful","/transactions?status=SUCCESS"],["Pending","/transactions?status=PENDING"],["Failed","/transactions?status=FAILED"]]),
       commissions:tabs(base,[["Commission History","/commission"],["Daily Earnings","/commission?view=daily"],["Monthly Earnings","/commission?view=monthly"]]),
       settlements:tabs(base,[["Balance","/wallet"],["Transfer Fund","/wallet/transfer"]]),
       reports:tabs(base,[["Business Report","/reports"],["Distributor Report","/reports?view=distributors"],["Retailer Report","/reports?view=retailers"],["Transaction Report","/reports?view=transactions"],["Commission Report","/reports?view=commission"]]),
@@ -24,6 +25,7 @@ export function managementSectionTabs(roleValue:string|undefined,area:AdminArea)
     const map:Partial<Record<AdminArea,SectionTab[]>>={
       merchants:tabs(base,[["All Retailers","/retailers"],["Add Retailer","/retailers/add"],["Retailer Details","/retailers?view=details"]]),
       transactions:tabs(base,[["Transactions","/aeps/transactions"],["Cash Withdrawal","/aeps/cash-withdrawal"],["Balance Enquiry","/aeps/balance-enquiry"],["Mini Statement","/aeps/mini-statement"]]),
+      aeps:tabs(base,[["My AEPS","/aeps"],["Network transactions","/aeps/transactions"],["Cash Withdrawal","/aeps/cash-withdrawal"],["Balance Enquiry","/aeps/balance-enquiry"],["Mini Statement","/aeps/mini-statement"]]),
       commissions:tabs(base,[["Commission History","/commission"],["Daily Earnings","/commission?view=daily"],["Monthly Earnings","/commission?view=monthly"]]),
       settlements:tabs(base,[["Balance","/wallet"],["Transfer Fund","/wallet/transfer"]]),
       reports:tabs(base,[["Transaction Report","/reports"],["Retailer-wise Report","/reports?view=retailers"]]),
@@ -32,7 +34,9 @@ export function managementSectionTabs(roleValue:string|undefined,area:AdminArea)
     };return map[area]||[];
   }
   if(role==="ADMIN"){
-    return area==="profile"?tabs("/admin",[["Personal Details","/profile"],["KYC","/profile/kyc"],["Bank Details","/profile/bank"]]):[];
+    if(area==="profile") return tabs("/admin",[["Personal Details","/profile"],["KYC","/profile/kyc"],["Bank Details","/profile/bank"]]);
+    if(area==="aeps") return tabs("/admin",[["My AEPS","/aeps"],["Merchants","/merchants/list"],["Transactions","/transactions"],["Provider controls","/api-settings"]]);
+    return [];
   }
   return [];
 }

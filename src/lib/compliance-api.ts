@@ -35,6 +35,8 @@ export type BankAccountInput = {
   accountNumber: string;
   accountType: BankAccountType;
   purposes: BankAccountPurpose[];
+  lat: string;
+  long: string;
 };
 export type BankAccountUpdate = Partial<Omit<BankAccountInput, "accountNumber">> & {
   accountNumber?: string;
@@ -92,16 +94,28 @@ export const complianceApi = {
   primaryBank: (token: string) =>
     authenticatedRequest<BankAccount>("/identity/my-bank-accounts/primary", {}, token),
   bankDirectory: (token: string) => authenticatedRequest<unknown>("/bank/list", {}, token),
-  addBank: (token: string, body: BankAccountInput) =>
+  addBank: (
+    token: string,
+    body: BankAccountInput,
+    idempotencyKey = createIdempotencyKey("bank-create"),
+  ) =>
     authenticatedRequest<BankAccount>(
       "/identity/bank-accounts",
-      { method: "POST", body: JSON.stringify(body) },
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(body),
+      },
       token,
     ),
-  updateBank: (token: string, id: string, body: BankAccountUpdate) =>
+  updateBank: (token: string, id: string, body: BankAccountUpdate, idempotencyKey?: string) =>
     authenticatedRequest<BankAccount>(
       `/identity/update-my-bank-account/${id}`,
-      { method: "PATCH", body: JSON.stringify(body) },
+      {
+        method: "PATCH",
+        headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
+        body: JSON.stringify(body),
+      },
       token,
     ),
   deleteBank: (token: string, id: string) =>

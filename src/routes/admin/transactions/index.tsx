@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   CheckCircle2,
   Eye,
@@ -15,6 +15,7 @@ import { ActionPermissionNotice } from "@/components/action-permission-notice";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { AdminTransactionOperations } from "@/components/admin/admin-transaction-operations";
+import { ReadableTransactionDetails } from "@/components/readable-transaction-details";
 import {
   AdminApiError,
   adminApi,
@@ -49,15 +50,18 @@ function amount(value?: string | number) {
 function Transactions() {
   const actor = getAdminActor();
   const { can } = useEffectiveAccess();
-  const identityAdminContract = actor?.kind === "IDENTITY_ADMIN";
+  const dedicatedSuperAdmin = actor?.kind === "SUPER_ADMIN";
   const canViewTransaction =
-    identityAdminContract && can(UI_PERMISSION.TRANSACTION_VIEW, ["ADMIN"]);
+    dedicatedSuperAdmin || can(UI_PERMISSION.TRANSACTION_VIEW, ["SUPER_ADMIN", "ADMIN"]);
   const canViewReconciliation =
-    identityAdminContract && can(UI_PERMISSION.TRANSACTION_RECONCILIATION_VIEW, ["ADMIN"]);
+    dedicatedSuperAdmin ||
+    can(UI_PERMISSION.TRANSACTION_RECONCILIATION_VIEW, ["SUPER_ADMIN", "ADMIN"]);
   const canResolve =
-    identityAdminContract && can(UI_PERMISSION.TRANSACTION_RECONCILIATION_RESOLVE, ["ADMIN"]);
+    dedicatedSuperAdmin ||
+    can(UI_PERMISSION.TRANSACTION_RECONCILIATION_RESOLVE, ["SUPER_ADMIN", "ADMIN"]);
   const canReverse =
-    identityAdminContract && can(UI_PERMISSION.TRANSACTION_REVERSAL_REQUEST, ["ADMIN"]);
+    dedicatedSuperAdmin ||
+    can(UI_PERMISSION.TRANSACTION_REVERSAL_REQUEST, ["SUPER_ADMIN", "ADMIN"]);
   const [items, setItems] = useState<ReconciliationItem[]>([]),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false);
@@ -77,32 +81,35 @@ function Transactions() {
     [providerTxnRefId, setProviderTxnRefId] = useState(""),
     [rrn, setRrn] = useState("");
 
-  async function load(targetPage = page) {
-    if (!canViewReconciliation) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError("");
-    try {
-      const params = new URLSearchParams({ page: String(targetPage), limit: "25" });
-      if (status) params.set("status", status);
-      if (operation) params.set("operation", operation);
-      const result = await adminApi.reconciliation(params.toString());
-      setItems(result.data || []);
-      setPage(result.page || targetPage);
-      setTotalPages(Math.max(result.totalPages || 1, 1));
-      setTotal(result.total || 0);
-    } catch (caught) {
-      setError(messageOf(caught));
-    } finally {
-      setLoading(false);
-    }
-  }
+  const load = useCallback(
+    async (targetPage: number) => {
+      if (!canViewReconciliation) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams({ page: String(targetPage), limit: "25" });
+        if (status) params.set("status", status);
+        if (operation) params.set("operation", operation);
+        const result = await adminApi.reconciliation(params.toString());
+        setItems(result.data || []);
+        setPage(result.page || targetPage);
+        setTotalPages(Math.max(result.totalPages || 1, 1));
+        setTotal(result.total || 0);
+      } catch (caught) {
+        setError(messageOf(caught));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [canViewReconciliation, operation, status],
+  );
   useEffect(() => {
     if (canViewReconciliation) void load(1);
     else setLoading(false);
-  }, [status, operation, canViewReconciliation]);
+  }, [load, canViewReconciliation]);
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return needle
@@ -173,35 +180,12 @@ function Transactions() {
         setNotice(`Reversal request submitted for ${action.item.referenceId}.`);
       }
       setAction(null);
-      await load();
+      await load(page);
     } catch (caught) {
       setError(messageOf(caught));
     } finally {
       setBusy(false);
     }
-  }
-  if (actor?.kind !== "IDENTITY_ADMIN") {
-    return (
-      <AdminLayout
-        active="transactions"
-        eyebrow="Payments operations"
-        title="Transactions & reconciliation"
-        description="Operational transaction endpoints require an identity Admin session."
-      >
-        <AdminPanel>
-          <div className="mx-auto max-w-2xl py-14 text-center">
-            <ShieldAlert className="mx-auto text-amber-600" size={42} />
-            <h2 className="mt-5 text-xl font-black">Backend authentication contract mismatch</h2>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              The current backend protects these routes with JwtAuthGuard, which validates an
-              identity Admin session. Your current Super Admin token is validated by a different
-              guard, so sending it here would return 401 Unauthorized. Requests are paused to avoid
-              repeated failing calls.
-            </p>
-          </div>
-        </AdminPanel>
-      </AdminLayout>
-    );
   }
   return (
     <AdminLayout
@@ -268,7 +252,7 @@ function Transactions() {
               ))}
             </select>
             <button
-              onClick={() => void load()}
+              onClick={() => void load(page)}
               disabled={loading}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-secondary px-4 py-3 text-xs font-extrabold text-white disabled:opacity-50"
             >
@@ -406,18 +390,10 @@ function Transactions() {
             </div>
           ) : (
             detail && (
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {Object.entries(detail)
-                  .filter(([, v]) => v !== null && typeof v !== "object")
-                  .map(([key, value]) => (
-                    <div key={key} className="rounded-xl bg-muted/50 p-3">
-                      <p className="text-[10px] font-extrabold uppercase text-muted-foreground">
-                        {key.replace(/([A-Z])/g, " $1")}
-                      </p>
-                      <p className="mt-1 break-all text-xs font-bold">{String(value)}</p>
-                    </div>
-                  ))}
-              </div>
+              <ReadableTransactionDetails
+                detail={detail}
+                className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+              />
             )
           )}
         </AdminPanel>

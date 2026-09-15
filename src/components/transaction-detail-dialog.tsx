@@ -7,13 +7,76 @@ import {
   type ProviderTransactionReceipt,
 } from "@/lib/operations-api";
 
-type Props = { accessToken: string; referenceId: string | null; onClose: () => void };
-const label = (key: string) =>
-  key.replace(/([A-Z])/g, " $1").replace(/^./, (value) => value.toUpperCase());
-const printable = (value: unknown) =>
-  value === null || value === undefined || value === "" ? "—" : String(value);
+type Props = {
+  accessToken: string;
+  referenceId: string | null;
+  onClose: () => void;
+  scope?: "self" | "network";
+};
+const operationLabels: Record<string, string> = {
+  BE: "Balance enquiry",
+  MS: "Mini statement",
+  CW: "Cash withdrawal",
+  AP: "Aadhaar Pay",
+  CD: "Cash deposit",
+};
 
-export function TransactionDetailDialog({ accessToken, referenceId, onClose }: Props) {
+const transactionFields: Array<{ key: keyof ProviderTransaction; label: string }> = [
+  { key: "referenceId", label: "Transaction reference" },
+  { key: "operation", label: "Service" },
+  { key: "amount", label: "Amount" },
+  { key: "status", label: "Status" },
+  { key: "provider", label: "Service provider" },
+  { key: "rrn", label: "Bank reference (RRN)" },
+  { key: "npciMessage", label: "Transaction result" },
+  { key: "aadhaarLast4", label: "Aadhaar number" },
+  { key: "settlementStatus", label: "Settlement" },
+  { key: "commissionStatus", label: "Commission" },
+  { key: "commissionAmount", label: "Commission amount" },
+  { key: "createdAt", label: "Started at" },
+  { key: "completedAt", label: "Completed at" },
+];
+
+const receiptFields: Array<{ key: keyof ProviderTransactionReceipt; label: string }> = [
+  { key: "transactionTypeLabel", label: "Service" },
+  { key: "transactionReferenceId", label: "Transaction reference" },
+  { key: "status", label: "Status" },
+  { key: "statusDescription", label: "Transaction result" },
+  { key: "amount", label: "Amount" },
+  { key: "transactionDateTime", label: "Date and time" },
+  { key: "rrn", label: "Bank reference (RRN)" },
+  { key: "maskedAadhaar", label: "Aadhaar number" },
+  { key: "availableBalance", label: "Available balance" },
+  { key: "reversed", label: "Reversal status" },
+  { key: "reversedAt", label: "Reversed at" },
+];
+
+function displayValue(key: string, value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (key === "operation" || key === "transactionType") {
+    return operationLabels[String(value)] || String(value);
+  }
+  if (["amount", "commissionAmount", "availableBalance"].includes(key)) {
+    const amount = Number(value);
+    return Number.isFinite(amount)
+      ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(amount)
+      : String(value);
+  }
+  if (["createdAt", "completedAt", "transactionDateTime", "reversedAt"].includes(key)) {
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("en-IN");
+  }
+  if (key === "aadhaarLast4") return `XXXX XXXX ${String(value).slice(-4)}`;
+  if (key === "reversed") return value ? "Reversed" : "Not reversed";
+  return String(value).replaceAll("_", " ");
+}
+
+export function TransactionDetailDialog({
+  accessToken,
+  referenceId,
+  onClose,
+  scope = "self",
+}: Props) {
   const [detail, setDetail] = useState<ProviderTransaction | null>(null);
   const [receipt, setReceipt] = useState<ProviderTransactionReceipt | null>(null);
   const [loading, setLoading] = useState(false);
@@ -25,18 +88,25 @@ export function TransactionDetailDialog({ accessToken, referenceId, onClose }: P
     setReceipt(null);
     setError("");
     setLoading(true);
-    operationsApi
-      .transaction(accessToken, referenceId)
+    const request =
+      scope === "network"
+        ? operationsApi.networkTransaction(accessToken, referenceId)
+        : operationsApi.transaction(accessToken, referenceId);
+    request
       .then(setDetail)
       .catch((reason) => setError(operationsMessage(reason)))
       .finally(() => setLoading(false));
-  }, [accessToken, referenceId]);
+  }, [accessToken, referenceId, scope]);
   if (!referenceId) return null;
   async function loadReceipt() {
     setReceiptLoading(true);
     setError("");
     try {
-      setReceipt(await operationsApi.receipt(accessToken, referenceId!));
+      setReceipt(
+        await (scope === "network"
+          ? operationsApi.networkReceipt(accessToken, referenceId!)
+          : operationsApi.receipt(accessToken, referenceId!)),
+      );
     } catch (reason) {
       setError(operationsMessage(reason));
     } finally {
@@ -82,17 +152,15 @@ export function TransactionDetailDialog({ accessToken, referenceId, onClose }: P
         ) : (
           detail && (
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(detail)
-                .filter(
-                  ([, value]) => value !== null && value !== undefined && typeof value !== "object",
-                )
-                .map(([key, value]) => (
+              {transactionFields
+                .filter(({ key }) => detail[key] !== null && detail[key] !== undefined)
+                .map(({ key, label }) => (
                   <div key={key} className="rounded-xl bg-muted/60 p-3">
                     <p className="text-[10px] font-extrabold uppercase text-muted-foreground">
-                      {label(key)}
+                      {label}
                     </p>
                     <p className="mt-1 break-all text-xs font-bold text-secondary">
-                      {printable(value)}
+                      {displayValue(key, detail[key])}
                     </p>
                   </div>
                 ))}
@@ -133,15 +201,17 @@ export function TransactionDetailDialog({ accessToken, referenceId, onClose }: P
               </p>
             </div>
             <div className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
-              {Object.entries(receipt)
-                .filter(([, value]) => value !== null && value !== undefined)
-                .map(([key, value]) => (
+              {receiptFields
+                .filter(({ key }) => receipt[key] !== null && receipt[key] !== undefined)
+                .map(({ key, label }) => (
                   <div
                     key={key}
                     className="flex justify-between gap-3 border-b border-dashed border-border py-2 text-xs"
                   >
-                    <span className="text-muted-foreground">{label(key)}</span>
-                    <strong className="break-all text-right">{printable(value)}</strong>
+                    <span className="text-muted-foreground">{label}</span>
+                    <strong className="break-all text-right">
+                      {displayValue(key, receipt[key])}
+                    </strong>
                   </div>
                 ))}
             </div>

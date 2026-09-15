@@ -1,11 +1,10 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 
 export type SectionTab = { label: string; href: string };
 
 export function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
+  const current = useLocation({ select: (location) => location.href.split("#")[0] });
   if (!tabs.length) return null;
-  const current =
-    typeof window === "undefined" ? "" : `${window.location.pathname}${window.location.search}`;
   return (
     <nav
       aria-label="Section navigation"
@@ -13,9 +12,10 @@ export function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
     >
       <div className="flex min-w-max items-center gap-1">
         {tabs.map((tab, index) => {
+          const currentHasQuery = current.includes("?");
           const active = current
             ? current === tab.href ||
-              (!tab.href.includes("?") && current.split("?")[0] === tab.href)
+              (!tab.href.includes("?") && !currentHasQuery && current.split("?")[0] === tab.href)
             : index === 0;
           return (
             <Link

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Eye, Loader2, RefreshCw, Search, ShieldCheck, UserCog, X } from "lucide-react";
+import { Eye, Loader2, RefreshCw, Search, UserCog, X } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
+import { BusinessPage } from "@/components/business-page";
+import { MemberDetailDialog } from "@/features/admin/members/member-detail-dialog";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { adminApi, getAdminActor, type AdminMember, type AdminMemberDetail } from "@/lib/admin-api";
+import { getSession } from "@/lib/auth-api";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 
 const control =
@@ -10,7 +13,7 @@ const control =
 const messageOf = (value: unknown) =>
   value instanceof Error ? value.message : "The member request could not be completed.";
 
-export function AdminMemberListPage() {
+export function AdminMemberListPage({ retailer = false }: { retailer?: boolean } = {}) {
   const actor = getAdminActor();
   const { can } = useEffectiveAccess();
   const privileged = actor?.kind === "SUPER_ADMIN";
@@ -100,13 +103,8 @@ export function AdminMemberListPage() {
     }
   }
 
-  return (
-    <AdminLayout
-      active="merchants"
-      eyebrow="Network operations"
-      title="Member directory"
-      description="Search consolidated member, KYC and AEPS status and manage the account lifecycle."
-    >
+  const content = (
+    <>
       {error && <Banner tone="error">{error}</Banner>}
       {notice && <Banner tone="success">{notice}</Banner>}
       <AdminPanel>
@@ -208,7 +206,7 @@ export function AdminMemberListPage() {
                           type="button"
                           disabled={!canView || busy}
                           onClick={() => void inspect(member.id)}
-                          className="cursor-pointer rounded-lg border border-border p-2"
+                          className="cursor-pointer rounded-lg border border-border p-2 disabled:cursor-not-allowed disabled:opacity-40"
                           title="View member"
                         >
                           <Eye size={16} />
@@ -221,7 +219,7 @@ export function AdminMemberListPage() {
                             setNextStatus(member.status);
                             setReason("");
                           }}
-                          className="cursor-pointer rounded-lg border border-border p-2"
+                          className="cursor-pointer rounded-lg border border-border p-2 disabled:cursor-not-allowed disabled:opacity-40"
                           title="Change member status"
                         >
                           <UserCog size={16} />
@@ -264,7 +262,7 @@ export function AdminMemberListPage() {
         </div>
       </AdminPanel>
 
-      {detail && <DetailDialog detail={detail} close={() => setDetail(null)} />}
+      {detail && <MemberDetailDialog detail={detail} close={() => setDetail(null)} />}
       {statusTarget && (
         <div className="fixed inset-0 z-[100] grid place-items-center bg-secondary/60 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
@@ -309,6 +307,32 @@ export function AdminMemberListPage() {
           </div>
         </div>
       )}
+    </>
+  );
+
+  const session = getSession();
+  if (retailer && session) {
+    return (
+      <BusinessPage
+        identity={session.identity}
+        active="members"
+        eyebrow="Network operations"
+        title="Member management"
+        description="View and manage members allowed by your assigned permissions."
+      >
+        {content}
+      </BusinessPage>
+    );
+  }
+
+  return (
+    <AdminLayout
+      active="merchants"
+      eyebrow="Network operations"
+      title="Member directory"
+      description="Search consolidated member, KYC and AEPS status and manage the account lifecycle."
+    >
+      {content}
     </AdminLayout>
   );
 }
@@ -350,48 +374,5 @@ function Banner({ tone, children }: { tone: "error" | "success"; children: React
     >
       {children}
     </p>
-  );
-}
-function DetailDialog({ detail, close }: { detail: AdminMemberDetail; close: () => void }) {
-  const sections: Array<[string, unknown]> = [
-    ["Identity", detail.identity],
-    ["KYC", detail.kyc],
-    ["AEPS", detail.aeps],
-    ["Bank accounts", detail.bankAccounts],
-    ["Wallets", detail.wallets],
-  ];
-  return (
-    <div className="fixed inset-0 z-[100] grid place-items-center bg-secondary/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-        <div className="flex justify-between">
-          <div>
-            <p className="text-xs font-black uppercase text-primary">Consolidated member</p>
-            <h2 className="text-xl font-black">{detail.identity.fullName}</h2>
-            <p className="text-xs text-muted-foreground">{detail.identity.loginId}</p>
-          </div>
-          <button onClick={close}>
-            <X />
-          </button>
-        </div>
-        {detail.partialErrors?.length ? (
-          <div className="mt-4 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">
-            Member identity loaded. {detail.partialErrors.join("; ")}.
-          </div>
-        ) : null}
-        <div className="mt-5 space-y-4">
-          {sections.map(([title, value]) => (
-            <section key={title} className="rounded-xl border border-border p-4">
-              <h3 className="flex items-center gap-2 font-black">
-                <ShieldCheck size={17} />
-                {title}
-              </h3>
-              <pre className="mt-3 max-h-52 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-3 text-xs">
-                {value == null ? "Not available" : JSON.stringify(value, null, 2)}
-              </pre>
-            </section>
-          ))}
-        </div>
-      </div>
-    </div>
   );
 }

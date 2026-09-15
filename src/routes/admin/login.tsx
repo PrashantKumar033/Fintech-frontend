@@ -251,7 +251,7 @@ function AdminLogin() {
             </>
           )}
           <p className="mt-6 text-center text-xs leading-5 text-muted-foreground">
-            This portal uses the dedicated <b>/super-admin/auth</b> backend flow. Retailer
+            This portal uses the dedicated to super admin only. Other roles
             credentials will not work here.
           </p>
         </div>

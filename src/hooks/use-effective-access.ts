@@ -8,33 +8,63 @@ import {
 import type { PlatformRole } from "@/lib/role-hierarchy";
 import { canUsePermission } from "@/lib/ui-permissions";
 
+const accessRefreshes = new Map<string, Promise<EffectiveAccess>>();
+
+function refreshEffectiveAccess(accessToken: string) {
+  const existing = accessRefreshes.get(accessToken);
+  if (existing) return existing;
+
+  const request = syncMyPermissions(accessToken).finally(() => {
+    if (accessRefreshes.get(accessToken) === request) {
+      accessRefreshes.delete(accessToken);
+    }
+  });
+  accessRefreshes.set(accessToken, request);
+  return request;
+}
+
 export function useEffectiveAccess() {
   const [access, setAccess] = useState<EffectiveAccess | null>(() => getEffectiveAccess());
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const refresh = useCallback(async () => {
     const session = getSession();
-    if (!session) return;
-    if (access?.identity?.id === session.identity.id) return;
+    if (!session) return null;
 
-    let cancelled = false;
     setLoading(true);
-    void syncMyPermissions(session.accessToken)
-      .then((next) => {
-        if (!cancelled) setAccess(next);
-      })
-      .catch(() => {
-        // The backend remains the source of truth. A missing permission refresh should not
-        // destroy the current page; strict mode will deny protected navigation when no cache exists.
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+    try {
+      const next = await refreshEffectiveAccess(session.accessToken);
+      setAccess(next);
+      return next;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const sync = () => {
+      if (cancelled) return;
+      void refresh().catch(() => {
+        // The backend remains the source of truth. A failed refresh should not destroy the
+        // current page; strict mode will deny protected actions when no cache exists.
       });
+    };
+
+    const syncWhenVisible = () => {
+      if (document.visibilityState === "visible") sync();
+    };
+
+    sync();
+    window.addEventListener("focus", sync);
+    document.addEventListener("visibilitychange", syncWhenVisible);
 
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", sync);
+      document.removeEventListener("visibilitychange", syncWhenVisible);
     };
-  }, [access?.identity?.id]);
+  }, [refresh]);
 
   const currentRole = getSession()?.identity.role || null;
   const can = useCallback(
@@ -43,5 +73,5 @@ export function useEffectiveAccess() {
     [access, currentRole],
   );
 
-  return { access, loading, can };
+  return { access, loading, can, refresh };
 }

@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   BadgeCheck,
   Building2,
   Edit3,
   Landmark,
+  MapPin,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -24,6 +25,7 @@ import {
   signedInHome,
 } from "@/lib/role-hierarchy";
 import { complianceApi, complianceMessage, type BankAccount } from "@/lib/compliance-api";
+import { createIdempotencyKey } from "@/lib/idempotency-key";
 
 export const Route = createFileRoute("/retailer/bank/")({
   head: () => ({ meta: [{ title: "Bank Accounts — UMOBIPAY" }] }),
@@ -39,7 +41,44 @@ const initial = {
   accountType: "SAVINGS" as "SAVINGS" | "CURRENT" | "SALARY",
   purposes: ["PAYOUT"] as Array<"PAYOUT" | "DMT">,
 };
+
+type BankCoordinates = { lat: string; long: string };
+
+function captureBankCoordinates(): Promise<BankCoordinates> {
+  if (typeof window === "undefined" || !window.isSecureContext) {
+    return Promise.reject(
+      new Error(
+        "Location is blocked on an insecure address. Open UMOBIPAY through HTTPS or localhost, then try again.",
+      ),
+    );
+  }
+  if (!navigator.geolocation) {
+    return Promise.reject(new Error("This browser does not support location capture."));
+  }
+
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) =>
+        resolve({
+          lat: String(coords.latitude),
+          long: String(coords.longitude),
+        }),
+      (error) => {
+        const text =
+          error.code === error.PERMISSION_DENIED
+            ? "Location permission was denied. Allow location for this site and try again."
+            : error.code === error.POSITION_UNAVAILABLE
+              ? "Current location is unavailable. Turn on device location and try again."
+              : "Location capture timed out. Check GPS/network and try again.";
+        reject(new Error(text));
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+    );
+  });
+}
+
 function BankAccountsPage() {
+  const requestKeyRef = useRef<string | null>(null);
   const { can } = useEffectiveAccess();
   const canManageBank = can(UI_PERMISSION.BANK_MANAGE, [
     "ADMIN",
@@ -55,6 +94,9 @@ function BankAccountsPage() {
     [adding, setAdding] = useState(false),
     [editingId, setEditingId] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
+    [locationBusy, setLocationBusy] = useState(false),
+    [coordinates, setCoordinates] = useState<BankCoordinates | null>(null),
+    [locationError, setLocationError] = useState(""),
     [loading, setLoading] = useState(true),
     [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   async function load(token: string) {
@@ -146,6 +188,22 @@ function BankAccountsPage() {
       return setMessage({ ok: false, text: "Select at least one account purpose." });
     setBusy(true);
     try {
+      let bankCoordinates = coordinates;
+      if (!bankCoordinates) {
+        setLocationBusy(true);
+        setLocationError("");
+        try {
+          bankCoordinates = await captureBankCoordinates();
+          setCoordinates(bankCoordinates);
+        } catch (error) {
+          setLocationError(
+            error instanceof Error ? error.message : "Location could not be captured.",
+          );
+          return;
+        } finally {
+          setLocationBusy(false);
+        }
+      }
       const payload = {
         bankName: form.bankName.trim(),
         ifsc: form.ifsc.toUpperCase(),
@@ -153,17 +211,34 @@ function BankAccountsPage() {
         accountHolderName: form.accountHolderName.trim(),
         accountType: form.accountType,
         purposes: form.purposes,
+        lat: bankCoordinates.lat,
+        long: bankCoordinates.long,
         ...(form.accountNumber ? { accountNumber: form.accountNumber } : {}),
       };
-      if (editingId) await complianceApi.updateBank(activeSession.accessToken, editingId, payload);
+      const requestKey = requestKeyRef.current ?? createIdempotencyKey("bank-verification");
+      requestKeyRef.current = requestKey;
+      if (editingId)
+        await complianceApi.updateBank(
+          activeSession.accessToken,
+          editingId,
+          payload,
+          form.accountNumber ? requestKey : undefined,
+        );
       else
-        await complianceApi.addBank(activeSession.accessToken, {
-          ...payload,
-          accountNumber: form.accountNumber,
-        });
+        await complianceApi.addBank(
+          activeSession.accessToken,
+          {
+            ...payload,
+            accountNumber: form.accountNumber,
+          },
+          requestKey,
+        );
+      requestKeyRef.current = null;
       setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
       setAdding(false);
       setEditingId(null);
+      setCoordinates(null);
+      setLocationError("");
       setMessage({
         ok: true,
         text: editingId
@@ -213,6 +288,9 @@ function BankAccountsPage() {
               disabled={!canManageBank}
               onClick={() => {
                 setEditingId(null);
+                requestKeyRef.current = null;
+                setCoordinates(null);
+                setLocationError("");
                 setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
                 setAdding(!adding);
               }}
@@ -269,7 +347,10 @@ function BankAccountsPage() {
                           try {
                             const latest = await complianceApi.bank(session.accessToken, a.id);
                             setEditingId(latest.id);
+                            requestKeyRef.current = null;
                             setAdding(true);
+                            setCoordinates(null);
+                            setLocationError("");
                             setForm({
                               bankName: latest.bankName,
                               ifsc: latest.ifsc,
@@ -367,7 +448,8 @@ function BankAccountsPage() {
                       (!editingId || !["accountNumber", "confirm"].includes(key))
                     }
                     value={form[key as keyof typeof form]}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      requestKeyRef.current = null;
                       setForm({
                         ...form,
                         [key]:
@@ -376,8 +458,8 @@ function BankAccountsPage() {
                             : key.includes("accountNumber") || key === "confirm"
                               ? e.target.value.replace(/\D/g, "").slice(0, 18)
                               : e.target.value,
-                      })
-                    }
+                      });
+                    }}
                     className="mt-1.5 w-full rounded-xl border border-border bg-card px-4 py-3 text-sm font-normal normal-case outline-none focus:border-primary"
                   />
                 </label>
@@ -391,12 +473,13 @@ function BankAccountsPage() {
                 Account type
                 <select
                   value={form.accountType}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    requestKeyRef.current = null;
                     setForm({
                       ...form,
                       accountType: e.target.value as "SAVINGS" | "CURRENT" | "SALARY",
-                    })
-                  }
+                    });
+                  }}
                   className="mt-1.5 w-full rounded-xl border border-border bg-card px-4 py-3 text-sm"
                 >
                   <option value="SAVINGS">Savings</option>
@@ -412,20 +495,60 @@ function BankAccountsPage() {
                       <input
                         type="checkbox"
                         checked={form.purposes.includes(purpose)}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          requestKeyRef.current = null;
                           setForm({
                             ...form,
                             purposes: event.target.checked
                               ? [...form.purposes, purpose]
                               : form.purposes.filter((item) => item !== purpose),
-                          })
-                        }
+                          });
+                        }}
                       />{" "}
                       {purpose}
                     </label>
                   ))}
                 </div>
               </fieldset>
+              <div className="sm:col-span-2">
+                <button
+                  type="button"
+                  disabled={busy || locationBusy}
+                  onClick={async () => {
+                    setLocationBusy(true);
+                    setLocationError("");
+                    requestKeyRef.current = null;
+                    try {
+                      setCoordinates(await captureBankCoordinates());
+                    } catch (error) {
+                      setCoordinates(null);
+                      setLocationError(
+                        error instanceof Error ? error.message : "Location could not be captured.",
+                      );
+                    } finally {
+                      setLocationBusy(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-bold text-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <MapPin size={16} />
+                  {locationBusy
+                    ? "Capturing location…"
+                    : coordinates
+                      ? "Location captured"
+                      : "Use current location"}
+                </button>
+                {locationError && (
+                  <p role="alert" className="mt-2 text-xs font-semibold text-red-600">
+                    {locationError}
+                  </p>
+                )}
+                {!locationError && coordinates && (
+                  <p className="mt-2 text-xs font-semibold text-emerald-700">
+                    Secure location is ready for bank verification.
+                  </p>
+                )}
+              </div>
               <button
                 disabled={!canManageBank || busy}
                 className="self-end rounded-xl bg-secondary py-3 text-sm font-bold text-white disabled:opacity-50"
@@ -437,7 +560,10 @@ function BankAccountsPage() {
                   type="button"
                   onClick={() => {
                     setEditingId(null);
+                    requestKeyRef.current = null;
                     setAdding(false);
+                    setCoordinates(null);
+                    setLocationError("");
                     setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
                   }}
                   className="rounded-xl border border-border bg-white py-3 text-sm font-bold text-secondary"

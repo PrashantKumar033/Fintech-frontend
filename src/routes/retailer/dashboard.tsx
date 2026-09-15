@@ -39,6 +39,7 @@ const serviceGroups = [
   {
     title: "Money transfer & payments",
     eyebrow: "DMT / AEPS",
+    viewAllHref: "/retailer/wallet",
     services: [
       ["Wallet to Wallet", Wallet],
       ["Money Transfer", Banknote],
@@ -50,6 +51,7 @@ const serviceGroups = [
   {
     title: "Bills & utilities",
     eyebrow: "BBPS",
+    viewAllHref: "/services",
     services: [
       ["Electricity", Lightbulb],
       ["Water", Droplets],
@@ -64,6 +66,7 @@ const serviceGroups = [
   {
     title: "Aadhaar enabled services",
     eyebrow: "AEPS",
+    viewAllHref: "/retailer/aeps",
     services: [
       ["AEPS", Fingerprint],
       ["Aadhaar Pay", BadgeCheck],
@@ -75,6 +78,7 @@ const serviceGroups = [
   {
     title: "Recharge & travel",
     eyebrow: "RECHARGE",
+    viewAllHref: "/services",
     services: [
       ["Mobile Recharge", Smartphone],
       ["DTH", Tv],
@@ -109,11 +113,7 @@ function DashboardPage() {
       </div>
     );
   return (
-    <BusinessPage
-      identity={session.identity}
-      active="dashboard"
-      showPageHeader={false}
-    >
+    <BusinessPage identity={session.identity} active="dashboard" showPageHeader={false}>
       <DashboardHome identity={session.identity} />
     </BusinessPage>
   );
@@ -168,6 +168,7 @@ function DashboardHome({ identity }: { identity: Identity }) {
           key={group.title}
           title={group.title}
           eyebrow={group.eyebrow}
+          viewAllHref={group.viewAllHref}
           services={group.services}
         />
       ))}
@@ -230,10 +231,12 @@ function Summary({
 function ServiceSection({
   title,
   eyebrow,
+  viewAllHref,
   services,
 }: {
   title: string;
   eyebrow: string;
+  viewAllHref: string;
   services: readonly (readonly [string, typeof Wallet])[];
 }) {
   return (
@@ -245,13 +248,24 @@ function ServiceSection({
           </p>
           <h2 className="mt-1 text-lg font-extrabold text-secondary">{title}</h2>
         </div>
-        <button className="hidden items-center gap-1 text-xs font-bold text-secondary sm:flex">
+        <Link
+          to={viewAllHref as never}
+          className="hidden items-center gap-1 text-xs font-bold text-secondary hover:text-primary sm:flex"
+        >
           View all <ChevronRight size={14} />
-        </button>
+        </Link>
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-8">
         {services.map(([label, Icon]) => {
-          const active = label === "AEPS" || label === "Aadhaar Pay" || label === "Cash Deposit";
+          const serviceHref =
+            label === "AEPS"
+              ? "/retailer/aeps"
+              : label === "Aadhaar Pay"
+                ? "/retailer/aeps?service=aadhaar-pay"
+                : label === "Cash Deposit"
+                  ? "/retailer/aeps?service=cash-deposit"
+                  : null;
+          const active = Boolean(serviceHref);
           const card = (
             <>
               <span className="grid h-11 w-11 place-items-center rounded-xl bg-card text-secondary shadow-sm transition group-hover:bg-primary group-hover:text-primary-foreground">
@@ -269,7 +283,7 @@ function ServiceSection({
           );
           return active ? (
             <Link
-              to="/retailer/aeps"
+              to={serviceHref as never}
               key={label}
               className="group rounded-2xl border border-border bg-background p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-mint hover:shadow-soft"
             >

@@ -1,1 +1,17 @@
-import { createFileRoute } from "@tanstack/react-router";import{Landmark}from"lucide-react";import{DistributorModulePlaceholder}from"@/components/distributor/module-placeholder";export const Route=createFileRoute("/distributor/aeps/balance-enquiry")({component:()=> <DistributorModulePlaceholder active="transactions" icon={Landmark} title="Balance enquiry monitoring" description="Review-focused Distributor workspace for balance enquiries."/>});
+import { createFileRoute } from "@tanstack/react-router";
+import { NetworkAepsTransactions } from "@/components/network-aeps-transactions";
+
+export const Route = createFileRoute("/distributor/aeps/balance-enquiry")({
+  component: BalanceEnquiryMonitoring,
+});
+
+function BalanceEnquiryMonitoring() {
+  return (
+    <NetworkAepsTransactions
+      activeArea="aeps"
+      operation="BE"
+      title="Balance enquiry monitoring"
+      description="Review balance-enquiry transactions performed by your assigned Retailers."
+    />
+  );
+}

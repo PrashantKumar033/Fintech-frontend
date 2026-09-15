@@ -1,13 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { FileText } from "lucide-react";
-import { DistributorModulePlaceholder } from "@/components/distributor/module-placeholder";
+import { NetworkAepsTransactions } from "@/components/network-aeps-transactions";
+
 export const Route = createFileRoute("/distributor/aeps/mini-statement")({
-  component: () => (
-    <DistributorModulePlaceholder
-      active="transactions"
-      icon={FileText}
-      title="Mini statement monitoring"
-      description="Review-focused Distributor workspace for mini-statement activity."
-    />
-  ),
+  component: MiniStatementMonitoring,
 });
+
+function MiniStatementMonitoring() {
+  return (
+    <NetworkAepsTransactions
+      activeArea="aeps"
+      operation="MS"
+      title="Mini statement monitoring"
+      description="Review mini-statement transactions performed by your assigned Retailers."
+    />
+  );
+}

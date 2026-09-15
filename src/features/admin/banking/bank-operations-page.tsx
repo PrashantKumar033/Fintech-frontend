@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Eye, Landmark, Loader2, RefreshCw, Search, X } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
+import { BankVerificationReconciliation } from "@/components/admin/bank-verification-reconciliation";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import {
   adminApi,
@@ -36,6 +37,7 @@ export function AdminBankOperationsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<AdminBankAccountDetail | null>(null);
+  const [workspace, setWorkspace] = useState<"accounts" | "reconciliation">("accounts");
 
   const load = useCallback(
     async (targetPage = 1) => {
@@ -86,225 +88,252 @@ export function AdminBankOperationsPage() {
       title="Bank operations"
       description="Search member bank accounts and inspect verification and status history without exposing full account numbers."
     >
-      {error && (
-        <p
-          role="alert"
-          className="mb-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700"
+      <div className="mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl border border-border bg-white p-1">
+        <button
+          type="button"
+          onClick={() => setWorkspace("accounts")}
+          className={`cursor-pointer whitespace-nowrap rounded-xl px-5 py-3 text-sm font-black ${workspace === "accounts" ? "bg-secondary text-white" : "text-secondary"}`}
         >
-          {error}
-        </p>
-      )}
-      <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Total accounts" value={total} />
-        <Metric
-          label="Active on page"
-          value={items.filter((item) => item.status === "ACTIVE").length}
-        />
-        <Metric
-          label="Verified on page"
-          value={items.filter((item) => item.verificationStatus === "VERIFIED").length}
-        />
-        <Metric
-          label="Pending on page"
-          value={items.filter((item) => item.status === "PENDING").length}
-        />
-      </div>
-      <AdminPanel>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-          <label className="relative md:col-span-2">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-              size={16}
-            />
-            <input
-              value={filters.search}
-              onChange={(event) => setFilters((v) => ({ ...v, search: event.target.value }))}
-              placeholder="Bank, holder, IFSC or last 4"
-              className={`${control} w-full pl-9`}
-            />
-          </label>
-          <Filter
-            label="All roles"
-            value={filters.role}
-            values={["ADMIN", "MASTER_DISTRIBUTOR", "DISTRIBUTOR", "RETAILER"]}
-            set={(role) => setFilters((v) => ({ ...v, role }))}
-          />
-          <Filter
-            label="All statuses"
-            value={filters.status}
-            values={["PENDING", "ACTIVE", "INACTIVE", "BLOCKED"]}
-            set={(status) => setFilters((v) => ({ ...v, status }))}
-          />
-          <Filter
-            label="All verification"
-            value={filters.verificationStatus}
-            values={["PENDING", "PROCESSING", "VERIFIED", "REJECTED", "FAILED"]}
-            set={(verificationStatus) => setFilters((v) => ({ ...v, verificationStatus }))}
-          />
-          <Filter
-            label="All ownership"
-            value={filters.ownershipStatus}
-            values={["PENDING", "VERIFIED", "FAILED"]}
-            set={(ownershipStatus) => setFilters((v) => ({ ...v, ownershipStatus }))}
-          />
-        </div>
-        <div className="mt-4 flex justify-end">
+          Bank accounts
+        </button>
+        {privileged ? (
           <button
             type="button"
-            onClick={() => void load(page)}
-            className={`${control} flex items-center gap-2 font-bold`}
+            onClick={() => setWorkspace("reconciliation")}
+            className={`cursor-pointer whitespace-nowrap rounded-xl px-5 py-3 text-sm font-black ${workspace === "reconciliation" ? "bg-secondary text-white" : "text-secondary"}`}
           >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            Refresh
+            Verification reconciliation
           </button>
-        </div>
-        <div className="mt-4 overflow-x-auto rounded-xl border border-border">
-          <table className="w-full min-w-[900px] text-left text-sm">
-            <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
-              <tr>
-                {[
-                  "Bank account",
-                  "Member ID",
-                  "Type",
-                  "Status",
-                  "Verification",
-                  "Ownership",
-                  "Action",
-                ].map((label) => (
-                  <th key={label} className="px-4 py-3">
-                    {label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="h-44 text-center">
-                    <Loader2 className="mx-auto animate-spin text-primary" />
-                  </td>
-                </tr>
-              ) : items.length ? (
-                items.map((item) => (
-                  <tr key={item.id}>
-                    <td className="px-4 py-3">
-                      <p className="font-extrabold">
-                        {item.bankName} ····{item.accountNumberLast4}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.accountHolderName} · {item.ifsc}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs">{item.identityId}</td>
-                    <td className="px-4 py-3">{item.accountType}</td>
-                    <td className="px-4 py-3">
-                      <Status value={item.status} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Status value={item.verificationStatus} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <Status value={item.ownershipStatus} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        disabled={!canView || detailLoading}
-                        onClick={() => void inspect(item.id)}
-                        className="cursor-pointer rounded-lg border border-border p-2"
-                        title="View bank details"
-                      >
-                        <Eye size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="h-44 text-center text-muted-foreground">
-                    No bank accounts match these filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-4 flex items-center justify-between text-xs font-bold">
-          <span>{total} bank accounts</span>
-          <div className="flex items-center gap-2">
-            <button
-              disabled={page <= 1 || loading}
-              onClick={() => void load(page - 1)}
-              className={control}
+        ) : null}
+      </div>
+      {workspace === "reconciliation" && privileged ? (
+        <BankVerificationReconciliation />
+      ) : (
+        <>
+          {error && (
+            <p
+              role="alert"
+              className="mb-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700"
             >
-              Previous
-            </button>
-            <span>
-              Page {page} of {pages}
-            </span>
-            <button
-              disabled={page >= pages || loading}
-              onClick={() => void load(page + 1)}
-              className={control}
-            >
-              Next
-            </button>
+              {error}
+            </p>
+          )}
+          <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Metric label="Total accounts" value={total} />
+            <Metric
+              label="Active on page"
+              value={items.filter((item) => item.status === "ACTIVE").length}
+            />
+            <Metric
+              label="Verified on page"
+              value={items.filter((item) => item.verificationStatus === "VERIFIED").length}
+            />
+            <Metric
+              label="Pending on page"
+              value={items.filter((item) => item.status === "PENDING").length}
+            />
           </div>
-        </div>
-      </AdminPanel>
-      {detailLoading && (
-        <div className="fixed inset-0 z-[100] grid place-items-center bg-secondary/50">
-          <Loader2 className="animate-spin text-white" />
-        </div>
-      )}
-      {detail && (
-        <div className="fixed inset-0 z-[100] grid place-items-center bg-secondary/60 p-4">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-            <div className="flex justify-between">
-              <div>
-                <p className="text-xs font-black uppercase text-primary">Bank account detail</p>
-                <h2 className="flex items-center gap-2 text-xl font-black">
-                  <Landmark size={20} />
-                  {detail.bankName} ····{detail.accountNumberLast4}
-                </h2>
-              </div>
-              <button onClick={() => setDetail(null)}>
-                <X />
+          <AdminPanel>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+              <label className="relative md:col-span-2">
+                <Search
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  size={16}
+                />
+                <input
+                  value={filters.search}
+                  onChange={(event) => setFilters((v) => ({ ...v, search: event.target.value }))}
+                  placeholder="Bank, holder, IFSC or last 4"
+                  className={`${control} w-full pl-9`}
+                />
+              </label>
+              <Filter
+                label="All roles"
+                value={filters.role}
+                values={["ADMIN", "MASTER_DISTRIBUTOR", "DISTRIBUTOR", "RETAILER"]}
+                set={(role) => setFilters((v) => ({ ...v, role }))}
+              />
+              <Filter
+                label="All statuses"
+                value={filters.status}
+                values={["PENDING", "ACTIVE", "INACTIVE", "BLOCKED"]}
+                set={(status) => setFilters((v) => ({ ...v, status }))}
+              />
+              <Filter
+                label="All verification"
+                value={filters.verificationStatus}
+                values={["PENDING", "PROCESSING", "VERIFIED", "REJECTED", "FAILED"]}
+                set={(verificationStatus) => setFilters((v) => ({ ...v, verificationStatus }))}
+              />
+              <Filter
+                label="All ownership"
+                value={filters.ownershipStatus}
+                values={["PENDING", "VERIFIED", "FAILED"]}
+                set={(ownershipStatus) => setFilters((v) => ({ ...v, ownershipStatus }))}
+              />
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => void load(page)}
+                className={`${control} flex items-center gap-2 font-bold`}
+              >
+                <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+                Refresh
               </button>
             </div>
-            <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <DetailGroup title="Account information">
-                <DetailRow label="Account holder" value={detail.accountHolderName} />
-                <DetailRow label="Bank" value={detail.bankName} />
-                <DetailRow label="Account number" value={`••••${detail.accountNumberLast4}`} />
-                <DetailRow label="Account type" value={detail.accountType} />
-                <DetailRow label="IFSC" value={detail.ifsc} />
-                <DetailRow label="Branch" value={detail.branchName} />
-              </DetailGroup>
-              <DetailGroup title="Account status">
-                <DetailRow label="Status" value={<Status value={detail.status} />} />
-                <DetailRow
-                  label="Verification"
-                  value={<Status value={detail.verificationStatus} />}
-                />
-                <DetailRow label="Ownership" value={<Status value={detail.ownershipStatus} />} />
-                <DetailRow label="Default account" value={detail.isDefault ? "Yes" : "No"} />
-                <DetailRow label="Purposes" value={detail.purposes?.join(", ") || "—"} />
-                <DetailRow label="Verified on" value={formatDate(detail.verifiedAt)} />
-              </DetailGroup>
+            <div className="mt-4 overflow-x-auto rounded-xl border border-border">
+              <table className="w-full min-w-[900px] text-left text-sm">
+                <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
+                  <tr>
+                    {[
+                      "Bank account",
+                      "Member ID",
+                      "Type",
+                      "Status",
+                      "Verification",
+                      "Ownership",
+                      "Action",
+                    ].map((label) => (
+                      <th key={label} className="px-4 py-3">
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="h-44 text-center">
+                        <Loader2 className="mx-auto animate-spin text-primary" />
+                      </td>
+                    </tr>
+                  ) : items.length ? (
+                    items.map((item) => (
+                      <tr key={item.id}>
+                        <td className="px-4 py-3">
+                          <p className="font-extrabold">
+                            {item.bankName} ····{item.accountNumberLast4}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.accountHolderName} · {item.ifsc}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs">{item.identityId}</td>
+                        <td className="px-4 py-3">{item.accountType}</td>
+                        <td className="px-4 py-3">
+                          <Status value={item.status} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <Status value={item.verificationStatus} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <Status value={item.ownershipStatus} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            disabled={!canView || detailLoading}
+                            onClick={() => void inspect(item.id)}
+                            className="cursor-pointer rounded-lg border border-border p-2"
+                            title="View bank details"
+                          >
+                            <Eye size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="h-44 text-center text-muted-foreground">
+                        No bank accounts match these filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-            <DetailHistory
-              title="Verification history"
-              items={detail.bankAccountVerifications}
-              empty="No verification attempts recorded."
-            />
-            <DetailHistory
-              title="Status history"
-              items={detail.userBankStatusAudits}
-              empty="No status changes recorded."
-            />
-          </div>
-        </div>
+            <div className="mt-4 flex items-center justify-between text-xs font-bold">
+              <span>{total} bank accounts</span>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={page <= 1 || loading}
+                  onClick={() => void load(page - 1)}
+                  className={control}
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {page} of {pages}
+                </span>
+                <button
+                  disabled={page >= pages || loading}
+                  onClick={() => void load(page + 1)}
+                  className={control}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </AdminPanel>
+          {detailLoading && (
+            <div className="fixed inset-0 z-[100] grid place-items-center bg-secondary/50">
+              <Loader2 className="animate-spin text-white" />
+            </div>
+          )}
+          {detail && (
+            <div className="fixed inset-0 z-[100] grid place-items-center bg-secondary/60 p-4">
+              <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+                <div className="flex justify-between">
+                  <div>
+                    <p className="text-xs font-black uppercase text-primary">Bank account detail</p>
+                    <h2 className="flex items-center gap-2 text-xl font-black">
+                      <Landmark size={20} />
+                      {detail.bankName} ····{detail.accountNumberLast4}
+                    </h2>
+                  </div>
+                  <button onClick={() => setDetail(null)}>
+                    <X />
+                  </button>
+                </div>
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <DetailGroup title="Account information">
+                    <DetailRow label="Account holder" value={detail.accountHolderName} />
+                    <DetailRow label="Bank" value={detail.bankName} />
+                    <DetailRow label="Account number" value={`••••${detail.accountNumberLast4}`} />
+                    <DetailRow label="Account type" value={detail.accountType} />
+                    <DetailRow label="IFSC" value={detail.ifsc} />
+                    <DetailRow label="Branch" value={detail.branchName} />
+                  </DetailGroup>
+                  <DetailGroup title="Account status">
+                    <DetailRow label="Status" value={<Status value={detail.status} />} />
+                    <DetailRow
+                      label="Verification"
+                      value={<Status value={detail.verificationStatus} />}
+                    />
+                    <DetailRow
+                      label="Ownership"
+                      value={<Status value={detail.ownershipStatus} />}
+                    />
+                    <DetailRow label="Default account" value={detail.isDefault ? "Yes" : "No"} />
+                    <DetailRow label="Purposes" value={detail.purposes?.join(", ") || "—"} />
+                    <DetailRow label="Verified on" value={formatDate(detail.verifiedAt)} />
+                  </DetailGroup>
+                </div>
+                <DetailHistory
+                  title="Verification history"
+                  items={detail.bankAccountVerifications}
+                  empty="No verification attempts recorded."
+                />
+                <DetailHistory
+                  title="Status history"
+                  items={detail.userBankStatusAudits}
+                  empty="No status changes recorded."
+                />
+              </div>
+            </div>
+          )}
+        </>
       )}
     </AdminLayout>
   );

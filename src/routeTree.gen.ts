@@ -36,6 +36,7 @@ import { Route as RetailerAccountSetupRouteImport } from './routes/retailer/acco
 import { Route as RetailerDashboardRouteImport } from './routes/retailer/dashboard'
 import { Route as RetailerSettingsRouteImport } from './routes/retailer/settings'
 import { Route as AdminAccessIndexRouteImport } from './routes/admin/access/index'
+import { Route as AdminAepsIndexRouteImport } from './routes/admin/aeps/index'
 import { Route as AdminApiSettingsIndexRouteImport } from './routes/admin/api-settings/index'
 import { Route as AdminBankingIndexRouteImport } from './routes/admin/banking/index'
 import { Route as AdminCommissionsIndexRouteImport } from './routes/admin/commissions/index'
@@ -66,6 +67,7 @@ import { Route as DistributorSettingsIndexRouteImport } from './routes/distribut
 import { Route as DistributorSupportIndexRouteImport } from './routes/distributor/support/index'
 import { Route as DistributorWalletIndexRouteImport } from './routes/distributor/wallet/index'
 import { Route as DistributorWalletTransferRouteImport } from './routes/distributor/wallet/transfer'
+import { Route as MasterDistributorAepsIndexRouteImport } from './routes/master-distributor/aeps/index'
 import { Route as MasterDistributorCommissionIndexRouteImport } from './routes/master-distributor/commission/index'
 import { Route as MasterDistributorKycIndexRouteImport } from './routes/master-distributor/kyc/index'
 import { Route as MasterDistributorNotificationsIndexRouteImport } from './routes/master-distributor/notifications/index'
@@ -82,7 +84,9 @@ import { Route as MasterDistributorWalletRequestsRouteImport } from './routes/ma
 import { Route as MasterDistributorWalletTransferRouteImport } from './routes/master-distributor/wallet/transfer'
 import { Route as RetailerAepsIndexRouteImport } from './routes/retailer/aeps/index'
 import { Route as RetailerBankIndexRouteImport } from './routes/retailer/bank/index'
+import { Route as RetailerCommissionIndexRouteImport } from './routes/retailer/commission/index'
 import { Route as RetailerKycIndexRouteImport } from './routes/retailer/kyc/index'
+import { Route as RetailerMembersIndexRouteImport } from './routes/retailer/members/index'
 import { Route as RetailerTransactionsIndexRouteImport } from './routes/retailer/transactions/index'
 import { Route as RetailerWalletIndexRouteImport } from './routes/retailer/wallet/index'
 import { Route as RetailerWalletTransferRouteImport } from './routes/retailer/wallet/transfer'
@@ -229,6 +233,11 @@ const RetailerSettingsRoute = RetailerSettingsRouteImport.update({
 const AdminAccessIndexRoute = AdminAccessIndexRouteImport.update({
   id: '/admin/access/',
   path: '/admin/access/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAepsIndexRoute = AdminAepsIndexRouteImport.update({
+  id: '/admin/aeps/',
+  path: '/admin/aeps/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminApiSettingsIndexRoute = AdminApiSettingsIndexRouteImport.update({
@@ -390,6 +399,12 @@ const DistributorWalletTransferRoute =
     path: '/distributor/wallet/transfer',
     getParentRoute: () => rootRouteImport,
   } as any)
+const MasterDistributorAepsIndexRoute =
+  MasterDistributorAepsIndexRouteImport.update({
+    id: '/master-distributor/aeps/',
+    path: '/master-distributor/aeps/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const MasterDistributorCommissionIndexRoute =
   MasterDistributorCommissionIndexRouteImport.update({
     id: '/master-distributor/commission/',
@@ -484,9 +499,19 @@ const RetailerBankIndexRoute = RetailerBankIndexRouteImport.update({
   path: '/retailer/bank/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RetailerCommissionIndexRoute = RetailerCommissionIndexRouteImport.update({
+  id: '/retailer/commission/',
+  path: '/retailer/commission/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RetailerKycIndexRoute = RetailerKycIndexRouteImport.update({
   id: '/retailer/kyc/',
   path: '/retailer/kyc/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetailerMembersIndexRoute = RetailerMembersIndexRouteImport.update({
+  id: '/retailer/members/',
+  path: '/retailer/members/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RetailerTransactionsIndexRoute =
@@ -590,6 +615,7 @@ export interface FileRoutesByFullPath {
   '/master-distributor/wallet/transfer': typeof MasterDistributorWalletTransferRoute
   '/retailer/wallet/transfer': typeof RetailerWalletTransferRoute
   '/admin/access/': typeof AdminAccessIndexRoute
+  '/admin/aeps/': typeof AdminAepsIndexRoute
   '/admin/api-settings/': typeof AdminApiSettingsIndexRoute
   '/admin/banking/': typeof AdminBankingIndexRoute
   '/admin/commissions/': typeof AdminCommissionsIndexRoute
@@ -610,6 +636,7 @@ export interface FileRoutesByFullPath {
   '/distributor/settings/': typeof DistributorSettingsIndexRoute
   '/distributor/support/': typeof DistributorSupportIndexRoute
   '/distributor/wallet/': typeof DistributorWalletIndexRoute
+  '/master-distributor/aeps/': typeof MasterDistributorAepsIndexRoute
   '/master-distributor/commission/': typeof MasterDistributorCommissionIndexRoute
   '/master-distributor/kyc/': typeof MasterDistributorKycIndexRoute
   '/master-distributor/notifications/': typeof MasterDistributorNotificationsIndexRoute
@@ -621,7 +648,9 @@ export interface FileRoutesByFullPath {
   '/master-distributor/wallet/': typeof MasterDistributorWalletIndexRoute
   '/retailer/aeps/': typeof RetailerAepsIndexRoute
   '/retailer/bank/': typeof RetailerBankIndexRoute
+  '/retailer/commission/': typeof RetailerCommissionIndexRoute
   '/retailer/kyc/': typeof RetailerKycIndexRoute
+  '/retailer/members/': typeof RetailerMembersIndexRoute
   '/retailer/transactions/': typeof RetailerTransactionsIndexRoute
   '/retailer/wallet/': typeof RetailerWalletIndexRoute
   '/admin/merchants/add/': typeof AdminMerchantsAddIndexRoute
@@ -676,6 +705,7 @@ export interface FileRoutesByTo {
   '/master-distributor/wallet/transfer': typeof MasterDistributorWalletTransferRoute
   '/retailer/wallet/transfer': typeof RetailerWalletTransferRoute
   '/admin/access': typeof AdminAccessIndexRoute
+  '/admin/aeps': typeof AdminAepsIndexRoute
   '/admin/api-settings': typeof AdminApiSettingsIndexRoute
   '/admin/banking': typeof AdminBankingIndexRoute
   '/admin/commissions': typeof AdminCommissionsIndexRoute
@@ -696,6 +726,7 @@ export interface FileRoutesByTo {
   '/distributor/settings': typeof DistributorSettingsIndexRoute
   '/distributor/support': typeof DistributorSupportIndexRoute
   '/distributor/wallet': typeof DistributorWalletIndexRoute
+  '/master-distributor/aeps': typeof MasterDistributorAepsIndexRoute
   '/master-distributor/commission': typeof MasterDistributorCommissionIndexRoute
   '/master-distributor/kyc': typeof MasterDistributorKycIndexRoute
   '/master-distributor/notifications': typeof MasterDistributorNotificationsIndexRoute
@@ -707,7 +738,9 @@ export interface FileRoutesByTo {
   '/master-distributor/wallet': typeof MasterDistributorWalletIndexRoute
   '/retailer/aeps': typeof RetailerAepsIndexRoute
   '/retailer/bank': typeof RetailerBankIndexRoute
+  '/retailer/commission': typeof RetailerCommissionIndexRoute
   '/retailer/kyc': typeof RetailerKycIndexRoute
+  '/retailer/members': typeof RetailerMembersIndexRoute
   '/retailer/transactions': typeof RetailerTransactionsIndexRoute
   '/retailer/wallet': typeof RetailerWalletIndexRoute
   '/admin/merchants/add': typeof AdminMerchantsAddIndexRoute
@@ -763,6 +796,7 @@ export interface FileRoutesById {
   '/master-distributor/wallet/transfer': typeof MasterDistributorWalletTransferRoute
   '/retailer/wallet/transfer': typeof RetailerWalletTransferRoute
   '/admin/access/': typeof AdminAccessIndexRoute
+  '/admin/aeps/': typeof AdminAepsIndexRoute
   '/admin/api-settings/': typeof AdminApiSettingsIndexRoute
   '/admin/banking/': typeof AdminBankingIndexRoute
   '/admin/commissions/': typeof AdminCommissionsIndexRoute
@@ -783,6 +817,7 @@ export interface FileRoutesById {
   '/distributor/settings/': typeof DistributorSettingsIndexRoute
   '/distributor/support/': typeof DistributorSupportIndexRoute
   '/distributor/wallet/': typeof DistributorWalletIndexRoute
+  '/master-distributor/aeps/': typeof MasterDistributorAepsIndexRoute
   '/master-distributor/commission/': typeof MasterDistributorCommissionIndexRoute
   '/master-distributor/kyc/': typeof MasterDistributorKycIndexRoute
   '/master-distributor/notifications/': typeof MasterDistributorNotificationsIndexRoute
@@ -794,7 +829,9 @@ export interface FileRoutesById {
   '/master-distributor/wallet/': typeof MasterDistributorWalletIndexRoute
   '/retailer/aeps/': typeof RetailerAepsIndexRoute
   '/retailer/bank/': typeof RetailerBankIndexRoute
+  '/retailer/commission/': typeof RetailerCommissionIndexRoute
   '/retailer/kyc/': typeof RetailerKycIndexRoute
+  '/retailer/members/': typeof RetailerMembersIndexRoute
   '/retailer/transactions/': typeof RetailerTransactionsIndexRoute
   '/retailer/wallet/': typeof RetailerWalletIndexRoute
   '/admin/merchants/add/': typeof AdminMerchantsAddIndexRoute
@@ -851,6 +888,7 @@ export interface FileRouteTypes {
     | '/master-distributor/wallet/transfer'
     | '/retailer/wallet/transfer'
     | '/admin/access/'
+    | '/admin/aeps/'
     | '/admin/api-settings/'
     | '/admin/banking/'
     | '/admin/commissions/'
@@ -871,6 +909,7 @@ export interface FileRouteTypes {
     | '/distributor/settings/'
     | '/distributor/support/'
     | '/distributor/wallet/'
+    | '/master-distributor/aeps/'
     | '/master-distributor/commission/'
     | '/master-distributor/kyc/'
     | '/master-distributor/notifications/'
@@ -882,7 +921,9 @@ export interface FileRouteTypes {
     | '/master-distributor/wallet/'
     | '/retailer/aeps/'
     | '/retailer/bank/'
+    | '/retailer/commission/'
     | '/retailer/kyc/'
+    | '/retailer/members/'
     | '/retailer/transactions/'
     | '/retailer/wallet/'
     | '/admin/merchants/add/'
@@ -937,6 +978,7 @@ export interface FileRouteTypes {
     | '/master-distributor/wallet/transfer'
     | '/retailer/wallet/transfer'
     | '/admin/access'
+    | '/admin/aeps'
     | '/admin/api-settings'
     | '/admin/banking'
     | '/admin/commissions'
@@ -957,6 +999,7 @@ export interface FileRouteTypes {
     | '/distributor/settings'
     | '/distributor/support'
     | '/distributor/wallet'
+    | '/master-distributor/aeps'
     | '/master-distributor/commission'
     | '/master-distributor/kyc'
     | '/master-distributor/notifications'
@@ -968,7 +1011,9 @@ export interface FileRouteTypes {
     | '/master-distributor/wallet'
     | '/retailer/aeps'
     | '/retailer/bank'
+    | '/retailer/commission'
     | '/retailer/kyc'
+    | '/retailer/members'
     | '/retailer/transactions'
     | '/retailer/wallet'
     | '/admin/merchants/add'
@@ -1023,6 +1068,7 @@ export interface FileRouteTypes {
     | '/master-distributor/wallet/transfer'
     | '/retailer/wallet/transfer'
     | '/admin/access/'
+    | '/admin/aeps/'
     | '/admin/api-settings/'
     | '/admin/banking/'
     | '/admin/commissions/'
@@ -1043,6 +1089,7 @@ export interface FileRouteTypes {
     | '/distributor/settings/'
     | '/distributor/support/'
     | '/distributor/wallet/'
+    | '/master-distributor/aeps/'
     | '/master-distributor/commission/'
     | '/master-distributor/kyc/'
     | '/master-distributor/notifications/'
@@ -1054,7 +1101,9 @@ export interface FileRouteTypes {
     | '/master-distributor/wallet/'
     | '/retailer/aeps/'
     | '/retailer/bank/'
+    | '/retailer/commission/'
     | '/retailer/kyc/'
+    | '/retailer/members/'
     | '/retailer/transactions/'
     | '/retailer/wallet/'
     | '/admin/merchants/add/'
@@ -1110,6 +1159,7 @@ export interface RootRouteChildren {
   MasterDistributorWalletTransferRoute: typeof MasterDistributorWalletTransferRoute
   RetailerWalletTransferRoute: typeof RetailerWalletTransferRoute
   AdminAccessIndexRoute: typeof AdminAccessIndexRoute
+  AdminAepsIndexRoute: typeof AdminAepsIndexRoute
   AdminApiSettingsIndexRoute: typeof AdminApiSettingsIndexRoute
   AdminBankingIndexRoute: typeof AdminBankingIndexRoute
   AdminCommissionsIndexRoute: typeof AdminCommissionsIndexRoute
@@ -1130,6 +1180,7 @@ export interface RootRouteChildren {
   DistributorSettingsIndexRoute: typeof DistributorSettingsIndexRoute
   DistributorSupportIndexRoute: typeof DistributorSupportIndexRoute
   DistributorWalletIndexRoute: typeof DistributorWalletIndexRoute
+  MasterDistributorAepsIndexRoute: typeof MasterDistributorAepsIndexRoute
   MasterDistributorCommissionIndexRoute: typeof MasterDistributorCommissionIndexRoute
   MasterDistributorKycIndexRoute: typeof MasterDistributorKycIndexRoute
   MasterDistributorNotificationsIndexRoute: typeof MasterDistributorNotificationsIndexRoute
@@ -1141,7 +1192,9 @@ export interface RootRouteChildren {
   MasterDistributorWalletIndexRoute: typeof MasterDistributorWalletIndexRoute
   RetailerAepsIndexRoute: typeof RetailerAepsIndexRoute
   RetailerBankIndexRoute: typeof RetailerBankIndexRoute
+  RetailerCommissionIndexRoute: typeof RetailerCommissionIndexRoute
   RetailerKycIndexRoute: typeof RetailerKycIndexRoute
+  RetailerMembersIndexRoute: typeof RetailerMembersIndexRoute
   RetailerTransactionsIndexRoute: typeof RetailerTransactionsIndexRoute
   RetailerWalletIndexRoute: typeof RetailerWalletIndexRoute
   AdminMerchantsAddIndexRoute: typeof AdminMerchantsAddIndexRoute
@@ -1342,6 +1395,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/access'
       fullPath: '/admin/access/'
       preLoaderRoute: typeof AdminAccessIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/aeps/': {
+      id: '/admin/aeps/'
+      path: '/admin/aeps'
+      fullPath: '/admin/aeps/'
+      preLoaderRoute: typeof AdminAepsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/api-settings/': {
@@ -1554,6 +1614,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DistributorWalletTransferRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/master-distributor/aeps/': {
+      id: '/master-distributor/aeps/'
+      path: '/master-distributor/aeps'
+      fullPath: '/master-distributor/aeps/'
+      preLoaderRoute: typeof MasterDistributorAepsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/master-distributor/commission/': {
       id: '/master-distributor/commission/'
       path: '/master-distributor/commission'
@@ -1666,11 +1733,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RetailerBankIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/retailer/commission/': {
+      id: '/retailer/commission/'
+      path: '/retailer/commission'
+      fullPath: '/retailer/commission/'
+      preLoaderRoute: typeof RetailerCommissionIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/retailer/kyc/': {
       id: '/retailer/kyc/'
       path: '/retailer/kyc'
       fullPath: '/retailer/kyc/'
       preLoaderRoute: typeof RetailerKycIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/members/': {
+      id: '/retailer/members/'
+      path: '/retailer/members'
+      fullPath: '/retailer/members/'
+      preLoaderRoute: typeof RetailerMembersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/retailer/transactions/': {
@@ -1790,6 +1871,7 @@ const rootRouteChildren: RootRouteChildren = {
   MasterDistributorWalletTransferRoute: MasterDistributorWalletTransferRoute,
   RetailerWalletTransferRoute: RetailerWalletTransferRoute,
   AdminAccessIndexRoute: AdminAccessIndexRoute,
+  AdminAepsIndexRoute: AdminAepsIndexRoute,
   AdminApiSettingsIndexRoute: AdminApiSettingsIndexRoute,
   AdminBankingIndexRoute: AdminBankingIndexRoute,
   AdminCommissionsIndexRoute: AdminCommissionsIndexRoute,
@@ -1810,6 +1892,7 @@ const rootRouteChildren: RootRouteChildren = {
   DistributorSettingsIndexRoute: DistributorSettingsIndexRoute,
   DistributorSupportIndexRoute: DistributorSupportIndexRoute,
   DistributorWalletIndexRoute: DistributorWalletIndexRoute,
+  MasterDistributorAepsIndexRoute: MasterDistributorAepsIndexRoute,
   MasterDistributorCommissionIndexRoute: MasterDistributorCommissionIndexRoute,
   MasterDistributorKycIndexRoute: MasterDistributorKycIndexRoute,
   MasterDistributorNotificationsIndexRoute:
@@ -1823,7 +1906,9 @@ const rootRouteChildren: RootRouteChildren = {
   MasterDistributorWalletIndexRoute: MasterDistributorWalletIndexRoute,
   RetailerAepsIndexRoute: RetailerAepsIndexRoute,
   RetailerBankIndexRoute: RetailerBankIndexRoute,
+  RetailerCommissionIndexRoute: RetailerCommissionIndexRoute,
   RetailerKycIndexRoute: RetailerKycIndexRoute,
+  RetailerMembersIndexRoute: RetailerMembersIndexRoute,
   RetailerTransactionsIndexRoute: RetailerTransactionsIndexRoute,
   RetailerWalletIndexRoute: RetailerWalletIndexRoute,
   AdminMerchantsAddIndexRoute: AdminMerchantsAddIndexRoute,

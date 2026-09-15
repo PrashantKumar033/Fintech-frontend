@@ -4,6 +4,7 @@ import {
   Banknote,
   Building2,
   FileBarChart,
+  Fingerprint,
   Landmark,
   LayoutDashboard,
   Lock,
@@ -36,6 +37,7 @@ export type AdminArea =
   | "transactions"
   | "banking"
   | "kyc"
+  | "aeps"
   | "commissions"
   | "settlements"
   | "access"
@@ -52,6 +54,7 @@ const items: Array<{ area: AdminArea; label: string; to: string; icon: LucideIco
   { area: "transactions", label: "Transactions", to: "/admin/transactions", icon: Banknote },
   { area: "banking", label: "Bank operations", to: "/admin/banking", icon: Landmark },
   { area: "kyc", label: "KYC approvals", to: "/admin/kyc", icon: ShieldCheck },
+  { area: "aeps", label: "AEPS management", to: "/admin/aeps", icon: Fingerprint },
   { area: "commissions", label: "Commission setup", to: "/admin/commissions", icon: Percent },
   { area: "settlements", label: "Wallet & settlements", to: "/admin/settlements", icon: Wallet },
   { area: "access", label: "Roles & access", to: "/admin/access", icon: Building2 },
@@ -65,12 +68,8 @@ const items: Array<{ area: AdminArea; label: string; to: string; icon: LucideIco
 const distributorItems: typeof items = [
   { area: "dashboard", label: "Dashboard", to: "/admin", icon: LayoutDashboard },
   { area: "merchants", label: "Retailers", to: "/admin/retailers", icon: Users },
-  {
-    area: "transactions",
-    label: "AEPS transactions",
-    to: "/admin/aeps/transactions",
-    icon: Banknote,
-  },
+  { area: "aeps", label: "AEPS", to: "/admin/aeps", icon: Fingerprint },
+  { area: "banking", label: "Bank accounts", to: "/admin/profile/bank", icon: Landmark },
   { area: "commissions", label: "Commission & earnings", to: "/admin/commission", icon: Percent },
   { area: "settlements", label: "Wallet", to: "/admin/wallet", icon: Wallet },
   { area: "reports", label: "Reports", to: "/admin/reports", icon: FileBarChart },
@@ -82,12 +81,8 @@ const distributorItems: typeof items = [
 const masterDistributorItems: typeof items = [
   { area: "dashboard", label: "Dashboard", to: "/admin", icon: LayoutDashboard },
   { area: "merchants", label: "Network", to: "/admin/network/distributors", icon: Users },
-  {
-    area: "transactions",
-    label: "Network transactions",
-    to: "/admin/transactions",
-    icon: Banknote,
-  },
+  { area: "aeps", label: "AEPS", to: "/admin/aeps", icon: Fingerprint },
+  { area: "banking", label: "Bank accounts", to: "/admin/profile/bank", icon: Landmark },
   { area: "commissions", label: "Commission & earnings", to: "/admin/commission", icon: Percent },
   { area: "settlements", label: "Wallet & funds", to: "/admin/wallet", icon: Wallet },
   { area: "reports", label: "Network reports", to: "/admin/reports", icon: FileBarChart },
@@ -104,6 +99,7 @@ const permissionArea: Record<AdminArea, UiArea> = {
   transactions: "transactions",
   banking: "banking",
   kyc: "kyc",
+  aeps: "aeps",
   commissions: "commissions",
   settlements: "settlements",
   access: "access",
@@ -178,7 +174,10 @@ export function AdminSidebar({
           const uiArea =
             area === "sms" && (role === "DISTRIBUTOR" || role === "MASTER_DISTRIBUTOR")
               ? "support"
-              : permissionArea[area];
+              : area === "settlements" &&
+                  (role === "DISTRIBUTOR" || role === "MASTER_DISTRIBUTOR")
+                ? "wallet"
+                : permissionArea[area];
           const permissionDenied = !canAccessUiArea(uiArea, {
             role: role || actor?.role,
             access: actor?.kind === "IDENTITY_ADMIN" ? access : null,

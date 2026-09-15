@@ -14,6 +14,7 @@ import {
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
+import { ReadableTransactionDetails } from "@/components/readable-transaction-details";
 
 type View = "transactions" | "income" | "reversals";
 
@@ -339,18 +340,7 @@ export function AdminTransactionOperations() {
               <X size={18} />
             </button>
           </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            {Object.entries(detail)
-              .filter(([, value]) => value !== null && typeof value !== "object")
-              .map(([key, value]) => (
-                <div key={key} className="rounded-lg bg-muted p-2">
-                  <p className="text-[9px] uppercase text-muted-foreground">
-                    {key.replace(/([A-Z])/g, " $1")}
-                  </p>
-                  <p className="break-all text-xs font-bold">{String(value)}</p>
-                </div>
-              ))}
-          </div>
+          <ReadableTransactionDetails detail={detail} />
         </div>
       )}
 

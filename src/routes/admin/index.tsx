@@ -126,8 +126,11 @@ export function AdminDashboard() {
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
+  const degradedServices = summary?.degradedServices ?? [];
+  const metricUnavailable = (key: (typeof metrics)[number]["key"]) =>
+    degradedServices.includes(key === "members" ? "auth" : key === "banks" ? "bank" : key);
   const metricValue = (key: (typeof metrics)[number]["key"]) => {
-    if (!summary) return "—";
+    if (!summary || metricUnavailable(key)) return "—";
     if (key === "members") return String(summary.members.total);
     if (key === "kyc") return String(summary.kyc.pendingOrInProgress);
     if (key === "aeps") return String(summary.aeps.active);
@@ -157,10 +160,20 @@ export function AdminDashboard() {
           <div className="grid grid-cols-2 gap-3 sm:flex">
             <HeroStat
               label="Active members"
-              value={summary ? String(summary.members.active) : "—"}
+              value={
+                summary && !degradedServices.includes("auth") ? String(summary.members.active) : "—"
+              }
             />
-            <HeroStat label="KYC approved" value={summary ? String(summary.kyc.approved) : "—"} />
-            <HeroStat label="Platform status" value="Online" />
+            <HeroStat
+              label="KYC approved"
+              value={
+                summary && !degradedServices.includes("kyc") ? String(summary.kyc.approved) : "—"
+              }
+            />
+            <HeroStat
+              label="Platform status"
+              value={degradedServices.length ? "Degraded" : "Online"}
+            />
           </div>
         </div>
       </section>
@@ -177,6 +190,21 @@ export function AdminDashboard() {
           </button>
         </div>
       )}
+      {!summaryError && degradedServices.length > 0 && (
+        <div className="mt-5 flex items-center justify-between gap-3 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800">
+          <span>
+            Live counters are temporarily unavailable for: {degradedServices.join(", ")}. Available
+            services are still shown.
+          </span>
+          <button
+            type="button"
+            onClick={() => void loadSummary()}
+            className="rounded-lg border border-amber-200 px-3 py-2"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map(({ key, label, detail, icon: Icon, tone }) => (
           <AdminPanel key={label} className="min-h-44">
@@ -184,8 +212,14 @@ export function AdminDashboard() {
               <span className={`grid h-11 w-11 place-items-center rounded-xl ${tone}`}>
                 <Icon size={21} />
               </span>
-              <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-extrabold text-emerald-700">
-                LIVE READY
+              <span
+                className={`rounded-full px-2 py-1 text-[10px] font-extrabold ${
+                  metricUnavailable(key)
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-emerald-50 text-emerald-700"
+                }`}
+              >
+                {metricUnavailable(key) ? "TEMPORARILY UNAVAILABLE" : "LIVE READY"}
               </span>
             </div>
             <p className="mt-5 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">

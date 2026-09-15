@@ -53,8 +53,8 @@ function KycPage() {
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(""),
     [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  async function load(token: string) {
-    setLoading(true);
+  async function load(token: string, background = false) {
+    if (!background) setLoading(true);
     try {
       const profile = await complianceApi.getKyc(token);
       setKyc(profile);
@@ -65,7 +65,7 @@ function KycPage() {
         setBundle(null);
       } else setMessage({ ok: false, text: `KYC service: ${complianceMessage(error)}` });
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }
   useEffect(() => {
@@ -101,7 +101,7 @@ function KycPage() {
     setMessage(null);
     try {
       await task();
-      await load(activeSession.accessToken);
+      await load(activeSession.accessToken, true);
       setMessage({ ok: true, text });
     } catch (e) {
       setMessage({ ok: false, text: complianceMessage(e) });

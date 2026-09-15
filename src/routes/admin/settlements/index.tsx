@@ -1,4 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AdminLayout, ServiceState } from "@/components/admin/admin-layout";
+import { AdminLayout } from "@/components/admin/admin-layout";
+import { AdminTransactionOperations } from "@/components/admin/admin-transaction-operations";
 export const Route = createFileRoute("/admin/settlements/")({ component: Settlements });
-function Settlements() { return <AdminLayout active="settlements" eyebrow="Wallet operations" title="Settlements" description="Settlement operations have their own scalable module boundary."><ServiceState title="Settlement workspace" description="Settlement batches and controls will be connected to the transaction and wallet admin contracts when those endpoints are exposed." status="Backend contract pending" /></AdminLayout>; }
+function Settlements() {
+  return (
+    <AdminLayout
+      active="settlements"
+      eyebrow="Wallet operations"
+      title="Wallet & settlements"
+      description="Monitor transaction settlement, reconcile provider income and process authorized reversals."
+    >
+      <AdminTransactionOperations />
+    </AdminLayout>
+  );
+}

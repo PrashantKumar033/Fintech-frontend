@@ -1,6 +1,5 @@
 import { clearSession, getSession, logout as identityLogout, refreshSession } from "@/lib/auth-api";
 import { getDeviceId } from "@/lib/device-id";
-import { isManagementRole } from "@/lib/role-hierarchy";
 import type { ProviderTransaction } from "@/lib/operations-api";
 
 const defaultUrl =
@@ -294,6 +293,7 @@ export type AdminDashboardSummary = {
   kyc: { approved: number; rejected: number; notStarted: number; pendingOrInProgress: number };
   aeps: { active: number; blocked: number; notStarted: number; other: number };
   bankAccounts: { total: number; active: number; pending: number; verified: number };
+  degradedServices?: Array<"auth" | "kyc" | "aeps" | "bank">;
   generatedAt: string;
 };
 
@@ -333,10 +333,59 @@ export type AdminMemberPage = {
 export type AdminMemberDetail = {
   identity: AdminMember & Record<string, unknown>;
   kyc?: Record<string, unknown> | null;
-  bankAccounts?: unknown;
+  bankAccounts?: AdminBankAccount[] | null;
   aeps?: Record<string, unknown> | null;
-  wallets?: unknown;
+  wallets?: {
+    userId?: string;
+    wallets?: { main?: number; aeps?: number; profit?: number };
+  } | null;
   partialErrors?: string[];
+};
+
+export type AdminWalletLedgerEntry = {
+  id: string;
+  referenceId: string;
+  walletType: string;
+  serviceType: string;
+  type: string;
+  amount: string;
+  openingBalance: string;
+  closingBalance: string;
+  status: string;
+  description?: string | null;
+  externalReference?: string | null;
+  sequence: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminWalletLedgerPage = {
+  identityId: string;
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  data: AdminWalletLedgerEntry[];
+};
+
+export type AdminAepsProviderService = {
+  operation: string;
+  name: string;
+  isEnabled: boolean;
+  reason?: string | null;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+};
+
+export type AdminAepsProviderStatus = {
+  providers: Array<{
+    provider: string;
+    status: "ENABLED" | "PARTIALLY_DISABLED" | "DISABLED";
+    enabledServices: number;
+    totalServices: number;
+    services: AdminAepsProviderService[];
+  }>;
+  generatedAt: string;
 };
 
 export type AdminBankAccount = {
@@ -367,6 +416,82 @@ export type AdminBankAccountDetail = AdminBankAccount & {
 export type AdminBankAccountPage = {
   data: AdminBankAccount[];
   pagination: { page: number; limit: number; total: number; totalPages: number };
+};
+
+export type ReconciliationAction =
+  "RECONCILE_DEBIT" | "CONFIRM_PROVIDER_SUCCESS" | "CONFIRM_PROVIDER_FAILED" | "RETRY_REVERSAL";
+
+export type AepsTwoFactorFeeConfiguration = {
+  provider: string;
+  configured: boolean;
+  feeAmount: string | number;
+  version: number;
+  updatedByIdentityId?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type AepsTwoFactorReconciliationItem = {
+  id: string;
+  status: string;
+  feeAmount?: string | number | null;
+  providerMerchantRefId?: string | null;
+  providerTxnRefId?: string | null;
+  providerStatusCode?: string | null;
+  providerStatusMessage?: string | null;
+  debitReferenceId?: string | null;
+  reversalReferenceId?: string | null;
+  failureCode?: string | null;
+  failureReason?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  day?: {
+    businessDate?: string;
+    status?: string;
+    profile?: {
+      identityId?: string;
+      provider?: string;
+      providerMerchantId?: string | null;
+    };
+  } | null;
+};
+
+export type AepsTwoFactorReconciliationPage = {
+  items: AepsTwoFactorReconciliationItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+export type BankVerificationReconciliationItem = {
+  id: string;
+  identityId?: string | null;
+  provider: string;
+  clientRefId: string;
+  status: string;
+  accountNumberLast4?: string | null;
+  ifsc?: string | null;
+  accountHolderName?: string | null;
+  feeAmount?: string | number | null;
+  feeStatus?: string | null;
+  debitReferenceId?: string | null;
+  reversalReferenceId?: string | null;
+  providerTxnId?: string | null;
+  providerStatusCode?: string | null;
+  providerStatusMessage?: string | null;
+  failureCode?: string | null;
+  failureReason?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type BankVerificationReconciliationPage = {
+  items: BankVerificationReconciliationItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 };
 
 export type CommissionRuleType = "FIXED" | "PERCENTAGE";
@@ -513,7 +638,15 @@ async function parse<T>(response: Response): Promise<T> {
     );
   return data as T;
 }
-async function refresh(): Promise<AdminSession> {
+async function performAdminRefresh(rejectedAccessToken?: string): Promise<AdminSession> {
+  const latestSession = getAdminSession();
+  if (
+    rejectedAccessToken &&
+    latestSession?.accessToken &&
+    latestSession.accessToken !== rejectedAccessToken
+  ) {
+    return latestSession;
+  }
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = fetch(`${API_URL}/super-admin/auth/refresh`, {
     method: "POST",
@@ -525,14 +658,24 @@ async function refresh(): Promise<AdminSession> {
       storeSession(session);
       return session;
     })
-    .catch((error) => {
-      clearAdminSession();
+    .catch((error: unknown) => {
+      if (error instanceof AdminApiError && (error.status === 401 || error.status === 403)) {
+        clearAdminSession();
+      }
       throw error;
     })
     .finally(() => {
       refreshInFlight = null;
     });
   return refreshInFlight;
+}
+async function refresh(rejectedAccessToken?: string): Promise<AdminSession> {
+  if (typeof navigator !== "undefined" && navigator.locks) {
+    return navigator.locks.request("nexus-super-admin-session-refresh", () =>
+      performAdminRefresh(rejectedAccessToken),
+    );
+  }
+  return performAdminRefresh(rejectedAccessToken);
 }
 export function getAdminActor() {
   const superSession = getAdminSession();
@@ -545,7 +688,10 @@ export function getAdminActor() {
     };
   const identitySession = getSession();
   const role = identitySession?.identity.role?.trim().toUpperCase();
-  if (identitySession && (role === "SUPER_ADMIN" || isManagementRole(role)))
+  // PermissionGuard is the source of truth for every /admin operation. Allow an
+  // identity carrying an explicitly assigned admin permission to call that
+  // operation even when its business role is not a management role.
+  if (identitySession && role)
     return {
       kind: "IDENTITY_ADMIN" as const,
       accessToken: identitySession.accessToken,
@@ -574,8 +720,8 @@ async function call<T>(path: string, init: RequestInit = {}, retry = true): Prom
     throw new AdminApiError("Cannot connect to the API Gateway on port 8000.", 0);
   }
   if (response.status === 401 && retry) {
-    if (actor?.kind === "SUPER_ADMIN") await refresh();
-    else await refreshSession();
+    if (actor?.kind === "SUPER_ADMIN") await refresh(token);
+    else await refreshSession(token);
     return call<T>(path, init, false);
   }
   return parse<T>(response);
@@ -664,6 +810,59 @@ export function updateAdminOnboarding(nextStep: string | null, onboardingStatus?
 }
 
 export const adminApi = {
+  superAdminAeps: {
+    twoFactorFee: (provider: string) =>
+      call<AepsTwoFactorFeeConfiguration>(
+        `/super-admin/aeps/2fa/fees/${encodeURIComponent(provider)}`,
+        { cache: "no-store" },
+      ),
+    updateTwoFactorFee: (provider: string, feeAmount: number, reason: string) =>
+      call<AepsTwoFactorFeeConfiguration>(
+        `/super-admin/aeps/2fa/fees/${encodeURIComponent(provider)}`,
+        json("PATCH", { feeAmount, reason }),
+      ),
+    twoFactorReconciliation: (query = "") =>
+      call<AepsTwoFactorReconciliationPage>(
+        `/super-admin/aeps/2fa/reconciliation${query ? `?${query}` : ""}`,
+        { cache: "no-store" },
+      ),
+    resolveTwoFactor: (
+      attemptId: string,
+      body: {
+        action: ReconciliationAction;
+        reason: string;
+        providerTxnRefId?: string;
+        providerStatusCode?: string;
+        providerStatusMessage?: string;
+      },
+    ) =>
+      call(
+        `/super-admin/aeps/2fa/reconciliation/${encodeURIComponent(attemptId)}/resolve`,
+        json("POST", body),
+      ),
+  },
+  bankVerificationReconciliation: {
+    list: (query = "") =>
+      call<BankVerificationReconciliationPage>(
+        `/super-admin/bank-verifications/reconciliation${query ? `?${query}` : ""}`,
+        { cache: "no-store" },
+      ),
+    resolve: (
+      attemptId: string,
+      body: {
+        action: ReconciliationAction;
+        reason: string;
+        providerTxnId?: string;
+        providerStatusCode?: string;
+        providerStatusMessage?: string;
+        accountHolderName?: string;
+      },
+    ) =>
+      call(
+        `/super-admin/bank-verifications/reconciliation/${encodeURIComponent(attemptId)}/resolve`,
+        json("POST", body),
+      ),
+  },
   operations: {
     dashboardSummary: () =>
       call<AdminDashboardSummary>("/admin/dashboard/summary", { cache: "no-store" }),
@@ -688,6 +887,43 @@ export const adminApi = {
       call<AdminBankAccountDetail>(`/admin/bank-accounts/${encodeURIComponent(bankId)}`, {
         cache: "no-store",
       }),
+    updateAepsMerchantStatus: (identityId: string, status: string, reason?: string) =>
+      call<Record<string, unknown>>(
+        `/admin/aeps/merchants/${encodeURIComponent(identityId)}/status`,
+        json("PATCH", { status, ...(reason?.trim() ? { reason: reason.trim() } : {}) }),
+      ),
+    syncAepsMerchantStatus: (
+      identityId: string,
+      body: {
+        mode: "RESET_REGISTRATION" | "LINK_PROVIDER";
+        providerMerchantId?: string;
+        reason: string;
+      },
+    ) =>
+      call<Record<string, unknown>>(
+        `/admin/aeps/merchants/${encodeURIComponent(identityId)}/sync-status`,
+        json("POST", body),
+      ),
+    walletLedger: (identityId: string, query = "") =>
+      call<AdminWalletLedgerPage>(
+        `/admin/wallets/${encodeURIComponent(identityId)}/ledger${query ? `?${query}` : ""}`,
+        { cache: "no-store" },
+      ),
+    aepsProviderStatus: () =>
+      call<AdminAepsProviderStatus>("/admin/aeps/providers/status", { cache: "no-store" }),
+    updateAepsProviderServiceStatus: (
+      provider: string,
+      operation: string,
+      isEnabled: boolean,
+      reason?: string,
+    ) =>
+      call<Record<string, unknown>>(
+        `/admin/aeps/providers/${encodeURIComponent(provider)}/services/${encodeURIComponent(operation)}/status`,
+        json("PATCH", {
+          isEnabled,
+          ...(reason?.trim() ? { reason: reason.trim() } : {}),
+        }),
+      ),
   },
   roles: {
     list: () => call<unknown>("/roles"),

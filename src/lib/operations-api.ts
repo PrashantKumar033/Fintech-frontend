@@ -44,6 +44,8 @@ export type ProviderTransactionStatus =
 
 export type ProviderTransaction = {
   id: string;
+  identityId?: string;
+  networkDepth?: number;
   referenceId: string;
   serviceType: string;
   provider: string;
@@ -213,6 +215,28 @@ export const operationsApi = {
       token,
     ),
 
+  networkTransactions: (
+    token: string,
+    filters: {
+      page?: number;
+      limit?: number;
+      operation?: ProviderOperation;
+      status?: ProviderTransactionStatus;
+      provider?: string;
+    } = {},
+  ) =>
+    authenticatedRequest<ProviderTransactionPage>(
+      `/aeps/network-transactions?${queryString({
+        page: filters.page ?? 1,
+        limit: filters.limit ?? 20,
+        operation: filters.operation,
+        status: filters.status,
+        provider: filters.provider,
+      })}`,
+      {},
+      token,
+    ),
+
   transaction: (token: string, referenceId: string) =>
     authenticatedRequest<ProviderTransaction>(
       `/aeps/transactions/${encodeURIComponent(referenceId)}`,
@@ -223,6 +247,20 @@ export const operationsApi = {
   receipt: (token: string, referenceId: string) =>
     authenticatedRequest<ProviderTransactionReceipt>(
       `/aeps/transactions/${encodeURIComponent(referenceId)}/receipt`,
+      {},
+      token,
+    ),
+
+  networkTransaction: (token: string, referenceId: string) =>
+    authenticatedRequest<ProviderTransaction>(
+      `/aeps/network-transactions/${encodeURIComponent(referenceId)}`,
+      {},
+      token,
+    ),
+
+  networkReceipt: (token: string, referenceId: string) =>
+    authenticatedRequest<ProviderTransactionReceipt>(
+      `/aeps/network-transactions/${encodeURIComponent(referenceId)}/receipt`,
       {},
       token,
     ),

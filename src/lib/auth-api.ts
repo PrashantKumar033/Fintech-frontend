@@ -169,7 +169,15 @@ async function request<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-export async function refreshSession(): Promise<Session> {
+async function performSessionRefresh(rejectedAccessToken?: string): Promise<Session> {
+  const latestSession = getSession();
+  if (
+    rejectedAccessToken &&
+    latestSession?.accessToken &&
+    latestSession.accessToken !== rejectedAccessToken
+  ) {
+    return latestSession;
+  }
   if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
@@ -186,8 +194,13 @@ export async function refreshSession(): Promise<Session> {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      clearSession();
-      redirectToLogin();
+      // Only an authentication rejection proves that the refresh session is
+      // unusable. A timeout, rate limit, or temporary backend error must not
+      // sign the user out.
+      if (response.status === 401 || response.status === 403) {
+        clearSession();
+        redirectToLogin();
+      }
       throw new ApiError(
         extractApiMessage(data) || "Your session has expired. Please sign in again.",
         response.status,
@@ -196,8 +209,6 @@ export async function refreshSession(): Promise<Session> {
 
     const session = data as Session;
     if (!session.accessToken || !session.identity) {
-      clearSession();
-      redirectToLogin();
       throw new ApiError("The server returned an invalid refreshed session.", 500);
     }
     const existing = getSession();
@@ -214,6 +225,18 @@ export async function refreshSession(): Promise<Session> {
   });
 
   return refreshPromise;
+}
+
+export async function refreshSession(rejectedAccessToken?: string): Promise<Session> {
+  // Refresh tokens rotate after every use. Browser Locks serialize refreshes
+  // across tabs; after waiting, the losing tab reuses the access token saved
+  // by the winning tab instead of replaying the old refresh cookie.
+  if (typeof navigator !== "undefined" && navigator.locks) {
+    return navigator.locks.request("nexus-identity-session-refresh", () =>
+      performSessionRefresh(rejectedAccessToken),
+    );
+  }
+  return performSessionRefresh(rejectedAccessToken);
 }
 
 export async function authenticatedRequest<T>(
@@ -241,7 +264,7 @@ export async function authenticatedRequest<T>(
     if (!currentToken) throw new ApiError("Your session has expired. Please sign in again.", 401);
     response = await send(currentToken);
     if (response.status === 401) {
-      const refreshed = await refreshSession();
+      const refreshed = await refreshSession(currentToken);
       response = await send(refreshed.accessToken);
     }
   } catch (error) {

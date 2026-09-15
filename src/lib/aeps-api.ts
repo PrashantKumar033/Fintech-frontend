@@ -133,7 +133,8 @@ export const aepsApi = {
   twoFactor: (
     t: string,
     body: { aadhaarNumber: string; deviceType: string; pidData: string; lat: string; long: string },
-  ) => post<TransactionResult>(t, "/aeps/vimopay/onboarding/2fa", body),
+    idempotencyKey: string,
+  ) => post<TransactionResult>(t, "/aeps/vimopay/onboarding/2fa", body, idempotencyKey),
   transactionOtp: (t: string, operation: "CW" | "AP", body: Record<string, string>) =>
     post<TransactionOtpResult>(
       t,
@@ -164,7 +165,7 @@ export function newIdempotencyKey(): string {
 }
 
 // Mock PID is opt-in and development-only. Production always calls the configured RD service.
-const USE_MOCK_FINGERPRINT =
+export const USE_MOCK_FINGERPRINT =
   import.meta.env.DEV && import.meta.env.VITE_AEPS_USE_MOCK_PID === "true";
 
 export async function capturePid(rdUrl: string, otp?: string): Promise<string> {

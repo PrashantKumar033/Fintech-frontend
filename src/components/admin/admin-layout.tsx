@@ -84,6 +84,7 @@ export function AdminLayout({
     transactions: "transactions",
     banking: "banking",
     kyc: "kyc",
+    aeps: "aeps",
     commissions: "commissions",
     settlements: "settlements",
     access: "access",
@@ -149,7 +150,13 @@ export function AdminLayout({
             </div>
             <div className={managementSectionTabs(identity?.role, active).length ? "" : "mt-7"}>
               <PermissionBoundary
-                area={permissionArea[active]}
+                area={
+                  active === "settlements" &&
+                  (identity?.role === "DISTRIBUTOR" ||
+                    identity?.role === "MASTER_DISTRIBUTOR")
+                    ? "wallet"
+                    : permissionArea[active]
+                }
                 role={identity?.role || actor?.role}
                 access={actor?.kind === "IDENTITY_ADMIN" ? access : null}
                 dedicatedSuperAdmin={actor?.kind === "SUPER_ADMIN"}
