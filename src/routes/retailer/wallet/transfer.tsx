@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { BusinessPage } from "@/components/business-page";
 import { ActionPermissionNotice } from "@/components/action-permission-notice";
-import { ApiError, getSession } from "@/lib/auth-api";
+import { getSession } from "@/lib/auth-api";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import {
@@ -22,9 +22,10 @@ import {
   operationsApi,
   operationsMessage,
   type WalletBalances,
+  type WalletTransferOtpChallenge,
   type WalletTransferResult,
 } from "@/lib/operations-api";
-import { credentialsPending, normalizeRole, signedInHome } from "@/lib/role-hierarchy";
+import { credentialsPending, resolveWorkspaceRole, signedInHome } from "@/lib/role-hierarchy";
 
 export const Route = createFileRoute("/retailer/wallet/transfer")({
   head: () => ({ meta: [{ title: "Transfer Fund — Retailer | UMOBIPAY" }] }),
@@ -66,9 +67,11 @@ function RetailerWalletTransferPage() {
   const [review, setReview] = useState<TransferDraft | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [result, setResult] = useState<WalletTransferResult | null>(null);
+  const [challenge, setChallenge] = useState<WalletTransferOtpChallenge | null>(null);
+  const [otp, setOtp] = useState("");
   const idempotencyKeyRef = useRef<string | null>(null);
 
-  const mainBalance = Number(balances?.wallets.main ?? 0);
+  const mainBalance = Number(balances?.wallets.mainAvailable ?? balances?.wallets.main ?? 0);
   const numericAmount = Number(amount);
   const receiver = receiverLoginId.trim().toUpperCase();
   const selfLoginId = session?.identity.loginId?.trim().toUpperCase() ?? "";
@@ -96,7 +99,7 @@ function RetailerWalletTransferPage() {
       return;
     }
 
-    if (normalizeRole(session.identity.role) !== "RETAILER") {
+    if (resolveWorkspaceRole(session.identity.role) !== "RETAILER") {
       window.location.replace(signedInHome(session));
       return;
     }
@@ -115,6 +118,8 @@ function RetailerWalletTransferPage() {
     setAmount("");
     setReview(null);
     setResult(null);
+    setChallenge(null);
+    setOtp("");
     setNotice(null);
     idempotencyKeyRef.current = null;
   }
@@ -160,13 +165,15 @@ function RetailerWalletTransferPage() {
     event.preventDefault();
     setNotice(null);
     setResult(null);
+    setChallenge(null);
+    setOtp("");
     const draft = validateDraft();
     if (!draft) return;
     idempotencyKeyRef.current = null;
     setReview(draft);
   }
 
-  async function confirmTransfer() {
+  async function requestTransferOtp(resend = false) {
     if (!session || !review || submitting) return;
     if (!canTransfer) {
       setNotice({ ok: false, text: `Permission ${UI_PERMISSION.WALLET_TRANSFER} is required.` });
@@ -176,34 +183,55 @@ function RetailerWalletTransferPage() {
     setSubmitting(true);
     setNotice(null);
 
-    if (!idempotencyKeyRef.current) {
+    if (resend) {
+      idempotencyKeyRef.current = newTransferIdempotencyKey();
+      setChallenge(null);
+      setOtp("");
+    } else if (!idempotencyKeyRef.current) {
       idempotencyKeyRef.current = newTransferIdempotencyKey();
     }
 
     try {
-      const response = await operationsApi.transfer(
+      const response = await operationsApi.requestTransferOtp(
         session.accessToken,
         { receiverLoginId: review.receiverLoginId, amount: review.amount },
         idempotencyKeyRef.current,
       );
+      setChallenge(response);
+      setOtp(response.devOtp || "");
+      setNotice({
+        ok: true,
+        text: `OTP sent to ${response.phoneNumber}. Verify it to complete the transfer.`,
+      });
+    } catch (error) {
+      setNotice({ ok: false, text: operationsMessage(error) });
+      idempotencyKeyRef.current = null;
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
+  async function confirmTransfer() {
+    if (!session || !challenge || !/^\d{6}$/.test(otp) || submitting) return;
+    setSubmitting(true);
+    setNotice(null);
+    try {
+      const response = await operationsApi.confirmTransferOtp(
+        session.accessToken,
+        challenge.challengeId,
+        otp,
+      );
       setResult(response);
       setReview(null);
+      setChallenge(null);
+      setOtp("");
       setReceiverLoginId("");
       setAmount("");
       idempotencyKeyRef.current = null;
-      setNotice({
-        ok: true,
-        text: response.duplicate
-          ? "This transfer was already completed earlier. No second debit was made."
-          : "Transfer completed successfully.",
-      });
+      setNotice({ ok: true, text: "Transfer completed successfully." });
       await loadBalance();
     } catch (error) {
       setNotice({ ok: false, text: operationsMessage(error) });
-      const shouldReuseKey =
-        error instanceof ApiError && (error.status === 0 || error.status >= 500);
-      if (!shouldReuseKey) idempotencyKeyRef.current = null;
     } finally {
       setSubmitting(false);
     }
@@ -407,11 +435,45 @@ function RetailerWalletTransferPage() {
                   </div>
                 </dl>
 
+                {challenge ? (
+                  <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm font-bold text-amber-900">
+                      Enter the 6-digit OTP sent to {challenge.phoneNumber}.
+                    </p>
+                    {challenge.devOtp ? (
+                      <p className="mt-2 text-sm text-amber-900">
+                        Development OTP:{" "}
+                        <strong className="tracking-[.25em]">{challenge.devOtp}</strong>
+                      </p>
+                    ) : null}
+                    <input
+                      value={otp}
+                      onChange={(event) =>
+                        setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
+                      }
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="Enter OTP"
+                      className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-4 py-3 text-center text-lg font-black tracking-[.3em] outline-none focus:border-primary"
+                    />
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => void requestTransferOtp(true)}
+                      className="mt-3 w-full rounded-xl border border-amber-400 bg-white px-4 py-2.5 text-sm font-extrabold text-amber-900 disabled:opacity-60"
+                    >
+                      {submitting ? "Sending OTP..." : "Resend OTP"}
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   <button
                     type="button"
                     onClick={() => {
                       setReview(null);
+                      setChallenge(null);
+                      setOtp("");
                       idempotencyKeyRef.current = null;
                     }}
                     disabled={!canTransfer || submitting}
@@ -421,8 +483,10 @@ function RetailerWalletTransferPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void confirmTransfer()}
-                    disabled={!canTransfer || submitting}
+                    onClick={() => void (challenge ? confirmTransfer() : requestTransferOtp())}
+                    disabled={
+                      !canTransfer || submitting || Boolean(challenge && !/^\d{6}$/.test(otp))
+                    }
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-secondary px-5 py-3.5 text-sm font-extrabold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {submitting ? (
@@ -433,7 +497,7 @@ function RetailerWalletTransferPage() {
                     ) : (
                       <>
                         <ShieldCheck size={17} />
-                        Confirm & transfer
+                        {challenge ? "Verify OTP & transfer" : "Send transfer OTP"}
                       </>
                     )}
                   </button>

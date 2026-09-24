@@ -7,13 +7,11 @@ import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import {
   adminApi,
-  asArray,
   getAdminActor,
   type AdminEntity,
   type CreateManagedAccountInput,
   type CreateManagedAccountResult,
 } from "@/lib/admin-api";
-import { registrationTargets, type PlatformRole } from "@/lib/role-hierarchy";
 
 export const Route = createFileRoute("/admin/merchants/")({ component: MemberManagementOverview });
 const emptyForm: CreateManagedAccountInput = {
@@ -100,28 +98,30 @@ export function CreateMemberPage() {
   const { can } = useEffectiveAccess();
   const permissionAllowsCreate =
     actor?.kind === "SUPER_ADMIN" || can(UI_PERMISSION.ACCOUNT_CREATE, ["ADMIN"]);
-  const allowedRoles = registrationTargets(actor?.role);
+  const [allowedRoles, setAllowedRoles] = useState<AdminEntity[]>([]);
   const canCreate = permissionAllowsCreate && allowedRoles.length > 0;
   const [form, setForm] = useState<CreateManagedAccountInput>(emptyForm);
-  const [roles, setRoles] = useState<AdminEntity[]>([]);
   const [result, setResult] = useState<CreateManagedAccountResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    setForm((current) => ({ ...current, role: allowedRoles[0] || "RETAILER" }));
-    adminApi.roles
-      .list()
-      .then((value) =>
-        setRoles(
-          asArray<AdminEntity>(value).filter(
-            (role) =>
-              role.isActive &&
-              allowedRoles.includes(role.name.toUpperCase().replace(/[ -]+/g, "_") as PlatformRole),
-          ),
-        ),
-      )
-      .catch(() => undefined);
+    let active = true;
+    adminApi
+      .registerableRoles()
+      .then((value) => {
+        if (!active) return;
+        const next = value.filter((role) => role.isActive);
+        setAllowedRoles(next);
+        setForm((current) => ({ ...current, role: next[0]?.name || "" }));
+      })
+      .catch((reason) => {
+        if (active)
+          setError(reason instanceof Error ? reason.message : "Could not load registerable roles.");
+      });
+    return () => {
+      active = false;
+    };
   }, [actor?.role]);
   function update(field: keyof CreateManagedAccountInput, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -133,7 +133,7 @@ export function CreateMemberPage() {
     if (!permissionAllowsCreate)
       return setError(`Permission ${UI_PERMISSION.ACCOUNT_CREATE} is required.`);
     if (!canCreate) return setError("Your role cannot create another managed account.");
-    if (!allowedRoles.includes(form.role as PlatformRole))
+    if (!allowedRoles.some((role) => role.name === form.role))
       return setError("You cannot create the selected role.");
     if (!/^[a-z0-9._-]{4,50}$/.test(form.username))
       return setError(
@@ -145,7 +145,7 @@ export function CreateMemberPage() {
     try {
       const created = await adminApi.createAccount(clean(form));
       setResult(created);
-      setForm(emptyForm);
+      setForm({ ...emptyForm, role: allowedRoles[0]?.name || "" });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Account creation failed.");
     } finally {
@@ -189,17 +189,11 @@ export function CreateMemberPage() {
                   value={form.role}
                   onChange={(e) => update("role", e.target.value)}
                 >
-                  {roles.length
-                    ? roles.map((role) => (
-                        <option key={role.id} value={role.name}>
-                          {role.name.replaceAll("_", " ")}
-                        </option>
-                      ))
-                    : allowedRoles.map((role) => (
-                        <option key={role} value={role}>
-                          {role.replaceAll("_", " ")}
-                        </option>
-                      ))}
+                  {allowedRoles.map((role) => (
+                    <option key={role.id} value={role.name}>
+                      {role.name.replaceAll("_", " ")}
+                    </option>
+                  ))}
                 </select>
               </Field>
               <Field label="Full name">

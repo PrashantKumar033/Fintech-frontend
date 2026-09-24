@@ -6,7 +6,12 @@ import {
   type EffectiveAccess,
 } from "@/lib/auth-api";
 import type { PlatformRole } from "@/lib/role-hierarchy";
-import { canUsePermission } from "@/lib/ui-permissions";
+import {
+  canAccessUiArea,
+  canUseAllPermissions,
+  canUsePermission,
+  type UiArea,
+} from "@/lib/ui-permissions";
 
 const accessRefreshes = new Map<string, Promise<EffectiveAccess>>();
 
@@ -72,6 +77,15 @@ export function useEffectiveAccess() {
       canUsePermission(codes, { role: currentRole, access, fallbackRoles }),
     [access, currentRole],
   );
+  const canAll = useCallback(
+    (codes: readonly string[], fallbackRoles: readonly PlatformRole[] = []) =>
+      canUseAllPermissions(codes, { role: currentRole, access, fallbackRoles }),
+    [access, currentRole],
+  );
+  const canArea = useCallback(
+    (area: UiArea) => canAccessUiArea(area, { role: currentRole, access }),
+    [access, currentRole],
+  );
 
-  return { access, loading, can, refresh };
+  return { access, loading, can, canAll, canArea, refresh };
 }

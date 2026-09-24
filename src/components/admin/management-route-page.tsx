@@ -3,8 +3,9 @@ import { useLocation } from "@tanstack/react-router";
 import { getSession } from "@/lib/auth-api";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { PermissionBoundary } from "@/components/permission-boundary";
-import { normalizeRole, signedInHome, type PlatformRole } from "@/lib/role-hierarchy";
+import { resolveWorkspaceRole, signedInHome, type PlatformRole } from "@/lib/role-hierarchy";
 import type { UiArea } from "@/lib/ui-permissions";
+import { navigationForRole } from "@/lib/app-navigation";
 import { AdminDashboard } from "@/routes/admin";
 import { AdminIdentitySetup } from "@/routes/admin/account-setup";
 import { AdminProfilePage } from "@/components/admin/admin-profile-page";
@@ -77,15 +78,20 @@ export function ManagementRoutePage({
   const { access } = useEffectiveAccess();
   const suffix = pathname.slice(base.length).replace(/^\/+|\/+$/g, "");
   const Page = pages[suffix] || AdminDashboard;
-  const area = pageAreas[suffix] || "dashboard";
+  const area =
+    navigationForRole(role).find(
+      (item) => pathname === item.to || pathname.startsWith(`${item.to}/`),
+    )?.area ||
+    pageAreas[suffix] ||
+    "dashboard";
 
   useEffect(() => {
     if (!session) return window.location.replace("/login");
-    if (normalizeRole(session.identity.role) !== role)
+    if (resolveWorkspaceRole(session.identity.role, access) !== role)
       window.location.replace(signedInHome(session));
-  }, [role, session]);
+  }, [access, role, session]);
 
-  if (!session || normalizeRole(session.identity.role) !== role) return null;
+  if (!session || resolveWorkspaceRole(session.identity.role, access) !== role) return null;
 
   return (
     <PermissionBoundary area={area} role={session.identity.role} access={access}>

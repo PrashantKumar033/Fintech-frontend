@@ -63,6 +63,7 @@ function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [shownOtp, setShownOtp] = useState("");
+  const [otpMessage, setOtpMessage] = useState("");
   const [pan, setPan] = useState("");
   const [details, setDetails] = useState(initialDetails);
   const [result, setResult] = useState<RegistrationResult>();
@@ -95,6 +96,7 @@ function RegisterPage() {
         const r = await authApi.registerPhone(draftId, normalized);
         setPhone(normalized);
         setShownOtp(r.otp || "");
+        setOtpMessage(r.message || "OTP sent successfully.");
         setStep(3);
         return;
       }
@@ -123,6 +125,13 @@ function RegisterPage() {
       setResult(r);
     });
   };
+  const resendOtp = () =>
+    run(async () => {
+      const r = await authApi.registerPhone(draftId, phone);
+      setOtp("");
+      setShownOtp(r.otp || "");
+      setOtpMessage(r.message || "A fresh OTP has been sent.");
+    });
   if (result)
     return (
       <Shell>
@@ -216,6 +225,22 @@ function RegisterPage() {
                     Development OTP: <strong>{shownOtp}</strong>
                   </p>
                 )}
+                {otpMessage ? (
+                  <p
+                    role="status"
+                    className="text-center text-xs font-medium text-muted-foreground"
+                  >
+                    {otpMessage}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void resendOtp()}
+                  className="w-full rounded-xl border border-primary px-4 py-3 text-sm font-semibold text-primary disabled:opacity-60"
+                >
+                  {loading ? "Sending OTP..." : "Resend OTP"}
+                </button>
               </>
             )}{" "}
             {step === 4 && (

@@ -66,6 +66,23 @@ function LoginPage() {
       setLoading(false);
     }
   }
+  async function resendDeviceOtp() {
+    setError("");
+    setLoading(true);
+    try {
+      const result = await authApi.login({ identifier: identifier.trim(), loginWith, password });
+      if (!requiresDeviceVerification(result)) {
+        await completeLogin(result);
+        return;
+      }
+      setChallenge(result);
+      setOtp("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to resend verification code.");
+    } finally {
+      setLoading(false);
+    }
+  }
   async function completeLogin(result: Session) {
     clearAdminSession();
     saveSession(result.accessToken, result.identity);
@@ -161,6 +178,15 @@ function LoginPage() {
                       </>
                     )}
                   </button>
+                  <div className="mt-4 flex gap-3">
+                    <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void resendDeviceOtp()}
+                    className="w-full rounded-xl border border-primary py-3 text-sm font-semibold text-primary disabled:opacity-60"
+                  >
+                    {loading ? "Sending code..." : "Resend verification code"}
+                  </button>
                   <button
                     type="button"
                     disabled={loading}
@@ -173,6 +199,7 @@ function LoginPage() {
                   >
                     Back to login
                   </button>
+                  </div>
                 </form>
               </>
             ) : (

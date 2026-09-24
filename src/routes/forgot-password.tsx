@@ -38,6 +38,7 @@ function ForgotPasswordPage() {
   const [aadharLast4, setAadharLast4] = useState("");
   const [otp, setOtp] = useState("");
   const [shownOtp, setShownOtp] = useState("");
+  const [otpMessage, setOtpMessage] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -67,6 +68,7 @@ function ForgotPasswordPage() {
         });
         setDraftId(r.draftId);
         setShownOtp(r.otp || "");
+        setOtpMessage(r.message || "OTP sent successfully.");
         setStep(2);
       });
       return;
@@ -90,6 +92,20 @@ function ForgotPasswordPage() {
       });
       return;
     }
+  }
+
+  function resendOtp() {
+    void run(async () => {
+      const r = await authApi.forgotPasswordVerifyUser({
+        loginId: loginId.trim(),
+        panNumber: panNumber.trim().toUpperCase(),
+        aadharLast4: aadharLast4.trim(),
+      });
+      setDraftId(r.draftId);
+      setOtp("");
+      setShownOtp(r.otp || "");
+      setOtpMessage(r.message || "A fresh OTP has been sent.");
+    });
   }
 
   return (
@@ -215,6 +231,22 @@ function ForgotPasswordPage() {
                       Development OTP: <strong>{shownOtp}</strong>
                     </div>
                   )}
+                  {otpMessage ? (
+                    <p
+                      role="status"
+                      className="text-center text-xs font-medium text-muted-foreground"
+                    >
+                      {otpMessage}
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={resendOtp}
+                    className="w-full rounded-xl border border-primary px-4 py-3 text-sm font-semibold text-primary disabled:opacity-60"
+                  >
+                    {loading ? "Sending OTP..." : "Resend OTP"}
+                  </button>
                 </>
               )}
 

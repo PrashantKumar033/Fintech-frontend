@@ -16,8 +16,16 @@ import {
   Wallet,
 } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
-import { adminApi, getAdminActor, type AdminDashboardSummary } from "@/lib/admin-api";
+import { DashboardFeature } from "@/components/permission-dashboard";
+import { usePermissionDashboard, type DashboardFeatureKey } from "@/lib/permission-dashboard";
+import {
+  adminApi,
+  getAdminActor,
+  type AdminDashboardSummary,
+  type AepsOverviewMetrics,
+} from "@/lib/admin-api";
 import { managementBasePath } from "@/lib/role-hierarchy";
+import { UI_PERMISSION } from "@/lib/ui-permissions";
 
 export const Route = createFileRoute("/admin/")({
   head: () => ({ meta: [{ title: "Admin Dashboard — UMOBIPAY" }] }),
@@ -30,6 +38,7 @@ const metrics: Array<{
   detail: string;
   icon: LucideIcon;
   tone: string;
+  feature: DashboardFeatureKey;
 }> = [
   {
     key: "members",
@@ -37,6 +46,7 @@ const metrics: Array<{
     detail: "Network-wide accounts",
     icon: Users,
     tone: "bg-blue-50 text-blue-700",
+    feature: "network",
   },
   {
     key: "kyc",
@@ -44,6 +54,7 @@ const metrics: Array<{
     detail: "Pending or under review",
     icon: Activity,
     tone: "bg-emerald-50 text-emerald-700",
+    feature: "kycReview",
   },
   {
     key: "aeps",
@@ -51,6 +62,7 @@ const metrics: Array<{
     detail: "Activated merchants",
     icon: IndianRupee,
     tone: "bg-orange-50 text-orange-700",
+    feature: "aeps",
   },
   {
     key: "banks",
@@ -58,6 +70,7 @@ const metrics: Array<{
     detail: "Bank operations queue",
     icon: Clock3,
     tone: "bg-amber-50 text-amber-700",
+    feature: "bankOperations",
   },
 ];
 
@@ -67,6 +80,7 @@ const modules: Array<{
   text: string;
   icon: LucideIcon;
   status: string;
+  feature: DashboardFeatureKey;
 }> = [
   {
     to: "/admin/merchants",
@@ -74,6 +88,7 @@ const modules: Array<{
     text: "Retailers, distributors and account lifecycle.",
     icon: Building2,
     status: "Manage",
+    feature: "network",
   },
   {
     to: "/admin/transactions",
@@ -81,6 +96,7 @@ const modules: Array<{
     text: "Reconciliation, transaction health and reversals.",
     icon: Banknote,
     status: "Live API",
+    feature: "transactions",
   },
   {
     to: "/admin/banking",
@@ -88,6 +104,7 @@ const modules: Array<{
     text: "Bank accounts and verification operations.",
     icon: Landmark,
     status: "Review",
+    feature: "bankOperations",
   },
   {
     to: "/admin/kyc",
@@ -95,6 +112,7 @@ const modules: Array<{
     text: "Compliance applications and verification status.",
     icon: ShieldCheck,
     status: "Review",
+    feature: "kycReview",
   },
   {
     to: "/admin/settlements",
@@ -102,17 +120,24 @@ const modules: Array<{
     text: "Settlement batches and wallet movement.",
     icon: Wallet,
     status: "Monitor",
+    feature: "settlements",
   },
 ];
 
-const bars = [38, 54, 46, 68, 59, 77, 65, 88, 73, 92, 81, 96];
-
 export function AdminDashboard() {
   const base = managementBasePath(getAdminActor()?.role);
+  const { canShow, canPermission } = usePermissionDashboard();
+  const canLoadSummary = canPermission(UI_PERMISSION.ADMIN_DASHBOARD_VIEW, ["ADMIN"]);
+  const canLoadAepsVolume = canPermission(UI_PERMISSION.TRANSACTION_AEPS_OVERVIEW_VIEW, ["ADMIN"]);
+  const canShowTransactions = canShow("transactions");
   const [summary, setSummary] = useState<AdminDashboardSummary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [summaryError, setSummaryError] = useState("");
+  const [aepsVolume, setAepsVolume] = useState<AepsOverviewMetrics | null>(null);
+  const [loadingAepsVolume, setLoadingAepsVolume] = useState(false);
+  const [aepsVolumeError, setAepsVolumeError] = useState("");
   const loadSummary = useCallback(async () => {
+    if (!canLoadSummary) return;
     setLoadingSummary(true);
     setSummaryError("");
     try {
@@ -122,10 +147,27 @@ export function AdminDashboard() {
     } finally {
       setLoadingSummary(false);
     }
-  }, []);
+  }, [canLoadSummary]);
   useEffect(() => {
     void loadSummary();
   }, [loadSummary]);
+  const loadAepsVolume = useCallback(async () => {
+    if (!canLoadAepsVolume) return;
+    setLoadingAepsVolume(true);
+    setAepsVolumeError("");
+    try {
+      setAepsVolume(await adminApi.aepsOverview());
+    } catch (value) {
+      setAepsVolumeError(
+        value instanceof Error ? value.message : "Transaction volume could not load.",
+      );
+    } finally {
+      setLoadingAepsVolume(false);
+    }
+  }, [canLoadAepsVolume]);
+  useEffect(() => {
+    void loadAepsVolume();
+  }, [loadAepsVolume]);
   const degradedServices = summary?.degradedServices ?? [];
   const metricUnavailable = (key: (typeof metrics)[number]["key"]) =>
     degradedServices.includes(key === "members" ? "auth" : key === "banks" ? "bank" : key);
@@ -158,18 +200,24 @@ export function AdminDashboard() {
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:flex">
-            <HeroStat
-              label="Active members"
-              value={
-                summary && !degradedServices.includes("auth") ? String(summary.members.active) : "—"
-              }
-            />
-            <HeroStat
-              label="KYC approved"
-              value={
-                summary && !degradedServices.includes("kyc") ? String(summary.kyc.approved) : "—"
-              }
-            />
+            <DashboardFeature allowed={canShow("network")}>
+              <HeroStat
+                label="Active members"
+                value={
+                  summary && !degradedServices.includes("auth")
+                    ? String(summary.members.active)
+                    : "—"
+                }
+              />
+            </DashboardFeature>
+            <DashboardFeature allowed={canShow("kycReview")}>
+              <HeroStat
+                label="KYC approved"
+                value={
+                  summary && !degradedServices.includes("kyc") ? String(summary.kyc.approved) : "—"
+                }
+              />
+            </DashboardFeature>
             <HeroStat
               label="Platform status"
               value={degradedServices.length ? "Degraded" : "Online"}
@@ -206,67 +254,133 @@ export function AdminDashboard() {
         </div>
       )}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map(({ key, label, detail, icon: Icon, tone }) => (
-          <AdminPanel key={label} className="min-h-44">
-            <div className="flex items-start justify-between">
-              <span className={`grid h-11 w-11 place-items-center rounded-xl ${tone}`}>
-                <Icon size={21} />
-              </span>
-              <span
-                className={`rounded-full px-2 py-1 text-[10px] font-extrabold ${
-                  metricUnavailable(key)
-                    ? "bg-amber-50 text-amber-700"
-                    : "bg-emerald-50 text-emerald-700"
-                }`}
-              >
-                {metricUnavailable(key) ? "TEMPORARILY UNAVAILABLE" : "LIVE READY"}
-              </span>
-            </div>
-            <p className="mt-5 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">
-              {label}
-            </p>
-            <p className="mt-1 text-2xl font-black">{loadingSummary ? "…" : metricValue(key)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
-          </AdminPanel>
-        ))}
+        {metrics
+          .filter(({ feature }) => canShow(feature))
+          .map(({ key, label, detail, icon: Icon, tone }) => (
+            <AdminPanel key={label} className="min-h-44">
+              <div className="flex items-start justify-between">
+                <span className={`grid h-11 w-11 place-items-center rounded-xl ${tone}`}>
+                  <Icon size={21} />
+                </span>
+                <span
+                  className={`rounded-full px-2 py-1 text-[10px] font-extrabold ${
+                    metricUnavailable(key)
+                      ? "bg-amber-50 text-amber-700"
+                      : "bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {metricUnavailable(key) ? "TEMPORARILY UNAVAILABLE" : "LIVE READY"}
+                </span>
+              </div>
+              <p className="mt-5 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">
+                {label}
+              </p>
+              <p className="mt-1 text-2xl font-black">{loadingSummary ? "…" : metricValue(key)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+            </AdminPanel>
+          ))}
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.45fr_.75fr]">
-        <AdminPanel>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-extrabold uppercase tracking-wider text-primary">
-                Transaction monitoring
-              </p>
-              <h2 className="mt-1 text-xl font-black">Processing activity</h2>
-            </div>
-            <Link
-              to={`${base}/transactions` as never}
-              className="flex items-center gap-1 text-xs font-extrabold text-primary"
-            >
-              View transactions <ArrowUpRight size={15} />
-            </Link>
-          </div>
-          <div
-            className="mt-8 flex h-52 items-end gap-2 sm:gap-3"
-            aria-label="Transaction activity chart"
-          >
-            {bars.map((height, index) => (
-              <div key={index} className="group flex h-full flex-1 items-end">
-                <div
-                  className="w-full rounded-t-md bg-secondary/15 transition group-hover:bg-primary"
-                  style={{ height: `${height}%` }}
-                />
+        <DashboardFeature allowed={canLoadAepsVolume}>
+          <AdminPanel>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-extrabold uppercase tracking-wider text-primary">
+                  Transaction volume
+                </p>
+                <h2 className="mt-1 text-xl font-black">AEPS volume · last 24 hours</h2>
               </div>
-            ))}
-          </div>
-          <div className="mt-3 flex justify-between text-[10px] font-bold uppercase text-muted-foreground">
-            <span>12 AM</span>
-            <span>6 AM</span>
-            <span>12 PM</span>
-            <span>Now</span>
-          </div>
-        </AdminPanel>
+              {canShowTransactions ? (
+                <Link
+                  to={`${base}/transactions` as never}
+                  className="flex items-center gap-1 text-xs font-extrabold text-primary"
+                >
+                  View transactions <ArrowUpRight size={15} />
+                </Link>
+              ) : null}
+            </div>
+
+            {aepsVolumeError ? (
+              <div className="mt-6 flex min-h-52 items-center justify-center rounded-2xl bg-red-50 p-5 text-center">
+                <div>
+                  <p className="text-sm font-bold text-red-700">{aepsVolumeError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadAepsVolume()}
+                    className="mt-3 inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-xs font-extrabold text-red-700"
+                  >
+                    <RefreshCw size={14} /> Retry
+                  </button>
+                </div>
+              </div>
+            ) : loadingAepsVolume && !aepsVolume ? (
+              <div className="mt-6 grid min-h-52 place-items-center rounded-2xl bg-secondary/[.03]">
+                <RefreshCw size={22} className="animate-spin text-primary" />
+              </div>
+            ) : aepsVolume ? (
+              <div className="mt-6">
+                <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+                  <div className="rounded-2xl bg-secondary p-6 text-white">
+                    <p className="text-[11px] font-extrabold uppercase tracking-wider text-white/60">
+                      Total financial volume
+                    </p>
+                    <p className="mt-2 text-3xl font-black sm:text-4xl">
+                      {formatMoney(aepsVolume.totals.financialVolume)}
+                    </p>
+                    <div className="mt-6 border-t border-white/15 pt-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-white/50">
+                        Successful financial volume
+                      </p>
+                      <p className="mt-1 text-lg font-black text-emerald-200">
+                        {formatMoney(aepsVolume.totals.successfulFinancialVolume)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <VolumeMetric
+                      label="Transactions"
+                      value={aepsVolume.totals.transactions.toLocaleString("en-IN")}
+                    />
+                    <VolumeMetric
+                      label="Financial"
+                      value={aepsVolume.totals.financialTransactions.toLocaleString("en-IN")}
+                    />
+                    <VolumeMetric
+                      label="Average ticket"
+                      value={formatMoney(aepsVolume.totals.averageFinancialTicket)}
+                    />
+                    <VolumeMetric
+                      label="Success rate"
+                      value={`${aepsVolume.totals.successRate.toFixed(1)}%`}
+                    />
+                  </div>
+                </div>
+
+                {aepsVolume.operations.length > 0 ? (
+                  <div className="mt-4 flex flex-wrap gap-2" aria-label="Volume by AEPS operation">
+                    {aepsVolume.operations.map((operation) => (
+                      <span
+                        key={operation.operation}
+                        className="rounded-full border border-border bg-secondary/[.03] px-3 py-1.5 text-[11px] font-bold"
+                      >
+                        {operation.operation}: {formatMoney(operation.volume)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-4 flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                  <span>
+                    {aepsVolume.totals.reconciliationRequired.toLocaleString("en-IN")} requiring
+                    reconciliation
+                  </span>
+                  <span>Updated {formatDashboardTime(aepsVolume.generatedAt)}</span>
+                </div>
+              </div>
+            ) : null}
+          </AdminPanel>
+        </DashboardFeature>
         <AdminPanel>
           <div className="flex items-center justify-between">
             <div>
@@ -278,30 +392,38 @@ export function AdminDashboard() {
             <RefreshCw size={18} className="text-muted-foreground" />
           </div>
           <div className="mt-5 space-y-3">
-            <QueueRow
-              to={`${base}/kyc`}
-              icon={ShieldCheck}
-              label="KYC applications"
-              value="Open queue"
-            />
-            <QueueRow
-              to={`${base}/banking`}
-              icon={Landmark}
-              label="Bank verification"
-              value="Open queue"
-            />
-            <QueueRow
-              to={`${base}/transactions`}
-              icon={Banknote}
-              label="Reconciliation"
-              value="Live API"
-            />
-            <QueueRow
-              to={`${base}/access`}
-              icon={Users}
-              label="Roles & permissions"
-              value="Live API"
-            />
+            <DashboardFeature allowed={canShow("kycReview")}>
+              <QueueRow
+                to={`${base}/kyc`}
+                icon={ShieldCheck}
+                label="KYC applications"
+                value="Open queue"
+              />
+            </DashboardFeature>
+            <DashboardFeature allowed={canShow("bankOperations")}>
+              <QueueRow
+                to={`${base}/banking`}
+                icon={Landmark}
+                label="Bank verification"
+                value="Open queue"
+              />
+            </DashboardFeature>
+            <DashboardFeature allowed={canShow("transactions")}>
+              <QueueRow
+                to={`${base}/transactions`}
+                icon={Banknote}
+                label="Reconciliation"
+                value="Live API"
+              />
+            </DashboardFeature>
+            <DashboardFeature allowed={canShow("access")}>
+              <QueueRow
+                to={`${base}/access`}
+                icon={Users}
+                label="Roles & permissions"
+                value="Live API"
+              />
+            </DashboardFeature>
           </div>
         </AdminPanel>
       </div>
@@ -316,31 +438,60 @@ export function AdminDashboard() {
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          {modules.map(({ to, title, text, icon: Icon, status }) => (
-            <Link
-              key={to}
-              to={`${base}${to.slice("/admin".length)}` as never}
-              className="group rounded-2xl border border-border bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg"
-            >
-              <div className="flex items-start justify-between">
-                <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary">
-                  <Icon size={21} />
-                </span>
-                <ArrowUpRight
-                  size={17}
-                  className="text-muted-foreground transition group-hover:text-primary"
-                />
-              </div>
-              <h3 className="mt-5 font-black group-hover:text-primary">{title}</h3>
-              <p className="mt-2 min-h-10 text-xs leading-5 text-muted-foreground">{text}</p>
-              <p className="mt-4 text-[10px] font-extrabold uppercase tracking-wider text-primary">
-                {status}
-              </p>
-            </Link>
-          ))}
+          {modules
+            .filter(({ feature }) => canShow(feature))
+            .map(({ to, title, text, icon: Icon, status }) => (
+              <Link
+                key={to}
+                to={`${base}${to.slice("/admin".length)}` as never}
+                className="group rounded-2xl border border-border bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:border-primary/50 hover:shadow-lg"
+              >
+                <div className="flex items-start justify-between">
+                  <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary">
+                    <Icon size={21} />
+                  </span>
+                  <ArrowUpRight
+                    size={17}
+                    className="text-muted-foreground transition group-hover:text-primary"
+                  />
+                </div>
+                <h3 className="mt-5 font-black group-hover:text-primary">{title}</h3>
+                <p className="mt-2 min-h-10 text-xs leading-5 text-muted-foreground">{text}</p>
+                <p className="mt-4 text-[10px] font-extrabold uppercase tracking-wider text-primary">
+                  {status}
+                </p>
+              </Link>
+            ))}
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+function formatMoney(value: string | number) {
+  const amount = Number(value);
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
+function formatDashboardTime(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "just now"
+    : date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function VolumeMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-secondary/[.03] p-4">
+      <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-2 text-lg font-black text-secondary">{value}</p>
+    </div>
   );
 }
 

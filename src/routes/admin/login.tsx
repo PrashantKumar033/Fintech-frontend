@@ -68,6 +68,23 @@ function AdminLogin() {
       setSubmitting(false);
     }
   }
+  async function resendDeviceOtp() {
+    setError("");
+    setSubmitting(true);
+    try {
+      const session = await adminAuthApi.login(identifier.trim(), loginWith, credential);
+      if (adminRequiresDeviceVerification(session)) {
+        setChallenge(session);
+        setOtp("");
+        return;
+      }
+      finishLogin(session);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to resend verification code.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
   function finishLogin(session: AdminSession) {
     clearSession();
     if (session.onboardingRequired) {
@@ -150,6 +167,15 @@ function AdminLogin() {
                   {submitting ? "Verifying..." : "Verify & Sign In"}
                   <ArrowRight size={17} />
                 </button>
+                <div className="mt-3 flex gap-3">
+                  <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => void resendDeviceOtp()}
+                  className="w-full rounded-xl border border-primary py-3 text-sm font-bold text-primary disabled:opacity-60"
+                >
+                  {submitting ? "Sending code..." : "Resend verification code"}
+                </button>
                 <button
                   type="button"
                   disabled={submitting}
@@ -162,6 +188,7 @@ function AdminLogin() {
                 >
                   Back to login
                 </button>
+                </div>
               </form>
             </>
           ) : (
@@ -251,8 +278,8 @@ function AdminLogin() {
             </>
           )}
           <p className="mt-6 text-center text-xs leading-5 text-muted-foreground">
-            This portal uses the dedicated to super admin only. Other roles
-            credentials will not work here.
+            This portal uses the dedicated to super admin only. Other roles credentials will not
+            work here.
           </p>
         </div>
       </section>

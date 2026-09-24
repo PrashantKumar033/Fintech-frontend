@@ -35,10 +35,13 @@ export function AdminTransactionOperations() {
   const allowed = (code: string) =>
     actor?.kind === "SUPER_ADMIN" ||
     (actor?.kind === "IDENTITY_ADMIN" && can(code, ["SUPER_ADMIN", "ADMIN"]));
-  const canView = allowed(UI_PERMISSION.TRANSACTION_VIEW);
+  const canView = allowed(UI_PERMISSION.TRANSACTION_ADMIN_LIST);
+  const canViewDetail = allowed(UI_PERMISSION.TRANSACTION_ADMIN_VIEW);
   const canViewIncome = allowed(UI_PERMISSION.TRANSACTION_PROVIDER_INCOME_VIEW);
   const canReconcileIncome = allowed(UI_PERMISSION.TRANSACTION_PROVIDER_INCOME_RECONCILE);
   const canRequestReversal = allowed(UI_PERMISSION.TRANSACTION_REVERSAL_REQUEST);
+  const canListReversals = allowed(UI_PERMISSION.TRANSACTION_REVERSAL_LIST);
+  const canViewReversal = allowed(UI_PERMISSION.TRANSACTION_REVERSAL_VIEW);
   const canProcessReversal = allowed(UI_PERMISSION.TRANSACTION_REVERSAL_PROCESS);
   const canRecover = allowed(UI_PERMISSION.TRANSACTION_FINANCIAL_RECOVERY);
 
@@ -63,21 +66,21 @@ export function AdminTransactionOperations() {
   useEffect(() => {
     if (view === "transactions" && !canView) {
       if (canViewIncome) setView("income");
-      else if (canProcessReversal || canRequestReversal) setView("reversals");
+      else if (canListReversals) setView("reversals");
     } else if (view === "income" && !canViewIncome) {
       if (canView) setView("transactions");
-      else if (canProcessReversal || canRequestReversal) setView("reversals");
-    } else if (view === "reversals" && !canProcessReversal && !canRequestReversal) {
+      else if (canListReversals) setView("reversals");
+    } else if (view === "reversals" && !canListReversals) {
       if (canView) setView("transactions");
       else if (canViewIncome) setView("income");
     }
-  }, [view, canView, canViewIncome, canProcessReversal, canRequestReversal]);
+  }, [view, canView, canViewIncome, canListReversals]);
 
   const load = useCallback(async () => {
     if (
       (view === "transactions" && !canView) ||
       (view === "income" && !canViewIncome) ||
-      (view === "reversals" && !canProcessReversal && !canRequestReversal)
+      (view === "reversals" && !canListReversals)
     ) {
       return;
     }
@@ -100,14 +103,15 @@ export function AdminTransactionOperations() {
     } finally {
       setLoading(false);
     }
-  }, [view, status, canView, canViewIncome, canProcessReversal, canRequestReversal]);
+  }, [view, status, canView, canViewIncome, canListReversals]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   async function inspect(referenceId: string) {
-    if (!canView) return setError(`Permission ${UI_PERMISSION.TRANSACTION_VIEW} is required.`);
+    if (!canViewDetail)
+      return setError(`Permission ${UI_PERMISSION.TRANSACTION_ADMIN_VIEW} is required.`);
     setBusy(true);
     setError("");
     try {
@@ -120,8 +124,8 @@ export function AdminTransactionOperations() {
   }
 
   async function inspectReversal(referenceId: string) {
-    if (!canRequestReversal && !canProcessReversal)
-      return setError("Reversal access is not granted for this account.");
+    if (!canViewReversal)
+      return setError(`Permission ${UI_PERMISSION.TRANSACTION_REVERSAL_VIEW} is required.`);
     setReversalDetailLoading(true);
     setReversalDetail(null);
     setError("");
@@ -225,12 +229,12 @@ export function AdminTransactionOperations() {
     }
   }
 
-  if (!canView && !canViewIncome && !canProcessReversal && !canRequestReversal) return null;
+  if (!canView && !canViewIncome && !canListReversals) return null;
 
   const tabs: Array<[View, string]> = [];
   if (canView) tabs.push(["transactions", "All transactions"]);
   if (canViewIncome) tabs.push(["income", "Pending provider income"]);
-  if (canProcessReversal || canRequestReversal) tabs.push(["reversals", "Reversals"]);
+  if (canListReversals) tabs.push(["reversals", "Reversals"]);
 
   return (
     <AdminPanel className="mb-6">
@@ -312,6 +316,7 @@ export function AdminTransactionOperations() {
             inspect={inspectReversal}
             process={processReversal}
             canProcess={canProcessReversal}
+            canInspect={canViewReversal}
           />
         ) : (
           <TransactionTable
@@ -324,23 +329,36 @@ export function AdminTransactionOperations() {
             canReconcileIncome={canReconcileIncome}
             canRequestReversal={canRequestReversal}
             canRecover={canRecover}
+            canInspect={canViewDetail}
           />
         )}
       </div>
 
       {detail && (
-        <div className="mt-4 rounded-xl border border-primary/30 p-4">
-          <div className="flex justify-between">
-            <h3 className="font-black">Transaction detail</h3>
-            <button
-              type="button"
-              onClick={() => setDetail(null)}
-              aria-label="Close transaction detail"
-            >
-              <X size={18} />
-            </button>
+        <div className="fixed inset-0 z-[110] grid place-items-center bg-secondary/60 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-[.16em] text-primary">
+                  Provider transaction
+                </p>
+                <h3 className="mt-1 text-xl font-black">Transaction detail</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetail(null)}
+                aria-label="Close transaction detail"
+                className="h-fit rounded-lg border border-border p-2"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <ReadableTransactionDetails detail={detail} />
           </div>
-          <ReadableTransactionDetails detail={detail} />
         </div>
       )}
 
@@ -436,6 +454,7 @@ function TransactionTable({
   canReconcileIncome,
   canRequestReversal,
   canRecover,
+  canInspect,
 }: {
   items: AdminProviderTransaction[];
   view: View;
@@ -446,6 +465,7 @@ function TransactionTable({
   canReconcileIncome: boolean;
   canRequestReversal: boolean;
   canRecover: boolean;
+  canInspect: boolean;
 }) {
   return (
     <table className="w-full min-w-[1000px] text-left text-xs">
@@ -472,7 +492,12 @@ function TransactionTable({
         {items.map((item) => (
           <tr key={item.referenceId} className="border-t">
             <td className="p-3 font-bold">{item.referenceId}</td>
-            <td className="p-3">{item.userId}</td>
+            <td className="p-3">
+              <p className="font-bold">{item.userLoginId || item.merchantRefId || "Unknown"}</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                {item.userRole || item.sourceRole || "Account"}
+              </p>
+            </td>
             <td className="p-3">
               {item.provider} / {item.operation}
             </td>
@@ -483,14 +508,16 @@ function TransactionTable({
             <td className="p-3">{time(item.createdAt)}</td>
             <td className="p-3">
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  title="View transaction"
-                  onClick={() => inspect(item.referenceId)}
-                  className="rounded-lg border p-2"
-                >
-                  <Eye size={14} />
-                </button>
+                {canInspect && (
+                  <button
+                    type="button"
+                    title="View transaction"
+                    onClick={() => inspect(item.referenceId)}
+                    className="rounded-lg border p-2"
+                  >
+                    <Eye size={14} />
+                  </button>
+                )}
                 {view === "income" && canReconcileIncome && (
                   <button
                     type="button"
@@ -538,12 +565,14 @@ function ReversalTable({
   inspect,
   process,
   canProcess,
+  canInspect,
 }: {
   items: ProviderReversal[];
   busy: boolean;
   inspect: (referenceId: string) => void;
   process: (item: ProviderReversal) => void;
   canProcess: boolean;
+  canInspect: boolean;
 }) {
   return (
     <table className="w-full min-w-[900px] text-left text-xs">
@@ -569,15 +598,17 @@ function ReversalTable({
             <td className="p-3">{item.failedReason || item.reason || "—"}</td>
             <td className="p-3">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  title="View reversal detail"
-                  aria-label={`View reversal ${item.referenceId}`}
-                  onClick={() => void inspect(item.referenceId)}
-                  className="rounded-lg border border-border p-2"
-                >
-                  <Eye size={14} />
-                </button>
+                {canInspect && (
+                  <button
+                    type="button"
+                    title="View reversal detail"
+                    aria-label={`View reversal ${item.referenceId}`}
+                    onClick={() => void inspect(item.referenceId)}
+                    className="rounded-lg border border-border p-2"
+                  >
+                    <Eye size={14} />
+                  </button>
+                )}
                 {canProcess && ["REQUESTED", "FAILED"].includes(item.status) && (
                   <button
                     type="button"

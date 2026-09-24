@@ -66,6 +66,9 @@ import { Route as DistributorRetailersIndexRouteImport } from './routes/distribu
 import { Route as DistributorSettingsIndexRouteImport } from './routes/distributor/settings/index'
 import { Route as DistributorSupportIndexRouteImport } from './routes/distributor/support/index'
 import { Route as DistributorWalletIndexRouteImport } from './routes/distributor/wallet/index'
+import { Route as DistributorWalletHistoryRouteImport } from './routes/distributor/wallet/history'
+import { Route as DistributorWalletHoldsRouteImport } from './routes/distributor/wallet/holds'
+import { Route as DistributorWalletRequestsRouteImport } from './routes/distributor/wallet/requests'
 import { Route as DistributorWalletTransferRouteImport } from './routes/distributor/wallet/transfer'
 import { Route as MasterDistributorAepsIndexRouteImport } from './routes/master-distributor/aeps/index'
 import { Route as MasterDistributorCommissionIndexRouteImport } from './routes/master-distributor/commission/index'
@@ -80,6 +83,7 @@ import { Route as MasterDistributorSupportIndexRouteImport } from './routes/mast
 import { Route as MasterDistributorTransactionsIndexRouteImport } from './routes/master-distributor/transactions/index'
 import { Route as MasterDistributorWalletIndexRouteImport } from './routes/master-distributor/wallet/index'
 import { Route as MasterDistributorWalletHistoryRouteImport } from './routes/master-distributor/wallet/history'
+import { Route as MasterDistributorWalletHoldsRouteImport } from './routes/master-distributor/wallet/holds'
 import { Route as MasterDistributorWalletRequestsRouteImport } from './routes/master-distributor/wallet/requests'
 import { Route as MasterDistributorWalletTransferRouteImport } from './routes/master-distributor/wallet/transfer'
 import { Route as RetailerAepsIndexRouteImport } from './routes/retailer/aeps/index'
@@ -87,8 +91,13 @@ import { Route as RetailerBankIndexRouteImport } from './routes/retailer/bank/in
 import { Route as RetailerCommissionIndexRouteImport } from './routes/retailer/commission/index'
 import { Route as RetailerKycIndexRouteImport } from './routes/retailer/kyc/index'
 import { Route as RetailerMembersIndexRouteImport } from './routes/retailer/members/index'
+import { Route as RetailerReportsIndexRouteImport } from './routes/retailer/reports/index'
 import { Route as RetailerTransactionsIndexRouteImport } from './routes/retailer/transactions/index'
 import { Route as RetailerWalletIndexRouteImport } from './routes/retailer/wallet/index'
+import { Route as RetailerWalletAepsTransferRouteImport } from './routes/retailer/wallet/aeps-transfer'
+import { Route as RetailerWalletHistoryRouteImport } from './routes/retailer/wallet/history'
+import { Route as RetailerWalletHoldsRouteImport } from './routes/retailer/wallet/holds'
+import { Route as RetailerWalletRequestsRouteImport } from './routes/retailer/wallet/requests'
 import { Route as RetailerWalletTransferRouteImport } from './routes/retailer/wallet/transfer'
 import { Route as AdminMerchantsAddIndexRouteImport } from './routes/admin/merchants/add/index'
 import { Route as AdminMerchantsListIndexRouteImport } from './routes/admin/merchants/list/index'
@@ -393,6 +402,23 @@ const DistributorWalletIndexRoute = DistributorWalletIndexRouteImport.update({
   path: '/distributor/wallet/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DistributorWalletHistoryRoute =
+  DistributorWalletHistoryRouteImport.update({
+    id: '/distributor/wallet/history',
+    path: '/distributor/wallet/history',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DistributorWalletHoldsRoute = DistributorWalletHoldsRouteImport.update({
+  id: '/distributor/wallet/holds',
+  path: '/distributor/wallet/holds',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistributorWalletRequestsRoute =
+  DistributorWalletRequestsRouteImport.update({
+    id: '/distributor/wallet/requests',
+    path: '/distributor/wallet/requests',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DistributorWalletTransferRoute =
   DistributorWalletTransferRouteImport.update({
     id: '/distributor/wallet/transfer',
@@ -477,6 +503,12 @@ const MasterDistributorWalletHistoryRoute =
     path: '/master-distributor/wallet/history',
     getParentRoute: () => rootRouteImport,
   } as any)
+const MasterDistributorWalletHoldsRoute =
+  MasterDistributorWalletHoldsRouteImport.update({
+    id: '/master-distributor/wallet/holds',
+    path: '/master-distributor/wallet/holds',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const MasterDistributorWalletRequestsRoute =
   MasterDistributorWalletRequestsRouteImport.update({
     id: '/master-distributor/wallet/requests',
@@ -514,6 +546,11 @@ const RetailerMembersIndexRoute = RetailerMembersIndexRouteImport.update({
   path: '/retailer/members/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RetailerReportsIndexRoute = RetailerReportsIndexRouteImport.update({
+  id: '/retailer/reports/',
+  path: '/retailer/reports/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RetailerTransactionsIndexRoute =
   RetailerTransactionsIndexRouteImport.update({
     id: '/retailer/transactions/',
@@ -523,6 +560,27 @@ const RetailerTransactionsIndexRoute =
 const RetailerWalletIndexRoute = RetailerWalletIndexRouteImport.update({
   id: '/retailer/wallet/',
   path: '/retailer/wallet/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetailerWalletAepsTransferRoute =
+  RetailerWalletAepsTransferRouteImport.update({
+    id: '/retailer/wallet/aeps-transfer',
+    path: '/retailer/wallet/aeps-transfer',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const RetailerWalletHistoryRoute = RetailerWalletHistoryRouteImport.update({
+  id: '/retailer/wallet/history',
+  path: '/retailer/wallet/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetailerWalletHoldsRoute = RetailerWalletHoldsRouteImport.update({
+  id: '/retailer/wallet/holds',
+  path: '/retailer/wallet/holds',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RetailerWalletRequestsRoute = RetailerWalletRequestsRouteImport.update({
+  id: '/retailer/wallet/requests',
+  path: '/retailer/wallet/requests',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RetailerWalletTransferRoute = RetailerWalletTransferRouteImport.update({
@@ -607,12 +665,20 @@ export interface FileRoutesByFullPath {
   '/distributor/aeps/transactions': typeof DistributorAepsTransactionsRoute
   '/distributor/profile/bank': typeof DistributorProfileBankRoute
   '/distributor/profile/kyc': typeof DistributorProfileKycRoute
+  '/distributor/wallet/history': typeof DistributorWalletHistoryRoute
+  '/distributor/wallet/holds': typeof DistributorWalletHoldsRoute
+  '/distributor/wallet/requests': typeof DistributorWalletRequestsRoute
   '/distributor/wallet/transfer': typeof DistributorWalletTransferRoute
   '/master-distributor/profile/bank': typeof MasterDistributorProfileBankRoute
   '/master-distributor/profile/kyc': typeof MasterDistributorProfileKycRoute
   '/master-distributor/wallet/history': typeof MasterDistributorWalletHistoryRoute
+  '/master-distributor/wallet/holds': typeof MasterDistributorWalletHoldsRoute
   '/master-distributor/wallet/requests': typeof MasterDistributorWalletRequestsRoute
   '/master-distributor/wallet/transfer': typeof MasterDistributorWalletTransferRoute
+  '/retailer/wallet/aeps-transfer': typeof RetailerWalletAepsTransferRoute
+  '/retailer/wallet/history': typeof RetailerWalletHistoryRoute
+  '/retailer/wallet/holds': typeof RetailerWalletHoldsRoute
+  '/retailer/wallet/requests': typeof RetailerWalletRequestsRoute
   '/retailer/wallet/transfer': typeof RetailerWalletTransferRoute
   '/admin/access/': typeof AdminAccessIndexRoute
   '/admin/aeps/': typeof AdminAepsIndexRoute
@@ -651,6 +717,7 @@ export interface FileRoutesByFullPath {
   '/retailer/commission/': typeof RetailerCommissionIndexRoute
   '/retailer/kyc/': typeof RetailerKycIndexRoute
   '/retailer/members/': typeof RetailerMembersIndexRoute
+  '/retailer/reports/': typeof RetailerReportsIndexRoute
   '/retailer/transactions/': typeof RetailerTransactionsIndexRoute
   '/retailer/wallet/': typeof RetailerWalletIndexRoute
   '/admin/merchants/add/': typeof AdminMerchantsAddIndexRoute
@@ -697,12 +764,20 @@ export interface FileRoutesByTo {
   '/distributor/aeps/transactions': typeof DistributorAepsTransactionsRoute
   '/distributor/profile/bank': typeof DistributorProfileBankRoute
   '/distributor/profile/kyc': typeof DistributorProfileKycRoute
+  '/distributor/wallet/history': typeof DistributorWalletHistoryRoute
+  '/distributor/wallet/holds': typeof DistributorWalletHoldsRoute
+  '/distributor/wallet/requests': typeof DistributorWalletRequestsRoute
   '/distributor/wallet/transfer': typeof DistributorWalletTransferRoute
   '/master-distributor/profile/bank': typeof MasterDistributorProfileBankRoute
   '/master-distributor/profile/kyc': typeof MasterDistributorProfileKycRoute
   '/master-distributor/wallet/history': typeof MasterDistributorWalletHistoryRoute
+  '/master-distributor/wallet/holds': typeof MasterDistributorWalletHoldsRoute
   '/master-distributor/wallet/requests': typeof MasterDistributorWalletRequestsRoute
   '/master-distributor/wallet/transfer': typeof MasterDistributorWalletTransferRoute
+  '/retailer/wallet/aeps-transfer': typeof RetailerWalletAepsTransferRoute
+  '/retailer/wallet/history': typeof RetailerWalletHistoryRoute
+  '/retailer/wallet/holds': typeof RetailerWalletHoldsRoute
+  '/retailer/wallet/requests': typeof RetailerWalletRequestsRoute
   '/retailer/wallet/transfer': typeof RetailerWalletTransferRoute
   '/admin/access': typeof AdminAccessIndexRoute
   '/admin/aeps': typeof AdminAepsIndexRoute
@@ -741,6 +816,7 @@ export interface FileRoutesByTo {
   '/retailer/commission': typeof RetailerCommissionIndexRoute
   '/retailer/kyc': typeof RetailerKycIndexRoute
   '/retailer/members': typeof RetailerMembersIndexRoute
+  '/retailer/reports': typeof RetailerReportsIndexRoute
   '/retailer/transactions': typeof RetailerTransactionsIndexRoute
   '/retailer/wallet': typeof RetailerWalletIndexRoute
   '/admin/merchants/add': typeof AdminMerchantsAddIndexRoute
@@ -788,12 +864,20 @@ export interface FileRoutesById {
   '/distributor/aeps/transactions': typeof DistributorAepsTransactionsRoute
   '/distributor/profile/bank': typeof DistributorProfileBankRoute
   '/distributor/profile/kyc': typeof DistributorProfileKycRoute
+  '/distributor/wallet/history': typeof DistributorWalletHistoryRoute
+  '/distributor/wallet/holds': typeof DistributorWalletHoldsRoute
+  '/distributor/wallet/requests': typeof DistributorWalletRequestsRoute
   '/distributor/wallet/transfer': typeof DistributorWalletTransferRoute
   '/master-distributor/profile/bank': typeof MasterDistributorProfileBankRoute
   '/master-distributor/profile/kyc': typeof MasterDistributorProfileKycRoute
   '/master-distributor/wallet/history': typeof MasterDistributorWalletHistoryRoute
+  '/master-distributor/wallet/holds': typeof MasterDistributorWalletHoldsRoute
   '/master-distributor/wallet/requests': typeof MasterDistributorWalletRequestsRoute
   '/master-distributor/wallet/transfer': typeof MasterDistributorWalletTransferRoute
+  '/retailer/wallet/aeps-transfer': typeof RetailerWalletAepsTransferRoute
+  '/retailer/wallet/history': typeof RetailerWalletHistoryRoute
+  '/retailer/wallet/holds': typeof RetailerWalletHoldsRoute
+  '/retailer/wallet/requests': typeof RetailerWalletRequestsRoute
   '/retailer/wallet/transfer': typeof RetailerWalletTransferRoute
   '/admin/access/': typeof AdminAccessIndexRoute
   '/admin/aeps/': typeof AdminAepsIndexRoute
@@ -832,6 +916,7 @@ export interface FileRoutesById {
   '/retailer/commission/': typeof RetailerCommissionIndexRoute
   '/retailer/kyc/': typeof RetailerKycIndexRoute
   '/retailer/members/': typeof RetailerMembersIndexRoute
+  '/retailer/reports/': typeof RetailerReportsIndexRoute
   '/retailer/transactions/': typeof RetailerTransactionsIndexRoute
   '/retailer/wallet/': typeof RetailerWalletIndexRoute
   '/admin/merchants/add/': typeof AdminMerchantsAddIndexRoute
@@ -880,12 +965,20 @@ export interface FileRouteTypes {
     | '/distributor/aeps/transactions'
     | '/distributor/profile/bank'
     | '/distributor/profile/kyc'
+    | '/distributor/wallet/history'
+    | '/distributor/wallet/holds'
+    | '/distributor/wallet/requests'
     | '/distributor/wallet/transfer'
     | '/master-distributor/profile/bank'
     | '/master-distributor/profile/kyc'
     | '/master-distributor/wallet/history'
+    | '/master-distributor/wallet/holds'
     | '/master-distributor/wallet/requests'
     | '/master-distributor/wallet/transfer'
+    | '/retailer/wallet/aeps-transfer'
+    | '/retailer/wallet/history'
+    | '/retailer/wallet/holds'
+    | '/retailer/wallet/requests'
     | '/retailer/wallet/transfer'
     | '/admin/access/'
     | '/admin/aeps/'
@@ -924,6 +1017,7 @@ export interface FileRouteTypes {
     | '/retailer/commission/'
     | '/retailer/kyc/'
     | '/retailer/members/'
+    | '/retailer/reports/'
     | '/retailer/transactions/'
     | '/retailer/wallet/'
     | '/admin/merchants/add/'
@@ -970,12 +1064,20 @@ export interface FileRouteTypes {
     | '/distributor/aeps/transactions'
     | '/distributor/profile/bank'
     | '/distributor/profile/kyc'
+    | '/distributor/wallet/history'
+    | '/distributor/wallet/holds'
+    | '/distributor/wallet/requests'
     | '/distributor/wallet/transfer'
     | '/master-distributor/profile/bank'
     | '/master-distributor/profile/kyc'
     | '/master-distributor/wallet/history'
+    | '/master-distributor/wallet/holds'
     | '/master-distributor/wallet/requests'
     | '/master-distributor/wallet/transfer'
+    | '/retailer/wallet/aeps-transfer'
+    | '/retailer/wallet/history'
+    | '/retailer/wallet/holds'
+    | '/retailer/wallet/requests'
     | '/retailer/wallet/transfer'
     | '/admin/access'
     | '/admin/aeps'
@@ -1014,6 +1116,7 @@ export interface FileRouteTypes {
     | '/retailer/commission'
     | '/retailer/kyc'
     | '/retailer/members'
+    | '/retailer/reports'
     | '/retailer/transactions'
     | '/retailer/wallet'
     | '/admin/merchants/add'
@@ -1060,12 +1163,20 @@ export interface FileRouteTypes {
     | '/distributor/aeps/transactions'
     | '/distributor/profile/bank'
     | '/distributor/profile/kyc'
+    | '/distributor/wallet/history'
+    | '/distributor/wallet/holds'
+    | '/distributor/wallet/requests'
     | '/distributor/wallet/transfer'
     | '/master-distributor/profile/bank'
     | '/master-distributor/profile/kyc'
     | '/master-distributor/wallet/history'
+    | '/master-distributor/wallet/holds'
     | '/master-distributor/wallet/requests'
     | '/master-distributor/wallet/transfer'
+    | '/retailer/wallet/aeps-transfer'
+    | '/retailer/wallet/history'
+    | '/retailer/wallet/holds'
+    | '/retailer/wallet/requests'
     | '/retailer/wallet/transfer'
     | '/admin/access/'
     | '/admin/aeps/'
@@ -1104,6 +1215,7 @@ export interface FileRouteTypes {
     | '/retailer/commission/'
     | '/retailer/kyc/'
     | '/retailer/members/'
+    | '/retailer/reports/'
     | '/retailer/transactions/'
     | '/retailer/wallet/'
     | '/admin/merchants/add/'
@@ -1151,12 +1263,20 @@ export interface RootRouteChildren {
   DistributorAepsTransactionsRoute: typeof DistributorAepsTransactionsRoute
   DistributorProfileBankRoute: typeof DistributorProfileBankRoute
   DistributorProfileKycRoute: typeof DistributorProfileKycRoute
+  DistributorWalletHistoryRoute: typeof DistributorWalletHistoryRoute
+  DistributorWalletHoldsRoute: typeof DistributorWalletHoldsRoute
+  DistributorWalletRequestsRoute: typeof DistributorWalletRequestsRoute
   DistributorWalletTransferRoute: typeof DistributorWalletTransferRoute
   MasterDistributorProfileBankRoute: typeof MasterDistributorProfileBankRoute
   MasterDistributorProfileKycRoute: typeof MasterDistributorProfileKycRoute
   MasterDistributorWalletHistoryRoute: typeof MasterDistributorWalletHistoryRoute
+  MasterDistributorWalletHoldsRoute: typeof MasterDistributorWalletHoldsRoute
   MasterDistributorWalletRequestsRoute: typeof MasterDistributorWalletRequestsRoute
   MasterDistributorWalletTransferRoute: typeof MasterDistributorWalletTransferRoute
+  RetailerWalletAepsTransferRoute: typeof RetailerWalletAepsTransferRoute
+  RetailerWalletHistoryRoute: typeof RetailerWalletHistoryRoute
+  RetailerWalletHoldsRoute: typeof RetailerWalletHoldsRoute
+  RetailerWalletRequestsRoute: typeof RetailerWalletRequestsRoute
   RetailerWalletTransferRoute: typeof RetailerWalletTransferRoute
   AdminAccessIndexRoute: typeof AdminAccessIndexRoute
   AdminAepsIndexRoute: typeof AdminAepsIndexRoute
@@ -1195,6 +1315,7 @@ export interface RootRouteChildren {
   RetailerCommissionIndexRoute: typeof RetailerCommissionIndexRoute
   RetailerKycIndexRoute: typeof RetailerKycIndexRoute
   RetailerMembersIndexRoute: typeof RetailerMembersIndexRoute
+  RetailerReportsIndexRoute: typeof RetailerReportsIndexRoute
   RetailerTransactionsIndexRoute: typeof RetailerTransactionsIndexRoute
   RetailerWalletIndexRoute: typeof RetailerWalletIndexRoute
   AdminMerchantsAddIndexRoute: typeof AdminMerchantsAddIndexRoute
@@ -1607,6 +1728,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DistributorWalletIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/distributor/wallet/history': {
+      id: '/distributor/wallet/history'
+      path: '/distributor/wallet/history'
+      fullPath: '/distributor/wallet/history'
+      preLoaderRoute: typeof DistributorWalletHistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/wallet/holds': {
+      id: '/distributor/wallet/holds'
+      path: '/distributor/wallet/holds'
+      fullPath: '/distributor/wallet/holds'
+      preLoaderRoute: typeof DistributorWalletHoldsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/distributor/wallet/requests': {
+      id: '/distributor/wallet/requests'
+      path: '/distributor/wallet/requests'
+      fullPath: '/distributor/wallet/requests'
+      preLoaderRoute: typeof DistributorWalletRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/distributor/wallet/transfer': {
       id: '/distributor/wallet/transfer'
       path: '/distributor/wallet/transfer'
@@ -1705,6 +1847,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MasterDistributorWalletHistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/master-distributor/wallet/holds': {
+      id: '/master-distributor/wallet/holds'
+      path: '/master-distributor/wallet/holds'
+      fullPath: '/master-distributor/wallet/holds'
+      preLoaderRoute: typeof MasterDistributorWalletHoldsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/master-distributor/wallet/requests': {
       id: '/master-distributor/wallet/requests'
       path: '/master-distributor/wallet/requests'
@@ -1754,6 +1903,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RetailerMembersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/retailer/reports/': {
+      id: '/retailer/reports/'
+      path: '/retailer/reports'
+      fullPath: '/retailer/reports/'
+      preLoaderRoute: typeof RetailerReportsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/retailer/transactions/': {
       id: '/retailer/transactions/'
       path: '/retailer/transactions'
@@ -1766,6 +1922,34 @@ declare module '@tanstack/react-router' {
       path: '/retailer/wallet'
       fullPath: '/retailer/wallet/'
       preLoaderRoute: typeof RetailerWalletIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/wallet/aeps-transfer': {
+      id: '/retailer/wallet/aeps-transfer'
+      path: '/retailer/wallet/aeps-transfer'
+      fullPath: '/retailer/wallet/aeps-transfer'
+      preLoaderRoute: typeof RetailerWalletAepsTransferRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/wallet/history': {
+      id: '/retailer/wallet/history'
+      path: '/retailer/wallet/history'
+      fullPath: '/retailer/wallet/history'
+      preLoaderRoute: typeof RetailerWalletHistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/wallet/holds': {
+      id: '/retailer/wallet/holds'
+      path: '/retailer/wallet/holds'
+      fullPath: '/retailer/wallet/holds'
+      preLoaderRoute: typeof RetailerWalletHoldsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/retailer/wallet/requests': {
+      id: '/retailer/wallet/requests'
+      path: '/retailer/wallet/requests'
+      fullPath: '/retailer/wallet/requests'
+      preLoaderRoute: typeof RetailerWalletRequestsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/retailer/wallet/transfer': {
@@ -1863,12 +2047,20 @@ const rootRouteChildren: RootRouteChildren = {
   DistributorAepsTransactionsRoute: DistributorAepsTransactionsRoute,
   DistributorProfileBankRoute: DistributorProfileBankRoute,
   DistributorProfileKycRoute: DistributorProfileKycRoute,
+  DistributorWalletHistoryRoute: DistributorWalletHistoryRoute,
+  DistributorWalletHoldsRoute: DistributorWalletHoldsRoute,
+  DistributorWalletRequestsRoute: DistributorWalletRequestsRoute,
   DistributorWalletTransferRoute: DistributorWalletTransferRoute,
   MasterDistributorProfileBankRoute: MasterDistributorProfileBankRoute,
   MasterDistributorProfileKycRoute: MasterDistributorProfileKycRoute,
   MasterDistributorWalletHistoryRoute: MasterDistributorWalletHistoryRoute,
+  MasterDistributorWalletHoldsRoute: MasterDistributorWalletHoldsRoute,
   MasterDistributorWalletRequestsRoute: MasterDistributorWalletRequestsRoute,
   MasterDistributorWalletTransferRoute: MasterDistributorWalletTransferRoute,
+  RetailerWalletAepsTransferRoute: RetailerWalletAepsTransferRoute,
+  RetailerWalletHistoryRoute: RetailerWalletHistoryRoute,
+  RetailerWalletHoldsRoute: RetailerWalletHoldsRoute,
+  RetailerWalletRequestsRoute: RetailerWalletRequestsRoute,
   RetailerWalletTransferRoute: RetailerWalletTransferRoute,
   AdminAccessIndexRoute: AdminAccessIndexRoute,
   AdminAepsIndexRoute: AdminAepsIndexRoute,
@@ -1909,6 +2101,7 @@ const rootRouteChildren: RootRouteChildren = {
   RetailerCommissionIndexRoute: RetailerCommissionIndexRoute,
   RetailerKycIndexRoute: RetailerKycIndexRoute,
   RetailerMembersIndexRoute: RetailerMembersIndexRoute,
+  RetailerReportsIndexRoute: RetailerReportsIndexRoute,
   RetailerTransactionsIndexRoute: RetailerTransactionsIndexRoute,
   RetailerWalletIndexRoute: RetailerWalletIndexRoute,
   AdminMerchantsAddIndexRoute: AdminMerchantsAddIndexRoute,

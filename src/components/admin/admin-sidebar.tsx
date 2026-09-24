@@ -1,34 +1,14 @@
-import type { LucideIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import {
-  Banknote,
-  Building2,
-  FileBarChart,
-  Fingerprint,
-  Landmark,
-  LayoutDashboard,
-  Lock,
-  LogOut,
-  MessageSquareText,
-  Percent,
-  Plug,
-  Scale,
-  Settings,
-  ShieldCheck,
-  UserCircle,
-  Users,
-  Wallet,
-  X,
-} from "lucide-react";
+import { Lock, LogOut, X } from "lucide-react";
 import { adminAuthApi, getAdminActor } from "@/lib/admin-api";
 import { getSession } from "@/lib/auth-api";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import {
   credentialsPending as hasPendingCredentials,
-  managementBasePath,
-  normalizeRole,
+  resolveWorkspaceRole,
 } from "@/lib/role-hierarchy";
-import { canAccessUiArea, type UiArea } from "@/lib/ui-permissions";
+import { navigationForRole } from "@/lib/app-navigation";
+import { canAccessUiArea } from "@/lib/ui-permissions";
 
 export type AdminArea =
   | "dashboard"
@@ -47,69 +27,6 @@ export type AdminArea =
   | "legal"
   | "sms";
 
-const items: Array<{ area: AdminArea; label: string; to: string; icon: LucideIcon }> = [
-  { area: "dashboard", label: "Command center", to: "/admin", icon: LayoutDashboard },
-  { area: "profile", label: "My profile", to: "/admin/profile", icon: UserCircle },
-  { area: "merchants", label: "Member management", to: "/admin/merchants", icon: Users },
-  { area: "transactions", label: "Transactions", to: "/admin/transactions", icon: Banknote },
-  { area: "banking", label: "Bank operations", to: "/admin/banking", icon: Landmark },
-  { area: "kyc", label: "KYC approvals", to: "/admin/kyc", icon: ShieldCheck },
-  { area: "aeps", label: "AEPS management", to: "/admin/aeps", icon: Fingerprint },
-  { area: "commissions", label: "Commission setup", to: "/admin/commissions", icon: Percent },
-  { area: "settlements", label: "Wallet & settlements", to: "/admin/settlements", icon: Wallet },
-  { area: "access", label: "Roles & access", to: "/admin/access", icon: Building2 },
-  { area: "reports", label: "All reports", to: "/admin/reports", icon: FileBarChart },
-  { area: "api", label: "API settings", to: "/admin/api-settings", icon: Plug },
-  { area: "settings", label: "System settings", to: "/admin/settings", icon: Settings },
-  { area: "legal", label: "Legal documents", to: "/admin/legal", icon: Scale },
-  { area: "sms", label: "SMS settings", to: "/admin/sms", icon: MessageSquareText },
-];
-
-const distributorItems: typeof items = [
-  { area: "dashboard", label: "Dashboard", to: "/admin", icon: LayoutDashboard },
-  { area: "merchants", label: "Retailers", to: "/admin/retailers", icon: Users },
-  { area: "aeps", label: "AEPS", to: "/admin/aeps", icon: Fingerprint },
-  { area: "banking", label: "Bank accounts", to: "/admin/profile/bank", icon: Landmark },
-  { area: "commissions", label: "Commission & earnings", to: "/admin/commission", icon: Percent },
-  { area: "settlements", label: "Wallet", to: "/admin/wallet", icon: Wallet },
-  { area: "reports", label: "Reports", to: "/admin/reports", icon: FileBarChart },
-  { area: "sms", label: "Support", to: "/admin/support", icon: MessageSquareText },
-  { area: "profile", label: "Profile & KYC", to: "/admin/profile", icon: UserCircle },
-  { area: "settings", label: "Settings", to: "/admin/settings", icon: Settings },
-];
-
-const masterDistributorItems: typeof items = [
-  { area: "dashboard", label: "Dashboard", to: "/admin", icon: LayoutDashboard },
-  { area: "merchants", label: "Network", to: "/admin/network/distributors", icon: Users },
-  { area: "aeps", label: "AEPS", to: "/admin/aeps", icon: Fingerprint },
-  { area: "banking", label: "Bank accounts", to: "/admin/profile/bank", icon: Landmark },
-  { area: "commissions", label: "Commission & earnings", to: "/admin/commission", icon: Percent },
-  { area: "settlements", label: "Wallet & funds", to: "/admin/wallet", icon: Wallet },
-  { area: "reports", label: "Network reports", to: "/admin/reports", icon: FileBarChart },
-  { area: "kyc", label: "KYC monitoring", to: "/admin/kyc", icon: ShieldCheck },
-  { area: "sms", label: "Support", to: "/admin/support", icon: MessageSquareText },
-  { area: "profile", label: "Profile", to: "/admin/profile", icon: UserCircle },
-  { area: "settings", label: "Settings", to: "/admin/settings", icon: Settings },
-];
-
-const permissionArea: Record<AdminArea, UiArea> = {
-  dashboard: "dashboard",
-  profile: "profile",
-  merchants: "members",
-  transactions: "transactions",
-  banking: "banking",
-  kyc: "kyc",
-  aeps: "aeps",
-  commissions: "commissions",
-  settlements: "settlements",
-  access: "access",
-  reports: "reports",
-  api: "api",
-  settings: "settings",
-  legal: "legal",
-  sms: "sms",
-};
-
 export function AdminSidebar({
   active,
   mobile = false,
@@ -119,12 +36,12 @@ export function AdminSidebar({
   mobile?: boolean;
   onClose?: () => void;
 }) {
-  const identity = getSession()?.identity;
-  const credentialsPending = hasPendingCredentials(identity);
-  const role = normalizeRole(identity?.role);
-  const base = managementBasePath(role);
   const actor = getAdminActor();
+  const identity = actor?.kind === "IDENTITY_ADMIN" ? getSession()?.identity : undefined;
+  const credentialsPending = hasPendingCredentials(identity);
   const { access } = useEffectiveAccess();
+  const role = resolveWorkspaceRole(identity?.role, access);
+  const navigationRole = role || resolveWorkspaceRole(actor?.role, access);
 
   async function logout() {
     const destination = getAdminActor()?.kind === "SUPER_ADMIN" ? "/admin/login" : "/login";
@@ -135,12 +52,15 @@ export function AdminSidebar({
     }
   }
 
-  const visibleItems =
-    role === "DISTRIBUTOR"
-      ? distributorItems
-      : role === "MASTER_DISTRIBUTOR"
-        ? masterDistributorItems
-        : items;
+  const visibleItems = navigationRole
+    ? navigationForRole(navigationRole).filter((item) =>
+        canAccessUiArea(item.area, {
+          role: identity?.role || actor?.role,
+          access: actor?.kind === "IDENTITY_ADMIN" ? access : null,
+          dedicatedSuperAdmin: actor?.kind === "SUPER_ADMIN",
+        }),
+      )
+    : [];
 
   return (
     <aside
@@ -170,30 +90,13 @@ export function AdminSidebar({
         aria-label="Admin navigation"
         className="mt-6 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1"
       >
-        {visibleItems.map(({ area, label, to, icon: Icon }) => {
-          const uiArea =
-            area === "sms" && (role === "DISTRIBUTOR" || role === "MASTER_DISTRIBUTOR")
-              ? "support"
-              : area === "settlements" &&
-                  (role === "DISTRIBUTOR" || role === "MASTER_DISTRIBUTOR")
-                ? "wallet"
-                : permissionArea[area];
-          const permissionDenied = !canAccessUiArea(uiArea, {
-            role: role || actor?.role,
-            access: actor?.kind === "IDENTITY_ADMIN" ? access : null,
-            dedicatedSuperAdmin: actor?.kind === "SUPER_ADMIN",
-          });
-          const locked = (credentialsPending && area !== "settings") || permissionDenied;
-          const destination = `${base}${to.slice("/admin".length)}`;
+        {visibleItems.map(({ key, active: itemActive, label, to, icon: Icon }) => {
+          const locked = credentialsPending && itemActive !== "settings";
 
           return locked ? (
             <div
-              key={area}
-              title={
-                permissionDenied
-                  ? "Your active packages do not grant this section"
-                  : "Change temporary password and MPIN in Settings to unlock"
-              }
+              key={key}
+              title="Change temporary password and MPIN in Settings to unlock"
               className="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold text-muted-foreground/55"
             >
               <Icon size={19} />
@@ -202,10 +105,10 @@ export function AdminSidebar({
             </div>
           ) : (
             <Link
-              key={area}
-              to={destination as never}
+              key={key}
+              to={to as never}
               onClick={onClose}
-              className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition ${active === area ? "bg-primary text-white shadow-md shadow-primary/20" : "text-secondary hover:bg-secondary/5"}`}
+              className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition ${active === itemActive ? "bg-primary text-white shadow-md shadow-primary/20" : "text-secondary hover:bg-secondary/5"}`}
             >
               <Icon size={19} />
               <span>{label}</span>

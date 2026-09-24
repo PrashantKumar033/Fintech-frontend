@@ -43,21 +43,6 @@ export function MemberDetailDialog({
   const [notice, setNotice] = useState("");
   const [aepsStatus, setAepsStatus] = useState("SUSPENDED");
   const [reason, setReason] = useState("");
-  const [recoveryMode, setRecoveryMode] = useState<"RESET_REGISTRATION" | "LINK_PROVIDER">(
-    "RESET_REGISTRATION",
-  );
-  const [providerMerchantId, setProviderMerchantId] = useState("");
-  const [recoveryReason, setRecoveryReason] = useState("");
-
-  useEffect(() => {
-    setMember(detail);
-    const currentStatus = detail.aeps?.status;
-    setAepsStatus(
-      currentStatus === "ACTIVE" || currentStatus === "SUSPENDED" || currentStatus === "BLOCKED"
-        ? currentStatus
-        : "SUSPENDED",
-    );
-  }, [detail]);
 
   const identity = member.identity;
   const kyc = member.kyc;
@@ -109,42 +94,6 @@ export function MemberDetailDialog({
       setError(messageOf(value));
     } finally {
       setLedgerLoading(false);
-    }
-  }
-
-  async function recoverAepsRegistration() {
-    if (!canChangeAeps) return;
-    if (recoveryMode === "LINK_PROVIDER" && !providerMerchantId.trim()) {
-      setError("Enter the Merchant ID verified by VimoPay support.");
-      return;
-    }
-    if (recoveryReason.trim().length < 5) {
-      setError("Enter a clear recovery reason of at least 5 characters.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      await adminApi.operations.syncAepsMerchantStatus(identity.id, {
-        mode: recoveryMode,
-        ...(recoveryMode === "LINK_PROVIDER"
-          ? { providerMerchantId: providerMerchantId.trim() }
-          : {}),
-        reason: recoveryReason.trim(),
-      });
-      await refreshMember();
-      setProviderMerchantId("");
-      setRecoveryReason("");
-      setNotice(
-        recoveryMode === "LINK_PROVIDER"
-          ? "Existing VimoPay merchant linked. The member can continue with OTP."
-          : "Registration reset. The member can retry Step 1 with corrected unique details.",
-      );
-    } catch (value) {
-      setError(messageOf(value));
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -268,51 +217,6 @@ export function MemberDetailDialog({
                     completes OTP and e-KYC onboarding.
                   </p>
                 ) : null}
-              </div>
-            ) : null}
-            {canChangeAeps && !canActivateAeps && aeps ? (
-              <div className="mt-4 border-t border-border pt-4">
-                <p className="text-xs font-black uppercase text-muted-foreground">
-                  Recover onboarding
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Reset a failed attempt for corrected registration, or link an existing Merchant ID
-                  only after VimoPay support verifies its ownership.
-                </p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  <select
-                    value={recoveryMode}
-                    onChange={(event) =>
-                      setRecoveryMode(event.target.value as "RESET_REGISTRATION" | "LINK_PROVIDER")
-                    }
-                    className={control}
-                  >
-                    <option value="RESET_REGISTRATION">Reset for corrected registration</option>
-                    <option value="LINK_PROVIDER">Link verified VimoPay Merchant ID</option>
-                  </select>
-                  {recoveryMode === "LINK_PROVIDER" ? (
-                    <input
-                      value={providerMerchantId}
-                      onChange={(event) => setProviderMerchantId(event.target.value)}
-                      placeholder="Verified VimoPay Merchant ID"
-                      className={control}
-                    />
-                  ) : null}
-                  <input
-                    value={recoveryReason}
-                    onChange={(event) => setRecoveryReason(event.target.value)}
-                    placeholder="Recovery reason (required)"
-                    className={control}
-                  />
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void recoverAepsRegistration()}
-                    className="cursor-pointer rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {busy ? <Loader2 className="animate-spin" size={18} /> : "Apply recovery"}
-                  </button>
-                </div>
               </div>
             ) : null}
           </Section>

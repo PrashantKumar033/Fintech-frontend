@@ -6,6 +6,7 @@ export type BankAccountPurpose = "PAYOUT" | "DMT";
 export type BankAccountStatus = "PENDING" | "ACTIVE" | "INACTIVE" | "BLOCKED";
 export type BankVerificationStatus = "PENDING" | "PROCESSING" | "VERIFIED" | "REJECTED" | "FAILED";
 export type BankOwnershipStatus = "PENDING" | "VERIFIED" | "FAILED";
+export type BankAdminReviewStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type BankAccount = {
   id: string;
   identityId?: string;
@@ -20,6 +21,11 @@ export type BankAccount = {
   status: BankAccountStatus;
   verificationStatus: BankVerificationStatus;
   ownershipStatus: BankOwnershipStatus;
+  adminReviewStatus: BankAdminReviewStatus;
+  adminReviewReason?: string | null;
+  adminReviewedAt?: string | null;
+  passbookOriginalName?: string | null;
+  passbookMimeType?: string | null;
   verifiedAt?: string | null;
   isDefault: boolean;
   createdAt?: string;
@@ -33,6 +39,7 @@ export type BankAccountInput = {
   branchName?: string;
   accountHolderName: string;
   accountNumber: string;
+  confirmAccountNumber: string;
   accountType: BankAccountType;
   purposes: BankAccountPurpose[];
   lat: string;
@@ -40,7 +47,18 @@ export type BankAccountInput = {
 };
 export type BankAccountUpdate = Partial<Omit<BankAccountInput, "accountNumber">> & {
   accountNumber?: string;
+  confirmAccountNumber?: string;
 };
+
+function bankAccountForm(body: BankAccountInput | BankAccountUpdate, passbook?: File): FormData {
+  const data = new FormData();
+  Object.entries(body).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    data.append(key, Array.isArray(value) ? value.join(",") : String(value));
+  });
+  if (passbook) data.append("passbook", passbook);
+  return data;
+}
 
 export type KycProfile = {
   id: string;
@@ -88,15 +106,28 @@ const form = (fields: Record<string, string>, files: Record<string, File>) => {
 
 export const complianceApi = {
   banks: (token: string) =>
-    authenticatedRequest<BankAccount[]>("/identity/get-my-bank-accounts", {}, token),
+    authenticatedRequest<BankAccount[]>(
+      "/identity/get-my-bank-accounts",
+      { cache: "no-store" },
+      token,
+    ),
   bank: (token: string, id: string) =>
-    authenticatedRequest<BankAccount>(`/identity/get-my-bank-account/${id}`, {}, token),
+    authenticatedRequest<BankAccount>(
+      `/identity/get-my-bank-account/${id}`,
+      { cache: "no-store" },
+      token,
+    ),
   primaryBank: (token: string) =>
-    authenticatedRequest<BankAccount>("/identity/my-bank-accounts/primary", {}, token),
+    authenticatedRequest<BankAccount>(
+      "/identity/my-bank-accounts/primary",
+      { cache: "no-store" },
+      token,
+    ),
   bankDirectory: (token: string) => authenticatedRequest<unknown>("/bank/list", {}, token),
   addBank: (
     token: string,
     body: BankAccountInput,
+    passbook: File,
     idempotencyKey = createIdempotencyKey("bank-create"),
   ) =>
     authenticatedRequest<BankAccount>(
@@ -104,17 +135,16 @@ export const complianceApi = {
       {
         method: "POST",
         headers: { "Idempotency-Key": idempotencyKey },
-        body: JSON.stringify(body),
+        body: bankAccountForm(body, passbook),
       },
       token,
     ),
-  updateBank: (token: string, id: string, body: BankAccountUpdate, idempotencyKey?: string) =>
+  updateBank: (token: string, id: string, body: BankAccountUpdate, passbook?: File) =>
     authenticatedRequest<BankAccount>(
       `/identity/update-my-bank-account/${id}`,
       {
         method: "PATCH",
-        headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
-        body: JSON.stringify(body),
+        body: bankAccountForm(body, passbook),
       },
       token,
     ),

@@ -1,20 +1,24 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Bell, Menu, Search } from "lucide-react";
+import { useLocation } from "@tanstack/react-router";
+import { Bell, Menu, Search, WalletCards } from "lucide-react";
 import logo from "@/assets/logo.png";
-import { getAdminActor, getAdminSession } from "@/lib/admin-api";
+import { adminApi, getAdminActor, getAdminSession } from "@/lib/admin-api";
 import { getSession } from "@/lib/auth-api";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { PermissionBoundary } from "@/components/permission-boundary";
-import type { UiArea } from "@/lib/ui-permissions";
 import {
   credentialsPending,
   identityVerificationPending,
   isManagementRole,
   managementBasePath,
+  resolveWorkspaceRole,
 } from "@/lib/role-hierarchy";
+import { navigationForRole } from "@/lib/app-navigation";
+import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { AdminSidebar, type AdminArea } from "./admin-sidebar";
 import { SectionTabs } from "@/components/section-tabs";
 import { managementSectionTabs } from "@/lib/management-section-tabs";
+import { useServiceReadiness } from "@/lib/service-readiness";
 
 // Child admin routes currently own their page metadata and therefore mount the
 // shell component independently. Remember a successful client-side guard pass
@@ -26,24 +30,32 @@ export function AdminLayout({
   eyebrow,
   title,
   description,
+  selfServiceCompliance = false,
   children,
 }: {
   active: AdminArea;
   eyebrow?: string;
   title: string;
   description: string;
+  selfServiceCompliance?: boolean;
   children: ReactNode;
 }) {
   const [ready, setReady] = useState(adminWorkspaceReady);
   const [menu, setMenu] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const pathname = useLocation({ select: (location) => location.pathname });
   const actor = getAdminActor();
-  const identity = getSession()?.identity;
+  const identity = actor?.kind === "IDENTITY_ADMIN" ? getSession()?.identity : undefined;
   const { access } = useEffectiveAccess();
+  const compliance = useServiceReadiness(
+    Boolean(identity && isManagementRole(identity.role) && !credentialsPending(identity)),
+  );
 
   useEffect(() => {
-    if (!getAdminActor()) return window.location.replace("/login");
+    const currentActor = getAdminActor();
+    if (!currentActor) return window.location.replace("/login");
     if (getAdminSession()?.onboardingRequired) return window.location.replace("/admin/onboarding");
-    const identitySession = getSession();
+    const identitySession = currentActor.kind === "IDENTITY_ADMIN" ? getSession() : null;
     const base = managementBasePath(identitySession?.identity.role);
     if (base !== "/admin" && window.location.pathname.startsWith("/admin")) {
       return window.location.replace(`${base}${window.location.pathname.slice("/admin".length)}`);
@@ -60,15 +72,47 @@ export function AdminLayout({
             : `${base}/settings`,
         );
     }
+    const compliancePage =
+      window.location.pathname === `${base}/profile` ||
+      window.location.pathname.startsWith(`${base}/profile/`) ||
+      window.location.pathname === `${base}/settings`;
+    if (
+      identitySession &&
+      isManagementRole(identitySession.identity.role) &&
+      compliance.isSuccess &&
+      compliance.data.complianceStatusAvailable &&
+      !compliance.data.complianceSetupComplete &&
+      !compliancePage
+    ) {
+      return window.location.replace(`${base}/profile`);
+    }
     adminWorkspaceReady = true;
     setReady(true);
-  }, [active]);
+  }, [active, actor?.kind, compliance.data, compliance.isSuccess]);
   useEffect(() => {
     document.body.style.overflow = menu ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
   }, [menu]);
+
+  useEffect(() => {
+    if (actor?.kind !== "SUPER_ADMIN") return;
+    let activeRequest = true;
+    adminApi.operations
+      .walletBalances()
+      .then((result) => {
+        if (activeRequest) {
+          setWalletBalance(Number(result.wallets.mainAvailable ?? result.wallets.main ?? 0));
+        }
+      })
+      .catch(() => {
+        if (activeRequest) setWalletBalance(null);
+      });
+    return () => {
+      activeRequest = false;
+    };
+  }, [actor?.kind]);
 
   if (!ready)
     return (
@@ -77,26 +121,36 @@ export function AdminLayout({
       </div>
     );
 
-  const permissionArea: Record<AdminArea, UiArea> = {
-    dashboard: "dashboard",
-    profile: "profile",
-    merchants: "members",
-    transactions: "transactions",
-    banking: "banking",
-    kyc: "kyc",
-    aeps: "aeps",
-    commissions: "commissions",
-    settlements: "settlements",
-    access: "access",
-    reports: "reports",
-    api: "api",
-    settings: "settings",
-    legal: "legal",
-    sms:
-      identity?.role === "DISTRIBUTOR" || identity?.role === "MASTER_DISTRIBUTOR"
-        ? "support"
-        : "sms",
-  };
+  const navigationRole = resolveWorkspaceRole(identity?.role || actor?.role, access);
+  const routeArea = navigationRole
+    ? navigationForRole(navigationRole).find((item) => item.active === active)?.area
+    : undefined;
+  const sectionTabsArea: AdminArea = selfServiceCompliance ? "profile" : active;
+  const sectionTabs = managementSectionTabs(identity?.role, sectionTabsArea);
+  const routePermission = (() => {
+    if (selfServiceCompliance) return undefined;
+    if (pathname.endsWith("/wallet/transfer")) return UI_PERMISSION.WALLET_TRANSFER;
+    if (pathname.endsWith("/wallet/requests")) return UI_PERMISSION.WALLET_FUND_REQUEST;
+    if (pathname.endsWith("/wallet/history")) return UI_PERMISSION.WALLET_TRANSACTION_VIEW;
+    if (pathname.endsWith("/wallet/holds")) return UI_PERMISSION.WALLET_HOLD_VIEW;
+    if (pathname.endsWith("/aeps/transactions")) {
+      return UI_PERMISSION.AEPS_NETWORK_TRANSACTION_VIEW;
+    }
+    if (pathname.endsWith("/merchants/add") || pathname.endsWith("/retailers/add")) {
+      return UI_PERMISSION.ACCOUNT_CREATE;
+    }
+    if (pathname.endsWith("/merchants/list") || pathname.endsWith("/retailers")) {
+      return UI_PERMISSION.MEMBER_LIST;
+    }
+    if (pathname.endsWith("/banking")) return UI_PERMISSION.BANK_ACCOUNT_LIST;
+    if (pathname.endsWith("/kyc")) return UI_PERMISSION.KYC_REVIEW_LIST;
+    if (pathname.endsWith("/transactions")) {
+      return navigationRole === "ADMIN" || navigationRole === "SUPER_ADMIN"
+        ? UI_PERMISSION.TRANSACTION_ADMIN_LIST
+        : UI_PERMISSION.AEPS_NETWORK_TRANSACTION_VIEW;
+    }
+    return undefined;
+  })();
 
   return (
     <div className="min-h-screen bg-[#f3f8f6] text-secondary">
@@ -109,10 +163,32 @@ export function AdminLayout({
           <Menu size={20} />
         </button>
         <img src={logo} alt="UMOBIPAY" className="h-9 w-auto" />
-        <div className="ml-auto hidden w-72 items-center gap-2 rounded-xl bg-muted px-3 py-2.5 text-muted-foreground md:flex">
-          <Search size={17} />
-          <span className="text-xs">Search operations</span>
-        </div>
+        {actor?.kind === "SUPER_ADMIN" ? (
+          <div className="ml-auto hidden min-w-44 items-center gap-3 rounded-xl border border-border bg-[#edf8f4] px-4 py-2 md:flex">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-white text-primary shadow-sm">
+              <WalletCards size={17} />
+            </span>
+            <span>
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                Wallet balance
+              </span>
+              <span className="block text-sm font-black text-secondary">
+                {walletBalance === null
+                  ? "Unavailable"
+                  : new Intl.NumberFormat("en-IN", {
+                      style: "currency",
+                      currency: "INR",
+                      minimumFractionDigits: 2,
+                    }).format(walletBalance)}
+              </span>
+            </span>
+          </div>
+        ) : (
+          <div className="ml-auto hidden w-72 items-center gap-2 rounded-xl bg-muted px-3 py-2.5 text-muted-foreground md:flex">
+            <Search size={17} />
+            <span className="text-xs">Search operations</span>
+          </div>
+        )}
         <button
           aria-label="Notifications"
           className="ml-3 grid h-10 w-10 place-items-center rounded-xl border border-border"
@@ -146,22 +222,33 @@ export function AdminLayout({
             <h1 className="mt-1 text-3xl font-black sm:text-4xl">{title}</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p>
             <div className="mt-6">
-              <SectionTabs tabs={managementSectionTabs(identity?.role, active)} />
+              <SectionTabs
+                tabs={sectionTabs}
+                role={identity?.role || actor?.role}
+                access={actor?.kind === "IDENTITY_ADMIN" ? access : null}
+                dedicatedSuperAdmin={actor?.kind === "SUPER_ADMIN"}
+              />
             </div>
-            <div className={managementSectionTabs(identity?.role, active).length ? "" : "mt-7"}>
+            <div className={sectionTabs.length ? "" : "mt-7"}>
               <PermissionBoundary
-                area={
-                  active === "settlements" &&
-                  (identity?.role === "DISTRIBUTOR" ||
-                    identity?.role === "MASTER_DISTRIBUTOR")
-                    ? "wallet"
-                    : permissionArea[active]
-                }
+                area={selfServiceCompliance ? "profile" : routeArea || "dashboard"}
                 role={identity?.role || actor?.role}
                 access={actor?.kind === "IDENTITY_ADMIN" ? access : null}
                 dedicatedSuperAdmin={actor?.kind === "SUPER_ADMIN"}
               >
-                {children}
+                {routePermission ? (
+                  <PermissionBoundary
+                    permission={routePermission}
+                    role={identity?.role || actor?.role}
+                    access={actor?.kind === "IDENTITY_ADMIN" ? access : null}
+                    dedicatedSuperAdmin={actor?.kind === "SUPER_ADMIN"}
+                    fallbackRoles={navigationRole ? [navigationRole] : []}
+                  >
+                    {children}
+                  </PermissionBoundary>
+                ) : (
+                  children
+                )}
               </PermissionBoundary>
             </div>
           </div>

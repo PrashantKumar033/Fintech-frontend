@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -264,10 +264,14 @@ function Commissions() {
   const { can } = useEffectiveAccess();
   const allowed = (code: string) => actor?.kind === "SUPER_ADMIN" || can(code, ["ADMIN"]);
   const supportedAdminRole = actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN";
-  const canViewRules = supportedAdminRole && allowed(UI_PERMISSION.COMMISSION_RULE_VIEW);
-  const canViewDistributions =
+  const canListRules = supportedAdminRole && allowed(UI_PERMISSION.COMMISSION_RULE_LIST);
+  const canInspectRule = supportedAdminRole && allowed(UI_PERMISSION.COMMISSION_RULE_VIEW);
+  const canListDistributions =
+    supportedAdminRole && allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_LIST);
+  const canInspectDistribution =
     supportedAdminRole && allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_VIEW);
-  const canManage = canViewRules || canViewDistributions;
+  const canViewHierarchy = allowed(UI_PERMISSION.COMMISSION_HIERARCHY_VIEW);
+  const canManage = canListRules || canListDistributions;
   const canCreateRule = allowed(UI_PERMISSION.COMMISSION_RULE_CREATE);
   const canUpdateRule = allowed(UI_PERMISSION.COMMISSION_RULE_UPDATE);
   const canDeactivateRule = allowed(UI_PERMISSION.COMMISSION_RULE_DEACTIVATE);
@@ -275,7 +279,13 @@ function Commissions() {
   const canUpdateDistribution = allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_UPDATE);
   const canDeactivateDistribution = allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_DEACTIVATE);
 
-  const view: CommissionView = search.view === "distributions" ? "DISTRIBUTIONS" : "RULES";
+  const requestedView: CommissionView = search.view === "distributions" ? "DISTRIBUTIONS" : "RULES";
+  const view: CommissionView =
+    requestedView === "DISTRIBUTIONS" && canListDistributions
+      ? "DISTRIBUTIONS"
+      : canListRules
+        ? "RULES"
+        : "DISTRIBUTIONS";
   const [rules, setRules] = useState<CommissionRule[]>([]);
   const [distributions, setDistributions] = useState<CommissionDistribution[]>([]);
   const [rulesLoading, setRulesLoading] = useState(canManage);
@@ -311,8 +321,8 @@ function Commissions() {
     nextActive: boolean;
   } | null>(null);
 
-  async function loadRules() {
-    if (!canManage) return;
+  const loadRules = useCallback(async () => {
+    if (!canListRules) return;
     setRulesLoading(true);
     try {
       setRules(await adminApi.commissionRules.list());
@@ -323,10 +333,10 @@ function Commissions() {
     } finally {
       setRulesLoading(false);
     }
-  }
+  }, [canListRules]);
 
-  async function loadDistributions() {
-    if (!canManage) return;
+  const loadDistributions = useCallback(async () => {
+    if (!canListDistributions) return;
     setDistributionsLoading(true);
     try {
       setDistributions(await adminApi.commissionDistributions.list());
@@ -339,7 +349,7 @@ function Commissions() {
     } finally {
       setDistributionsLoading(false);
     }
-  }
+  }, [canListDistributions]);
 
   async function refreshAll() {
     setError("");
@@ -349,7 +359,7 @@ function Commissions() {
   useEffect(() => {
     if (!canManage) return;
     void Promise.all([loadRules(), loadDistributions()]);
-  }, [canManage]);
+  }, [canManage, loadDistributions, loadRules]);
 
   useEffect(() => {
     if (!rules.length) {
@@ -438,6 +448,7 @@ function Commissions() {
     setError("");
     setNotice("");
     try {
+      if (!canInspectRule) return;
       const fresh = await adminApi.commissionRules.get(rule.id);
       setRuleDraft(draftFromRule(fresh));
     } catch (caught) {
@@ -594,6 +605,7 @@ function Commissions() {
     setError("");
     setNotice("");
     try {
+      if (!canInspectDistribution) return;
       const fresh = await adminApi.commissionDistributions.get(distribution.id);
       setDistributionDraft(draftFromDistribution(fresh));
       setSelectedRuleId(fresh.commissionRuleId);
@@ -800,32 +812,38 @@ function Commissions() {
       description="Manage the commission pool rules and the hierarchy shares paid from each matched rule."
     >
       <div className="inline-flex rounded-xl border border-border bg-white p-1">
-        <button
-          type="button"
-          onClick={() => switchView("RULES")}
-          className={`rounded-lg px-4 py-2.5 text-xs font-extrabold transition ${
-            view === "RULES" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"
-          }`}
-        >
-          Commission Rules
-        </button>
-        <button
-          type="button"
-          onClick={() => switchView("DISTRIBUTIONS")}
-          className={`rounded-lg px-4 py-2.5 text-xs font-extrabold transition ${
-            view === "DISTRIBUTIONS"
-              ? "bg-secondary text-white"
-              : "text-muted-foreground hover:bg-muted"
-          }`}
-        >
-          Distribution Setup
-        </button>
-        <Link
-          to="/admin/commissions/hierarchy"
-          className="rounded-lg px-4 py-2.5 text-xs font-extrabold text-muted-foreground transition hover:bg-muted"
-        >
-          Hierarchy
-        </Link>
+        {canListRules && (
+          <button
+            type="button"
+            onClick={() => switchView("RULES")}
+            className={`rounded-lg px-4 py-2.5 text-xs font-extrabold transition ${
+              view === "RULES" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            Commission Rules
+          </button>
+        )}
+        {canListDistributions && (
+          <button
+            type="button"
+            onClick={() => switchView("DISTRIBUTIONS")}
+            className={`rounded-lg px-4 py-2.5 text-xs font-extrabold transition ${
+              view === "DISTRIBUTIONS"
+                ? "bg-secondary text-white"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            Distribution Setup
+          </button>
+        )}
+        {canViewHierarchy && (
+          <Link
+            to="/admin/commissions/hierarchy"
+            className="rounded-lg px-4 py-2.5 text-xs font-extrabold text-muted-foreground transition hover:bg-muted"
+          >
+            Hierarchy
+          </Link>
+        )}
       </div>
 
       <CommissionCalculator />

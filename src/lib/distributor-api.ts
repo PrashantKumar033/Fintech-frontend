@@ -11,8 +11,7 @@ export type HierarchyChild = {
 };
 
 export const distributorApi = {
-  balances: (identityId: string) =>
-    authenticatedRequest<WalletBalances>(`/wallet/balances/${encodeURIComponent(identityId)}`),
+  balances: (_identityId?: string) => authenticatedRequest<WalletBalances>("/wallet/balances"),
   transactions: (query = "page=1&limit=50") =>
     authenticatedRequest<ProviderTransactionPage>(`/aeps/network-transactions?${query}`),
   retailers: (identityId: string) =>

@@ -11,7 +11,7 @@ import {
 import { BusinessPage } from "@/components/business-page";
 import { getSession } from "@/lib/auth-api";
 import { operationsApi, operationsMessage, type WalletBalances } from "@/lib/operations-api";
-import { credentialsPending, normalizeRole, signedInHome } from "@/lib/role-hierarchy";
+import { credentialsPending, resolveWorkspaceRole, signedInHome } from "@/lib/role-hierarchy";
 
 export const Route = createFileRoute("/retailer/wallet/")({
   head: () => ({ meta: [{ title: "Wallet — Retailer | UMOBIPAY" }] }),
@@ -36,12 +36,7 @@ function RetailerWalletPage() {
     setLoading(true);
     setError("");
     try {
-      const [main, aeps, profit] = await Promise.all([
-        operationsApi.balance(session.accessToken, "MAIN"),
-        operationsApi.balance(session.accessToken, "AEPS"),
-        operationsApi.balance(session.accessToken, "PROFIT"),
-      ]);
-      setBalances({ userId: session.identity.id, wallets: { main, aeps, profit } });
+      setBalances(await operationsApi.balances(session.accessToken));
     } catch (requestError) {
       setError(operationsMessage(requestError));
     } finally {
@@ -55,7 +50,7 @@ function RetailerWalletPage() {
       return;
     }
 
-    if (normalizeRole(session.identity.role) !== "RETAILER") {
+    if (resolveWorkspaceRole(session.identity.role) !== "RETAILER") {
       window.location.replace(signedInHome(session));
       return;
     }
@@ -78,7 +73,7 @@ function RetailerWalletPage() {
   }
 
   const cards = [
-    ["Main wallet", balances?.wallets.main ?? 0, WalletCards],
+    ["MAIN available", balances?.wallets.mainAvailable ?? balances?.wallets.main ?? 0, WalletCards],
     ["AEPS wallet", balances?.wallets.aeps ?? 0, Fingerprint],
     ["Profit wallet", balances?.wallets.profit ?? 0, ShieldCheck],
   ] as const;
@@ -124,6 +119,13 @@ function RetailerWalletPage() {
         ))}
       </div>
 
+      {Number(balances?.wallets.mainHeld || 0) > 0 ? (
+        <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          {inr.format(Number(balances?.wallets.mainHeld || 0))} is currently held. Ledger MAIN
+          balance is {inr.format(Number(balances?.wallets.main || 0))}.
+        </p>
+      ) : null}
+
       <section className="mt-6 rounded-2xl border border-border bg-card p-6 shadow-soft">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-4">
@@ -133,7 +135,8 @@ function RetailerWalletPage() {
             <div>
               <h2 className="text-xl font-black text-secondary">Retailer peer transfer</h2>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Send MAIN-wallet funds to another active Retailer. Your backend enforces the same-role rule and checks the balance again before debit.
+                Send MAIN-wallet funds to another active Retailer. Your backend enforces the
+                same-role rule and checks the balance again before debit.
               </p>
             </div>
           </div>
@@ -146,6 +149,27 @@ function RetailerWalletPage() {
             Transfer fund
           </Link>
         </div>
+      </section>
+
+      <section className="mt-6 grid gap-4 md:grid-cols-2">
+        <Link
+          to="/retailer/wallet/requests"
+          className="rounded-2xl border border-border bg-card p-6 shadow-soft transition hover:border-primary"
+        >
+          <h2 className="text-lg font-black text-secondary">Add money request</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Deposit into a company receiving account and submit the payment reference for approval.
+          </p>
+        </Link>
+        <Link
+          to="/retailer/wallet/history"
+          className="rounded-2xl border border-border bg-card p-6 shadow-soft transition hover:border-primary"
+        >
+          <h2 className="text-lg font-black text-secondary">Wallet history</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Review MAIN, AEPS and PROFIT credits, debits and closing balances.
+          </p>
+        </Link>
       </section>
     </BusinessPage>
   );

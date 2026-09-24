@@ -4,7 +4,11 @@ import { complianceApi } from "./compliance-api";
 
 export type ServiceReadiness = {
   kycStatus: string;
+  kycSubmitted: boolean;
+  hasBankAccount: boolean;
   hasVerifiedBank: boolean;
+  complianceStatusAvailable: boolean;
+  complianceSetupComplete: boolean;
   aepsUnlocked: boolean;
 };
 
@@ -31,17 +35,26 @@ export function useServiceReadiness(enabled = true) {
           : kycResult.reason instanceof ApiError && kycResult.reason.status === 404
             ? "NOT_STARTED"
             : "UNAVAILABLE";
+      const kycSubmitted = kycStatus === "UNDER_REVIEW" || kycStatus === "APPROVED";
+      const hasBankAccount = bankResult.status === "fulfilled" && bankResult.value.length > 0;
       const hasVerifiedBank =
         bankResult.status === "fulfilled" &&
         bankResult.value.some(
           (bank) =>
             bank.status === "ACTIVE" &&
+            bank.adminReviewStatus === "APPROVED" &&
             bank.verificationStatus === "VERIFIED" &&
             bank.ownershipStatus === "VERIFIED",
         );
+      const complianceStatusAvailable =
+        kycStatus !== "UNAVAILABLE" && bankResult.status === "fulfilled";
       return {
         kycStatus,
+        kycSubmitted,
+        hasBankAccount,
         hasVerifiedBank,
+        complianceStatusAvailable,
+        complianceSetupComplete: kycSubmitted && hasBankAccount,
         aepsUnlocked: kycStatus === "APPROVED" && hasVerifiedBank,
       };
     },

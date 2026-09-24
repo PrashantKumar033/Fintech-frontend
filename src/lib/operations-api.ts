@@ -2,7 +2,13 @@ import { ApiError, authenticatedRequest } from "./auth-api";
 
 export type WalletBalances = {
   userId: string;
-  wallets: { main: number; aeps: number; profit: number };
+  wallets: {
+    main: number;
+    mainHeld?: number;
+    mainAvailable?: number;
+    aeps: number;
+    profit: number;
+  };
 };
 
 export type WalletTransferInput = {
@@ -36,6 +42,118 @@ export type WalletTransferResult = {
   // actual peer-transfer response shape above.
   referenceId?: string;
   transaction?: { referenceId?: string };
+};
+
+export type AepsToMainTransferResult = {
+  duplicate: boolean;
+  transferReference: string;
+  aepsDebit: WalletTransferTransaction;
+  mainCredit: WalletTransferTransaction;
+};
+
+export type WalletTransferOtpChallenge = {
+  success: boolean;
+  challengeId: string;
+  receiver: { loginId: string; fullName?: string };
+  amount: number;
+  phoneNumber: string;
+  expiresInSeconds: number;
+  message: string;
+  devOtp?: string;
+};
+
+export type WalletLedgerEntry = {
+  referenceId: string;
+  walletType: "MAIN" | "AEPS" | "PROFIT";
+  serviceType: string;
+  title: string;
+  type: "CREDIT" | "DEBIT";
+  amount: string;
+  openingBalance: string;
+  closingBalance: string;
+  status: string;
+  description?: string | null;
+  createdAt: string;
+};
+
+export type WalletLedgerPage = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  data: WalletLedgerEntry[];
+};
+
+export type TransactionLedgerFilters = {
+  walletType?: "MAIN" | "AEPS" | "PROFIT";
+  type?: "CREDIT" | "DEBIT";
+  status?: "PENDING" | "PROCESSING" | "SUCCESS" | "FAILED" | "REVERSED" | "REFUNDED";
+  serviceType?: string;
+  fromDate?: string;
+  toDate?: string;
+};
+
+export type TransactionLedgerReportPage = {
+  limit: number;
+  hasNext: boolean;
+  nextCursor: string | null;
+  filters: Record<string, unknown>;
+  data: Array<WalletLedgerEntry & { sequence: string; updatedAt: string }>;
+};
+
+export type TransactionLedgerSummary = {
+  filters: Record<string, unknown>;
+  totalTransactions: number;
+  totalCreditAmount: string;
+  totalDebitAmount: string;
+  netMovement: string;
+  wallets: Array<{
+    walletType: "MAIN" | "AEPS" | "PROFIT";
+    transactionCount: number;
+    creditCount: number;
+    debitCount: number;
+    creditAmount: string;
+    debitAmount: string;
+    balanceAtPeriodEnd: string;
+  }>;
+};
+
+export type FundReceivingBank = {
+  id: string;
+  displayName?: string | null;
+  bankName: string;
+  ifsc: string;
+  branchName?: string | null;
+  accountHolderName: string;
+  accountNumberLast4: string;
+  maskedAccountNumber: string;
+  accountType: string;
+  upiId?: string | null;
+  isDefault: boolean;
+};
+
+export type FundRequest = {
+  id: string;
+  referenceId: string;
+  amount: string;
+  receivingBankAccountId: string;
+  paymentMode: string;
+  paymentReference?: string | null;
+  paymentDate: string;
+  remark?: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "REINITIATE" | "CANCELLED";
+  adminRemark?: string | null;
+  walletTransactionReference?: string | null;
+  createdAt: string;
+};
+
+export type FundRequestInput = {
+  amount: number;
+  receivingBankAccountId: string;
+  paymentMode: string;
+  paymentReference?: string;
+  paymentDate: string;
+  remark?: string;
 };
 
 export type ProviderOperation = "BE" | "MS" | "CW" | "AP" | "CD";
@@ -153,21 +271,171 @@ export const operationsApi = {
   balance: (token: string, walletType: "MAIN" | "AEPS" | "PROFIT") =>
     authenticatedRequest<number>(`/transactions/balance/${walletType}`, {}, token),
 
-  balances: (token: string, userId: string) =>
-    authenticatedRequest<WalletBalances>(
-      `/wallet/balances/${encodeURIComponent(userId)}`,
-      {},
-      token,
-    ),
+  balances: (token: string, _userId?: string) =>
+    authenticatedRequest<WalletBalances>("/wallet/balances", { cache: "no-store" }, token),
 
-  transfer: (token: string, body: WalletTransferInput, idempotencyKey = createIdempotencyKey()) =>
-    authenticatedRequest<WalletTransferResult>(
-      "/wallet/transfer",
+  requestTransferOtp: (
+    token: string,
+    body: WalletTransferInput,
+    idempotencyKey = createIdempotencyKey(),
+  ) =>
+    authenticatedRequest<WalletTransferOtpChallenge>(
+      "/wallet/transfer/request-otp",
       {
         method: "POST",
         headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify(body),
       },
+      token,
+    ),
+
+  confirmTransferOtp: (token: string, challengeId: string, otp: string) =>
+    authenticatedRequest<WalletTransferResult>(
+      "/wallet/transfer/confirm",
+      {
+        method: "POST",
+        body: JSON.stringify({ challengeId, otp }),
+        signal: AbortSignal.timeout(20_000),
+      },
+      token,
+    ),
+
+  aepsToMain: (
+    token: string,
+    body: { amount: number; tpin: string; description?: string },
+    idempotencyKey = createIdempotencyKey(),
+  ) =>
+    authenticatedRequest<AepsToMainTransferResult>(
+      "/wallet/transfer/aeps-to-main",
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(body),
+      },
+      token,
+    ),
+
+  walletTransactions: (
+    token: string,
+    filters: { page?: number; limit?: number; walletType?: string; type?: string } = {},
+  ) =>
+    authenticatedRequest<WalletLedgerPage>(
+      `/wallet/transactions?${queryString({
+        page: filters.page ?? 1,
+        limit: filters.limit ?? 20,
+        walletType: filters.walletType,
+        type: filters.type,
+      })}`,
+      { cache: "no-store" },
+      token,
+    ),
+
+  transactionLedgerReport: (
+    token: string,
+    filters: TransactionLedgerFilters & { limit?: number; cursor?: string } = {},
+  ) =>
+    authenticatedRequest<TransactionLedgerReportPage>(
+      `/transaction-ledger/me?${queryString({
+        limit: filters.limit ?? 50,
+        cursor: filters.cursor,
+        walletType: filters.walletType,
+        type: filters.type,
+        status: filters.status,
+        serviceType: filters.serviceType,
+        fromDate: filters.fromDate,
+        toDate: filters.toDate,
+      })}`,
+      { cache: "no-store" },
+      token,
+    ),
+
+  transactionLedgerEntry: (token: string, referenceId: string) =>
+    authenticatedRequest<WalletLedgerEntry & { sequence: string; updatedAt: string; description?: string | null; externalReference?: string | null }>(
+      `/transaction-ledger/me/${encodeURIComponent(referenceId)}`,
+      { cache: "no-store" },
+      token,
+    ),
+
+  transactionLedgerSummary: (token: string, filters: TransactionLedgerFilters = {}) =>
+    authenticatedRequest<TransactionLedgerSummary>(
+      `/transaction-ledger/me/summary?${queryString({
+        walletType: filters.walletType,
+        type: filters.type,
+        status: filters.status,
+        serviceType: filters.serviceType,
+        fromDate: filters.fromDate,
+        toDate: filters.toDate,
+      })}`,
+      { cache: "no-store" },
+      token,
+    ),
+
+  walletHolds: (
+    token: string,
+    filters: { status?: string; page?: number; limit?: number } = {},
+  ) =>
+    authenticatedRequest<{
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+      data: Array<{
+        id: string;
+        referenceId: string;
+        walletType: string;
+        amount: string;
+        reason: string;
+        status: string;
+        resolutionReason?: string | null;
+        releasedAt?: string | null;
+        createdAt: string;
+      }>;
+    }>(
+      `/wallet/holds?${queryString({
+        page: filters.page ?? 1,
+        limit: filters.limit ?? 20,
+        status: filters.status,
+      })}`,
+      { cache: "no-store" },
+      token,
+    ),
+
+  receivingBanks: (token: string) =>
+    authenticatedRequest<FundReceivingBank[]>(
+      "/fund-receiving-bank-accounts",
+      { cache: "no-store" },
+      token,
+    ),
+
+  fundRequests: (token: string) =>
+    authenticatedRequest<FundRequest[]>("/fund-requests", { cache: "no-store" }, token),
+
+  createFundRequest: (
+    token: string,
+    body: FundRequestInput,
+    idempotencyKey = createIdempotencyKey(),
+  ) =>
+    authenticatedRequest<FundRequest>(
+      "/fund-requests",
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(body),
+      },
+      token,
+    ),
+
+  resubmitFundRequest: (token: string, referenceId: string, body: FundRequestInput) =>
+    authenticatedRequest<FundRequest>(
+      `/fund-requests/${encodeURIComponent(referenceId)}/resubmit`,
+      { method: "PATCH", body: JSON.stringify(body) },
+      token,
+    ),
+
+  cancelFundRequest: (token: string, referenceId: string) =>
+    authenticatedRequest<FundRequest>(
+      `/fund-requests/${encodeURIComponent(referenceId)}/cancel`,
+      { method: "POST", body: JSON.stringify({}) },
       token,
     ),
 

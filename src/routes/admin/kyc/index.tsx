@@ -29,8 +29,15 @@ function Kyc() {
   const actor = getAdminActor();
   const { can } = useEffectiveAccess();
   const dedicatedSuperAdmin = actor?.kind === "SUPER_ADMIN";
-  const canView = dedicatedSuperAdmin || can(UI_PERMISSION.KYC_VIEW, ["SUPER_ADMIN", "ADMIN"]);
-  const canManage = dedicatedSuperAdmin || can(UI_PERMISSION.KYC_MANAGE, ["SUPER_ADMIN", "ADMIN"]);
+  const allowed = (permission: string) =>
+    dedicatedSuperAdmin || can(permission, ["SUPER_ADMIN", "ADMIN"]);
+  const canView = allowed(UI_PERMISSION.KYC_REVIEW_LIST);
+  const canInspect = allowed(UI_PERMISSION.KYC_REVIEW_VIEW);
+  const canReviewDocument = allowed(UI_PERMISSION.KYC_REVIEW_DOCUMENT);
+  const canReviewVideo = allowed(UI_PERMISSION.KYC_REVIEW_VIDEO);
+  const canApprove = allowed(UI_PERMISSION.KYC_REVIEW_APPROVE);
+  const canReject = allowed(UI_PERMISSION.KYC_REVIEW_REJECT);
+  const canManage = canReviewDocument || canReviewVideo || canApprove || canReject;
   const [items, setItems] = useState<KycReviewListItem[]>([]);
   const [status, setStatus] = useState<"" | KycReviewStatus>("UNDER_REVIEW");
   const [page, setPage] = useState(1),
@@ -71,6 +78,7 @@ function Kyc() {
   }, [load]);
 
   async function inspect(item: KycReviewListItem) {
+    if (!canInspect) return setError(`Permission ${UI_PERMISSION.KYC_REVIEW_VIEW} is required.`);
     setBusy(true);
     setError("");
     try {
@@ -85,8 +93,13 @@ function Kyc() {
     }
   }
 
-  async function mutate(task: () => Promise<unknown>, success: string) {
-    if (!canManage) return setError(`Permission ${UI_PERMISSION.KYC_MANAGE} is required.`);
+  async function mutate(
+    permitted: boolean,
+    permission: string,
+    task: () => Promise<unknown>,
+    success: string,
+  ) {
+    if (!permitted) return setError(`Permission ${permission} is required.`);
     setBusy(true);
     setError("");
     setDecisionError("");
@@ -135,14 +148,14 @@ function Kyc() {
     >
       {!canView && (
         <ActionPermissionNotice
-          permission={UI_PERMISSION.KYC_VIEW}
+          permission={UI_PERMISSION.KYC_REVIEW_LIST}
           title="KYC review queue is not enabled"
         />
       )}
       {canView && !canManage && (
         <div className="mb-5">
           <ActionPermissionNotice
-            permission={UI_PERMISSION.KYC_MANAGE}
+            permission={UI_PERMISSION.KYC_REVIEW_APPROVE}
             title="KYC queue is read-only"
           />
         </div>
@@ -218,14 +231,16 @@ function Kyc() {
                     </td>
                     <td className="p-3">{when(item.submittedAt || item.createdAt)}</td>
                     <td className="p-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => void inspect(item)}
-                        disabled={busy}
-                        className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 font-bold disabled:opacity-50"
-                      >
-                        <Eye size={15} /> Review
-                      </button>
+                      {canInspect && (
+                        <button
+                          type="button"
+                          onClick={() => void inspect(item)}
+                          disabled={busy}
+                          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 font-bold disabled:opacity-50"
+                        >
+                          <Eye size={15} /> Review
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -331,7 +346,7 @@ function Kyc() {
                     setRemarks(event.target.value);
                     setDecisionError("");
                   }}
-                  disabled={!canManage || detail.status !== "UNDER_REVIEW"}
+                  disabled={(!canApprove && !canReject) || detail.status !== "UNDER_REVIEW"}
                   maxLength={1000}
                   placeholder="Add approval notes or enter the required rejection reason"
                   className="mt-2 min-h-24 w-full resize-y rounded-xl border border-border bg-white p-3 text-sm font-normal normal-case tracking-normal outline-none focus:border-primary disabled:cursor-not-allowed disabled:bg-muted/50"
@@ -345,7 +360,7 @@ function Kyc() {
               <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
-                  disabled={!canManage || busy || detail.status !== "UNDER_REVIEW"}
+                  disabled={!canReject || busy || detail.status !== "UNDER_REVIEW"}
                   title={
                     detail.status === "UNDER_REVIEW"
                       ? "Reject this KYC application"
@@ -358,6 +373,8 @@ function Kyc() {
                       return;
                     }
                     void mutate(
+                      canReject,
+                      UI_PERMISSION.KYC_REVIEW_REJECT,
                       () =>
                         adminApi.kycReview.reject(detail.identityId, detail.accountType, reason),
                       "KYC rejected.",
@@ -370,7 +387,7 @@ function Kyc() {
                 <button
                   type="button"
                   disabled={
-                    !canManage || busy || detail.status !== "UNDER_REVIEW" || !allEvidenceApproved
+                    !canApprove || busy || detail.status !== "UNDER_REVIEW" || !allEvidenceApproved
                   }
                   title={
                     detail.status !== "UNDER_REVIEW"
@@ -382,6 +399,8 @@ function Kyc() {
                   onClick={() => {
                     const reason = remarks.trim();
                     void mutate(
+                      canApprove,
+                      UI_PERMISSION.KYC_REVIEW_APPROVE,
                       () =>
                         adminApi.kycReview.approve(
                           detail.identityId,
@@ -419,12 +438,14 @@ function Kyc() {
                       </a>
                     )}
                   </div>
-                  {canManage && detail.status === "UNDER_REVIEW" && (
+                  {canReviewDocument && detail.status === "UNDER_REVIEW" && (
                     <div className="mt-4 flex gap-2">
                       <button
                         disabled={busy || document.status === "APPROVED"}
                         onClick={() =>
                           void mutate(
+                            canReviewDocument,
+                            UI_PERMISSION.KYC_REVIEW_DOCUMENT,
                             () =>
                               adminApi.kycReview.document(
                                 detail.identityId,
@@ -446,6 +467,8 @@ function Kyc() {
                           const reason = rejectionReason(document.documentType);
                           if (reason)
                             void mutate(
+                              canReviewDocument,
+                              UI_PERMISSION.KYC_REVIEW_DOCUMENT,
                               () =>
                                 adminApi.kycReview.document(
                                   detail.identityId,
@@ -485,12 +508,14 @@ function Kyc() {
                     </a>
                   )}
                 </div>
-                {canManage && detail.status === "UNDER_REVIEW" && (
+                {canReviewVideo && detail.status === "UNDER_REVIEW" && (
                   <div className="mt-4 flex gap-2">
                     <button
                       disabled={busy || detail.video.status === "APPROVED"}
                       onClick={() =>
                         void mutate(
+                          canReviewVideo,
+                          UI_PERMISSION.KYC_REVIEW_VIDEO,
                           () =>
                             adminApi.kycReview.video(
                               detail.identityId,
@@ -510,6 +535,8 @@ function Kyc() {
                         const reason = rejectionReason("verification video");
                         if (reason)
                           void mutate(
+                            canReviewVideo,
+                            UI_PERMISSION.KYC_REVIEW_VIDEO,
                             () =>
                               adminApi.kycReview.video(
                                 detail.identityId,

@@ -52,7 +52,7 @@ function Transactions() {
   const { can } = useEffectiveAccess();
   const dedicatedSuperAdmin = actor?.kind === "SUPER_ADMIN";
   const canViewTransaction =
-    dedicatedSuperAdmin || can(UI_PERMISSION.TRANSACTION_VIEW, ["SUPER_ADMIN", "ADMIN"]);
+    dedicatedSuperAdmin || can(UI_PERMISSION.TRANSACTION_ADMIN_VIEW, ["SUPER_ADMIN", "ADMIN"]);
   const canViewReconciliation =
     dedicatedSuperAdmin ||
     can(UI_PERMISSION.TRANSACTION_RECONCILIATION_VIEW, ["SUPER_ADMIN", "ADMIN"]);
@@ -122,7 +122,7 @@ function Transactions() {
   }, [items, query]);
   async function inspect(referenceId: string) {
     if (!canViewTransaction)
-      return setError(`Permission ${UI_PERMISSION.TRANSACTION_VIEW} is required.`);
+      return setError(`Permission ${UI_PERMISSION.TRANSACTION_ADMIN_VIEW} is required.`);
     setDetailBusy(true);
     setError("");
     try {
@@ -314,12 +314,14 @@ function Transactions() {
                   <td className="p-3 text-xs">{dateTime(item.createdAt)}</td>
                   <td className="p-3">
                     <div className="flex justify-end gap-2">
-                      <ActionButton
-                        title="View transaction"
-                        onClick={() => void inspect(item.referenceId)}
-                      >
-                        <Eye size={15} />
-                      </ActionButton>
+                      {canViewTransaction && (
+                        <ActionButton
+                          title="View transaction"
+                          onClick={() => void inspect(item.referenceId)}
+                        >
+                          <Eye size={15} />
+                        </ActionButton>
+                      )}
                       {canResolve && (
                         <ActionButton
                           title="Resolve"

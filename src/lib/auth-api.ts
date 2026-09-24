@@ -58,7 +58,7 @@ export type EffectivePermissionPackage = {
 
 export type EffectiveAccess = {
   identity: { id: string; status: string };
-  role: { id: string; name: string; isActive: boolean };
+  role: { id: string; name: string; authorityLevel: number; isActive: boolean };
   packages: EffectivePermissionPackage[];
   permissions: EffectivePermission[];
   permissionCodes: string[];
@@ -334,6 +334,18 @@ export const authApi = {
   changeMpin: (accessToken: string, body: { currentMpin: string; newMpin: string }) =>
     authenticatedRequest<{ message: string }>(
       "/auth/change-mpin",
+      { method: "POST", body: JSON.stringify(body) },
+      accessToken,
+    ),
+  setupTpin: (accessToken: string, body: { currentMpin: string; newTpin: string }) =>
+    authenticatedRequest<{ success: boolean; message: string }>(
+      "/auth/tpin/setup",
+      { method: "POST", body: JSON.stringify(body) },
+      accessToken,
+    ),
+  changeTpin: (accessToken: string, body: { currentTpin: string; newTpin: string }) =>
+    authenticatedRequest<{ success: boolean; message: string }>(
+      "/auth/tpin/change",
       { method: "POST", body: JSON.stringify(body) },
       accessToken,
     ),

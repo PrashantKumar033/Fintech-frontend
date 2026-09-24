@@ -1,29 +1,12 @@
-import { Link } from "@tanstack/react-router";
-import {
-  BadgeCheck,
-  Bell,
-  CircleDollarSign,
-  FileBarChart,
-  Fingerprint,
-  Landmark,
-  LayoutDashboard,
-  Lock,
-  LogOut,
-  Menu,
-  Receipt,
-  Settings,
-  ShieldCheck,
-  Users,
-  Wallet,
-  X,
-} from "lucide-react";
+import { Link, useLocation } from "@tanstack/react-router";
+import { BadgeCheck, Bell, Lock, LogOut, Menu, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { logout, type Identity } from "@/lib/auth-api";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { PermissionBoundary } from "@/components/permission-boundary";
-import { canAccessUiArea, type UiArea } from "@/lib/ui-permissions";
+import { canAccessUiArea, UI_PERMISSION, type UiArea } from "@/lib/ui-permissions";
+import { navigationForRole } from "@/lib/app-navigation";
 import { useServiceReadiness } from "@/lib/service-readiness";
 import { credentialsPending } from "@/lib/role-hierarchy";
 import { SectionTabs, type SectionTab } from "@/components/section-tabs";
@@ -32,33 +15,102 @@ const retailerSectionTabs: Partial<
   Record<"aeps" | "transactions" | "wallet" | "reports" | "commission" | "settings", SectionTab[]>
 > = {
   aeps: [
-    { label: "AEPS Services", href: "/retailer/aeps" },
-    { label: "Cash Withdrawal", href: "/retailer/aeps?service=cash-withdrawal" },
-    { label: "Balance Enquiry", href: "/retailer/aeps?service=balance-enquiry" },
-    { label: "Mini Statement", href: "/retailer/aeps?service=mini-statement" },
-    { label: "Aadhaar Pay", href: "/retailer/aeps?service=aadhaar-pay" },
-    { label: "Cash Deposit", href: "/retailer/aeps?service=cash-deposit" },
-    { label: "Transaction Status", href: "/retailer/transactions" },
+    { label: "AEPS Services", href: "/retailer/aeps", area: "aeps" },
+    {
+      label: "Cash Withdrawal",
+      href: "/retailer/aeps?service=cash-withdrawal",
+      permission: UI_PERMISSION.AEPS_CASH_WITHDRAWAL,
+    },
+    {
+      label: "Balance Enquiry",
+      href: "/retailer/aeps?service=balance-enquiry",
+      permission: UI_PERMISSION.AEPS_BALANCE_ENQUIRY,
+    },
+    {
+      label: "Mini Statement",
+      href: "/retailer/aeps?service=mini-statement",
+      permission: UI_PERMISSION.AEPS_MINI_STATEMENT,
+    },
+    {
+      label: "Aadhaar Pay",
+      href: "/retailer/aeps?service=aadhaar-pay",
+      permission: UI_PERMISSION.AEPS_AADHAAR_PAY,
+    },
+    {
+      label: "Cash Deposit",
+      href: "/retailer/aeps?service=cash-deposit",
+      permission: UI_PERMISSION.AEPS_CASH_DEPOSIT,
+    },
+    {
+      label: "Transaction Status",
+      href: "/retailer/transactions",
+      permission: UI_PERMISSION.AEPS_TRANSACTION_VIEW,
+    },
   ],
   transactions: [
-    { label: "All Transactions", href: "/retailer/transactions" },
-    { label: "Successful", href: "/retailer/transactions?status=SUCCESS" },
-    { label: "Pending", href: "/retailer/transactions?status=PENDING" },
-    { label: "Failed", href: "/retailer/transactions?status=FAILED" },
+    {
+      label: "All Transactions",
+      href: "/retailer/transactions",
+      permission: UI_PERMISSION.AEPS_TRANSACTION_VIEW,
+    },
+    {
+      label: "Successful",
+      href: "/retailer/transactions?status=SUCCESS",
+      permission: UI_PERMISSION.AEPS_TRANSACTION_VIEW,
+    },
+    {
+      label: "Pending",
+      href: "/retailer/transactions?status=PENDING",
+      permission: UI_PERMISSION.AEPS_TRANSACTION_VIEW,
+    },
+    {
+      label: "Failed",
+      href: "/retailer/transactions?status=FAILED",
+      permission: UI_PERMISSION.AEPS_TRANSACTION_VIEW,
+    },
   ],
   wallet: [
-    { label: "Wallet Balance", href: "/retailer/wallet" },
-    { label: "Transfer Fund", href: "/retailer/wallet/transfer" },
+    {
+      label: "Wallet Balance",
+      href: "/retailer/wallet",
+      permission: UI_PERMISSION.WALLET_VIEW,
+    },
+    {
+      label: "Add Money",
+      href: "/retailer/wallet/requests",
+      permission: UI_PERMISSION.WALLET_FUND_REQUEST,
+    },
+    {
+      label: "AEPS to MAIN",
+      href: "/retailer/wallet/aeps-transfer",
+      permission: UI_PERMISSION.WALLET_AEPS_TO_MAIN_TRANSFER,
+    },
+    {
+      label: "Transfer Fund",
+      href: "/retailer/wallet/transfer",
+      permission: UI_PERMISSION.WALLET_TRANSFER,
+    },
+    {
+      label: "Wallet History",
+      href: "/retailer/wallet/history",
+      permission: UI_PERMISSION.WALLET_TRANSACTION_VIEW,
+    },
   ],
   reports: [
+    {
+      label: "Financial Report",
+      href: "/retailer/reports",
+      permission: UI_PERMISSION.WALLET_TRANSACTION_VIEW,
+    },
     { label: "Account Activity", href: "/activity" },
-    { label: "AEPS Report", href: "/activity?view=aeps" },
-    { label: "Wallet Report", href: "/activity?view=wallet" },
-    { label: "Commission Report", href: "/activity?view=commission" },
   ],
   commission: [
-    { label: "Commission summary", href: "/retailer/commission" },
-    { label: "Commission transactions", href: "/retailer/transactions" },
+    { label: "Commission summary", href: "/retailer/commission", area: "earnings" },
+    {
+      label: "Commission transactions",
+      href: "/retailer/transactions",
+      permission: UI_PERMISSION.AEPS_TRANSACTION_VIEW,
+    },
     { label: "Commission activity", href: "/activity?view=commission" },
   ],
   settings: [
@@ -88,6 +140,7 @@ export function BusinessPage({
     | "wallet"
     | "transactions"
     | "reports"
+    | "activity"
     | "commission"
     | "settings";
   eyebrow?: string;
@@ -104,9 +157,58 @@ export function BusinessPage({
   // singleton from the sidebar while that screen is already loading it.
   const readiness = useServiceReadiness(active !== "kyc");
   const { access } = useEffectiveAccess();
+  const currentHref = useLocation({ select: (location) => location.href });
+  const currentUrl = new URL(currentHref, "http://localhost");
+  const actionPermission = (() => {
+    if (currentUrl.pathname === "/retailer/transactions") {
+      return UI_PERMISSION.AEPS_TRANSACTION_VIEW;
+    }
+    if (currentUrl.pathname === "/retailer/reports") {
+      return UI_PERMISSION.WALLET_TRANSACTION_VIEW;
+    }
+    if (currentUrl.pathname === "/retailer/wallet/requests") {
+      return UI_PERMISSION.WALLET_FUND_REQUEST;
+    }
+    if (currentUrl.pathname === "/retailer/wallet/transfer") {
+      return UI_PERMISSION.WALLET_TRANSFER;
+    }
+    if (currentUrl.pathname === "/retailer/wallet/aeps-transfer") {
+      return UI_PERMISSION.WALLET_AEPS_TO_MAIN_TRANSFER;
+    }
+    if (currentUrl.pathname === "/retailer/wallet/history") {
+      return UI_PERMISSION.WALLET_TRANSACTION_VIEW;
+    }
+    if (currentUrl.pathname === "/retailer/wallet/holds") {
+      return UI_PERMISSION.WALLET_HOLD_VIEW;
+    }
+    if (currentUrl.pathname === "/retailer/aeps") {
+      const servicePermissions: Record<string, string> = {
+        "cash-withdrawal": UI_PERMISSION.AEPS_CASH_WITHDRAWAL,
+        "balance-enquiry": UI_PERMISSION.AEPS_BALANCE_ENQUIRY,
+        "mini-statement": UI_PERMISSION.AEPS_MINI_STATEMENT,
+        "aadhaar-pay": UI_PERMISSION.AEPS_AADHAAR_PAY,
+        "cash-deposit": UI_PERMISSION.AEPS_CASH_DEPOSIT,
+      };
+      return servicePermissions[currentUrl.searchParams.get("service") || ""];
+    }
+    return undefined;
+  })();
   useEffect(() => {
     if (securityLocked && active !== "settings") window.location.replace("/retailer/settings");
   }, [active, securityLocked]);
+  useEffect(() => {
+    if (
+      securityLocked ||
+      active === "kyc" ||
+      active === "bank" ||
+      active === "settings" ||
+      !readiness.isSuccess ||
+      !readiness.data.complianceStatusAvailable ||
+      readiness.data.complianceSetupComplete
+    )
+      return;
+    window.location.replace(readiness.data.kycSubmitted ? "/retailer/bank" : "/retailer/kyc");
+  }, [active, readiness.data, readiness.isSuccess, securityLocked]);
   useEffect(() => {
     if (!mobileMenuOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -120,108 +222,9 @@ export function BusinessPage({
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [mobileMenuOpen]);
-  const nav: Array<{
-    key: string;
-    label: string;
-    to?:
-      | "/retailer/dashboard"
-      | "/retailer/kyc"
-      | "/retailer/bank"
-      | "/retailer/aeps"
-      | "/retailer/members"
-      | "/retailer/wallet"
-      | "/retailer/transactions"
-      | "/retailer/commission"
-      | "/retailer/settings"
-      | "/activity";
-    icon: LucideIcon;
-    locked: boolean;
-    area?: UiArea;
-    status?: string;
-  }> = [
-    {
-      key: "dashboard",
-      label: "Dashboard",
-      to: "/retailer/dashboard",
-      icon: LayoutDashboard,
-      locked: false,
-      area: "dashboard",
-    },
-    {
-      key: "kyc",
-      label: "KYC verification",
-      to: "/retailer/kyc",
-      icon: ShieldCheck,
-      locked: false,
-      area: "kyc",
-      status: readiness.data?.kycStatus?.replaceAll("_", " "),
-    },
-    {
-      key: "bank",
-      label: "Bank accounts",
-      to: "/retailer/bank",
-      icon: Landmark,
-      locked: false,
-      area: "banking",
-      status: readiness.data?.hasVerifiedBank ? "VERIFIED" : undefined,
-    },
-    {
-      key: "aeps",
-      label: "AEPS",
-      to: "/retailer/aeps",
-      icon: Fingerprint,
-      locked: !readiness.data?.aepsUnlocked,
-      area: "aeps",
-    },
-    {
-      key: "members",
-      label: "Member management",
-      to: "/retailer/members",
-      icon: Users,
-      locked: false,
-      area: "members",
-    },
-    {
-      key: "wallet",
-      label: "Wallet & transfer",
-      to: "/retailer/wallet",
-      icon: Wallet,
-      locked: false,
-      area: "wallet",
-    },
-    {
-      key: "transactions",
-      label: "Transactions",
-      to: "/retailer/transactions",
-      icon: Receipt,
-      locked: false,
-      area: "transactions",
-    },
-    {
-      key: "reports",
-      label: "Account activity",
-      to: "/activity",
-      icon: FileBarChart,
-      locked: false,
-      area: "reports",
-    },
-    {
-      key: "commission",
-      label: "Commission",
-      to: "/retailer/commission",
-      icon: CircleDollarSign,
-      locked: false,
-      area: "earnings",
-    },
-    {
-      key: "settings",
-      label: "Settings",
-      to: "/retailer/settings",
-      icon: Settings,
-      locked: false,
-      area: "settings",
-    },
-  ];
+  const nav = navigationForRole("RETAILER").filter((item) =>
+    canAccessUiArea(item.area, { role: identity.role, access }),
+  );
   async function signOut() {
     setMobileMenuOpen(false);
     await logout();
@@ -339,12 +342,16 @@ export function BusinessPage({
             </div>
           </div>
           <nav className="space-y-1 overflow-y-auto">
-            {nav.map(({ key, label, icon: Icon, locked, status, to, area }) => {
-              const permissionDenied = area
-                ? !canAccessUiArea(area, { role: identity.role, access })
-                : false;
+            {nav.map(({ key, active: itemActive, label, icon: Icon, to }) => {
+              const status =
+                key === "kycSelf"
+                  ? readiness.data?.kycStatus?.replaceAll("_", " ")
+                  : key === "bankAccounts" && readiness.data?.hasVerifiedBank
+                    ? "VERIFIED"
+                    : undefined;
               const itemLocked =
-                (securityLocked && key !== "settings") || locked || permissionDenied;
+                (securityLocked && key !== "settings") ||
+                (key === "aeps" && !readiness.data?.aepsUnlocked);
               return key === "settings" && onSettingsClick ? (
                 <button
                   key={key}
@@ -353,7 +360,7 @@ export function BusinessPage({
                     onSettingsClick();
                     setMobileMenuOpen(false);
                   }}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active === key ? "bg-primary text-white shadow-sm" : "text-secondary hover:bg-mint"}`}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active === itemActive ? "bg-primary text-white shadow-sm" : "text-secondary hover:bg-mint"}`}
                 >
                   <Icon size={17} />
                   <span>{label}</span>
@@ -362,13 +369,11 @@ export function BusinessPage({
                 <div
                   key={key}
                   title={
-                    permissionDenied
-                      ? "Your active packages do not grant this section"
-                      : key === "aeps"
-                        ? "KYC approval and verified bank account required"
-                        : securityLocked
-                          ? "Change temporary password and MPIN in Settings to unlock"
-                          : "Coming soon"
+                    key === "aeps"
+                      ? "KYC approval and verified bank account required"
+                      : securityLocked
+                        ? "Change temporary password and MPIN in Settings to unlock"
+                        : "Coming soon"
                   }
                   className="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-muted-foreground/55"
                 >
@@ -379,9 +384,9 @@ export function BusinessPage({
               ) : (
                 <Link
                   key={key}
-                  to={to!}
+                  to={to as never}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active === key ? "bg-primary text-white shadow-sm" : "text-secondary hover:bg-mint"}`}
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active === itemActive ? "bg-primary text-white shadow-sm" : "text-secondary hover:bg-mint"}`}
                 >
                   <Icon size={17} />
                   <span>{label}</span>
@@ -406,42 +411,30 @@ export function BusinessPage({
             {showPageHeader && (
               <div className="mb-7">
                 <div className="mb-4 flex gap-2 overflow-x-auto lg:hidden">
-                  <Link
-                    to="/retailer/kyc"
-                    className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "kyc" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
-                  >
-                    KYC
-                  </Link>
-                  <Link
-                    to="/retailer/bank"
-                    className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "bank" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
-                  >
-                    Bank Accounts
-                  </Link>
-                  <Link
-                    to="/retailer/wallet"
-                    className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "wallet" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
-                  >
-                    Wallet
-                  </Link>
-                  <Link
-                    to="/retailer/transactions"
-                    className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "transactions" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
-                  >
-                    Transactions
-                  </Link>
-                  {readiness.data?.aepsUnlocked ? (
-                    <Link
-                      to="/retailer/aeps"
-                      className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === "aeps" ? "bg-secondary text-white" : "bg-card text-secondary"}`}
-                    >
-                      AEPS
-                    </Link>
-                  ) : (
-                    <span className="flex min-w-max items-center gap-2 rounded-xl bg-muted px-4 py-2 text-xs font-bold text-muted-foreground">
-                      <Lock size={12} /> AEPS
-                    </span>
-                  )}
+                  {nav
+                    .filter((item) =>
+                      ["kycSelf", "bankAccounts", "wallet", "transactions", "aeps"].includes(
+                        item.key,
+                      ),
+                    )
+                    .map((item) =>
+                      item.key === "aeps" && !readiness.data?.aepsUnlocked ? (
+                        <span
+                          key={item.key}
+                          className="flex min-w-max items-center gap-2 rounded-xl bg-muted px-4 py-2 text-xs font-bold text-muted-foreground"
+                        >
+                          <Lock size={12} /> {item.label}
+                        </span>
+                      ) : (
+                        <Link
+                          key={item.key}
+                          to={item.to as never}
+                          className={`min-w-max rounded-xl px-4 py-2 text-xs font-bold ${active === item.active ? "bg-secondary text-white" : "bg-card text-secondary"}`}
+                        >
+                          {item.label}
+                        </Link>
+                      ),
+                    )}
                 </div>
                 <p className="text-xs font-extrabold uppercase tracking-[.2em] text-primary">
                   {eyebrow}
@@ -453,24 +446,41 @@ export function BusinessPage({
             {showPageHeader && (
               <SectionTabs
                 tabs={retailerSectionTabs[active as keyof typeof retailerSectionTabs] || []}
+                role={identity.role}
+                access={access}
               />
             )}
             <PermissionBoundary
               area={
                 (active === "bank"
-                  ? "banking"
-                  : active === "transactions"
-                    ? "transactions"
-                    : active === "reports"
-                      ? "reports"
-                      : active === "commission"
-                        ? "earnings"
-                        : active) as UiArea
+                  ? "bankAccounts"
+                  : active === "kyc"
+                    ? "kycSelf"
+                    : active === "transactions"
+                      ? "transactions"
+                      : active === "activity"
+                        ? "activity"
+                        : active === "reports"
+                          ? "reports"
+                          : active === "commission"
+                            ? "earnings"
+                            : active) as UiArea
               }
               role={identity.role}
               access={access}
             >
-              {children}
+              {actionPermission ? (
+                <PermissionBoundary
+                  permission={actionPermission}
+                  role={identity.role}
+                  access={access}
+                  fallbackRoles={["RETAILER"]}
+                >
+                  {children}
+                </PermissionBoundary>
+              ) : (
+                children
+              )}
             </PermissionBoundary>
           </div>
         </main>

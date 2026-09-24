@@ -223,20 +223,67 @@ function SecuritySettings({
   onIdentityChange: (i: Identity) => void;
   onUnlocked: () => void;
 }) {
-  const [mode, setMode] = useState<"password" | "mpin">(
-      identity.passwordChangedAt ? "mpin" : "password",
-    ),
-    [current, setCurrent] = useState(""),
-    [next, setNext] = useState(""),
-    [confirm, setConfirm] = useState(""),
-    [visible, setVisible] = useState(false),
-    [busy, setBusy] = useState(false),
-    [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [mode, setMode] = useState<"password" | "mpin" | "tpin">(
+    identity.passwordChangedAt ? "mpin" : "password",
+  );
+
+  const [tpinSetup, setTpinSetup] = useState(false);
+
+  const [current, setCurrent] = useState("");
+
+  const [next, setNext] = useState("");
+
+  const [confirm, setConfirm] = useState("");
+
+  const [visible, setVisible] = useState(false);
+
+  const [busy, setBusy] = useState(false);
+
+  const [message, setMessage] = useState<{
+    ok: boolean;
+    text: string;
+  } | null>(null);
+
+  function resetFields() {
+    setCurrent("");
+    setNext("");
+    setConfirm("");
+    setMessage(null);
+  }
+
+  const isTpin = mode === "tpin";
+  const isPin = mode === "mpin" || isTpin;
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setMessage(null);
+    if (!current) {
+      setMessage({
+        ok: false,
+        text: `Enter your ${isTpin ? (tpinSetup ? "current TPIN" : "MPIN") : `current ${mode}`}.`,
+      });
+      return;
+    }
     if (next !== confirm) {
-      setMessage({ ok: false, text: `New ${mode} and confirmation do not match.` });
+      setMessage({
+        ok: false,
+        text: `New ${isTpin ? "TPIN" : mode} and confirmation do not match.`,
+      });
+      return;
+    }
+    if (isTpin && !/^\d{4,6}$/.test(next)) {
+      setMessage({ ok: false, text: "TPIN must contain 4 to 6 digits." });
+      return;
+    }
+    if (mode === "mpin" && !/^\d{4}$/.test(next)) {
+      setMessage({ ok: false, text: "New MPIN must contain exactly 4 digits." });
+      return;
+    }
+    if (mode === "password" && !/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(next)) {
+      setMessage({
+        ok: false,
+        text: "Password needs 8+ characters with uppercase, lowercase, number and special character.",
+      });
       return;
     }
     setBusy(true);
@@ -255,13 +302,25 @@ function SecuritySettings({
           setMessage({ ok: true, text: "Password updated successfully." });
           onUnlocked();
         }
-      } else {
+      } else if (mode === "mpin") {
         await authApi.changeMpin(accessToken, { currentMpin: current, newMpin: next });
         const synchronized = await refreshSession();
         onIdentityChange(synchronized.identity);
         setMessage({ ok: true, text: "MPIN changed. First-login security setup is complete." });
         if (synchronized.identity.passwordChangedAt && synchronized.identity.mpinChangedAt)
           onUnlocked();
+      } else {
+        if (tpinSetup) {
+          await authApi.changeTpin(accessToken, { currentTpin: current, newTpin: next });
+          setMessage({ ok: true, text: "TPIN changed successfully." });
+        } else {
+          await authApi.setupTpin(accessToken, { currentMpin: current, newTpin: next });
+          setMessage({
+            ok: true,
+            text: "TPIN set up. Use it for financial operations like wallet transfers.",
+          });
+          setTpinSetup(true);
+        }
       }
       setCurrent("");
       setNext("");
@@ -279,51 +338,82 @@ function SecuritySettings({
   return (
     <Panel
       title="Login & security"
-      description="On first login, replace both temporary credentials. Afterwards either credential can be updated independently."
+      description="Manage your password, MPIN and transaction PIN without resetting the other credentials."
     >
       <div className="mb-5 grid grid-cols-2 gap-3">
         <StatusCard label="Password" done={!!identity.passwordChangedAt} />
         <StatusCard label="MPIN" done={!!identity.mpinChangedAt} />
       </div>
       <div className="mb-5 flex rounded-xl bg-muted p-1">
-        {(["password", "mpin"] as const).map((item) => (
+        {(["password", "mpin", "tpin"] as const).map((item) => (
           <button
             type="button"
             key={item}
+            disabled={
+              (!identity.passwordChangedAt && item === "mpin") ||
+              ((!identity.passwordChangedAt || !identity.mpinChangedAt) && item === "tpin")
+            }
             onClick={() => {
               setMode(item);
-              setMessage(null);
-              setCurrent("");
-              setNext("");
-              setConfirm("");
+              resetFields();
             }}
-            className={`flex-1 rounded-lg py-2 text-sm font-bold capitalize ${mode === item ? "bg-card text-secondary shadow-sm" : "text-muted-foreground"}`}
+            className={`flex-1 rounded-lg py-2 text-sm font-bold uppercase disabled:cursor-not-allowed disabled:opacity-40 ${mode === item ? "bg-card text-secondary shadow-sm" : "text-muted-foreground"}`}
           >
             {item}
           </button>
         ))}
       </div>
+      {isTpin && (
+        <div className="mb-4 flex rounded-xl bg-muted p-1">
+          {([false, true] as const).map((isChange) => (
+            <button
+              type="button"
+              key={String(isChange)}
+              onClick={() => {
+                setTpinSetup(isChange);
+                resetFields();
+              }}
+              className={`flex-1 rounded-lg py-2 text-sm font-bold ${
+                tpinSetup === isChange
+                  ? "bg-card text-secondary shadow-sm"
+                  : "text-muted-foreground"
+              }`}
+            >
+              {isChange ? "Change TPIN" : "Setup TPIN"}
+            </button>
+          ))}
+        </div>
+      )}
+      {isTpin && (
+        <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+          {tpinSetup
+            ? "Enter your current TPIN to change it."
+            : "First-time setup: verify with your MPIN, then set a 4\u20136 digit TPIN used for financial operations."}
+        </p>
+      )}
       <form onSubmit={submit} className="space-y-4">
         <SecureInput
-          label={`Current ${mode}`}
+          label={
+            isTpin ? (tpinSetup ? "Current TPIN" : "Current MPIN (to verify)") : `Current ${mode}`
+          }
           value={current}
           onChange={setCurrent}
           type={fieldType}
-          maxLength={mode === "mpin" ? 4 : undefined}
+          maxLength={isTpin && !tpinSetup ? 4 : isTpin ? 6 : isPin ? 4 : undefined}
         />
         <SecureInput
-          label={`New ${mode}`}
+          label={isTpin ? "New TPIN" : `New ${mode}`}
           value={next}
           onChange={setNext}
           type={fieldType}
-          maxLength={mode === "mpin" ? 4 : undefined}
+          maxLength={isTpin ? 6 : isPin ? 4 : undefined}
         />
         <SecureInput
-          label={`Confirm new ${mode}`}
+          label={isTpin ? "Confirm new TPIN" : `Confirm new ${mode}`}
           value={confirm}
           onChange={setConfirm}
           type={fieldType}
-          maxLength={mode === "mpin" ? 4 : undefined}
+          maxLength={isTpin ? 6 : isPin ? 4 : undefined}
         />
         <button
           type="button"
@@ -344,7 +434,13 @@ function SecuritySettings({
           disabled={busy}
           className="w-full rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground disabled:opacity-60"
         >
-          {busy ? "Updating…" : `Update ${mode}`}
+          {busy
+            ? "Updating\u2026"
+            : isTpin
+              ? tpinSetup
+                ? "Change TPIN"
+                : "Setup TPIN"
+              : `Update ${mode}`}
         </button>
       </form>
       <div className="mt-6 grid gap-3 border-t border-border pt-6 sm:grid-cols-2">
@@ -393,7 +489,7 @@ function SecureInput({
         value={value}
         maxLength={maxLength}
         inputMode={maxLength ? "numeric" : undefined}
-        minLength={maxLength || 8}
+        minLength={maxLength ? 4 : 8}
         onChange={(e) => onChange(maxLength ? e.target.value.replace(/\D/g, "") : e.target.value)}
         className="mt-1.5 w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
       />

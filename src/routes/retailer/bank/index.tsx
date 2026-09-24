@@ -4,19 +4,16 @@ import {
   BadgeCheck,
   Building2,
   Edit3,
+  FileText,
   Landmark,
   MapPin,
   Plus,
   RefreshCw,
   ShieldCheck,
-  Star,
   Trash2,
 } from "lucide-react";
 import { ServiceNotice } from "@/components/business-page";
-import { ActionPermissionNotice } from "@/components/action-permission-notice";
 import { RoleAwareAccountPage } from "@/components/role-aware-account-page";
-import { useEffectiveAccess } from "@/hooks/use-effective-access";
-import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { getSession } from "@/lib/auth-api";
 import {
   credentialsPending,
@@ -42,7 +39,18 @@ const initial = {
   purposes: ["PAYOUT"] as Array<"PAYOUT" | "DMT">,
 };
 
+type BankTab = "AEPS" | "MAIN";
+
 type BankCoordinates = { lat: string; long: string };
+
+function isFullyVerifiedBank(account: BankAccount): boolean {
+  return (
+    account.status === "ACTIVE" &&
+    account.adminReviewStatus === "APPROVED" &&
+    account.verificationStatus === "VERIFIED" &&
+    account.ownershipStatus === "VERIFIED"
+  );
+}
 
 function captureBankCoordinates(): Promise<BankCoordinates> {
   if (typeof window === "undefined" || !window.isSecureContext) {
@@ -79,13 +87,11 @@ function captureBankCoordinates(): Promise<BankCoordinates> {
 
 function BankAccountsPage() {
   const requestKeyRef = useRef<string | null>(null);
-  const { can } = useEffectiveAccess();
-  const canManageBank = can(UI_PERMISSION.BANK_MANAGE, [
-    "ADMIN",
-    "MASTER_DISTRIBUTOR",
-    "DISTRIBUTOR",
-    "RETAILER",
-  ]);
+  const [activeTab, setActiveTab] = useState<BankTab>("AEPS");
+  // Adding the identity's own bank account is mandatory onboarding. Keep it
+  // available through its authenticated self-service backend endpoints;
+  // administrative review remains protected by BANK_ACCOUNT.* permissions.
+  const canManageBank = true;
   const navigate = useNavigate(),
     [session, setSession] = useState<ReturnType<typeof getSession>>(null),
     [accounts, setAccounts] = useState<BankAccount[]>([]),
@@ -93,6 +99,9 @@ function BankAccountsPage() {
     [form, setForm] = useState(initial),
     [adding, setAdding] = useState(false),
     [editingId, setEditingId] = useState<string | null>(null),
+    [editingAccount, setEditingAccount] = useState<BankAccount | null>(null),
+    [passbook, setPassbook] = useState<File | null>(null),
+    [fileInputKey, setFileInputKey] = useState(0),
     [busy, setBusy] = useState(false),
     [locationBusy, setLocationBusy] = useState(false),
     [coordinates, setCoordinates] = useState<BankCoordinates | null>(null),
@@ -166,6 +175,17 @@ function BankAccountsPage() {
     setForm((f) => ({ ...f, accountHolderName: value.identity.fullName }));
     void load(value.accessToken);
     void loadBankDirectory(value.accessToken);
+    const refreshApprovedState = () => {
+      const current = getSession();
+      if (current) void load(current.accessToken);
+    };
+    window.addEventListener("focus", refreshApprovedState);
+    window.addEventListener("pageshow", refreshApprovedState);
+    return () => {
+      window.removeEventListener("focus", refreshApprovedState);
+      window.removeEventListener("pageshow", refreshApprovedState);
+    };
+    // `load` intentionally stays page-local; session identity changes cause a remount.
   }, [navigate]);
   if (!session)
     return (
@@ -177,15 +197,30 @@ function BankAccountsPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setMessage(null);
-    if (!canManageBank)
-      return setMessage({
-        ok: false,
-        text: `Permission ${UI_PERMISSION.BANK_MANAGE} is required.`,
-      });
+    if (!form.bankName.trim() || !form.accountHolderName.trim())
+      return setMessage({ ok: false, text: "Bank name and account holder name are required." });
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifsc.trim().toUpperCase()))
+      return setMessage({ ok: false, text: "Enter a valid 11-character IFSC code." });
+    if (!editingId && !/^\d{9,18}$/.test(form.accountNumber))
+      return setMessage({ ok: false, text: "Account number must contain 9 to 18 digits." });
+    if (editingId && form.accountNumber && !/^\d{9,18}$/.test(form.accountNumber))
+      return setMessage({ ok: false, text: "Account number must contain 9 to 18 digits." });
     if (form.accountNumber && form.accountNumber !== form.confirm)
       return setMessage({ ok: false, text: "Account numbers do not match." });
     if (!form.purposes.length)
       return setMessage({ ok: false, text: "Select at least one account purpose." });
+    const requiresPassbook =
+      !editingId ||
+      editingAccount?.adminReviewStatus === "REJECTED" ||
+      !editingAccount?.passbookOriginalName ||
+      Boolean(form.accountNumber) ||
+      form.ifsc.trim().toUpperCase() !== editingAccount?.ifsc.toUpperCase() ||
+      form.accountHolderName.trim() !== editingAccount?.accountHolderName;
+    if (requiresPassbook && !passbook)
+      return setMessage({
+        ok: false,
+        text: "Upload the passbook front (JPG, PNG or PDF, maximum 5 MB) for bank review.",
+      });
     setBusy(true);
     try {
       let bankCoordinates = coordinates;
@@ -214,6 +249,7 @@ function BankAccountsPage() {
         lat: bankCoordinates.lat,
         long: bankCoordinates.long,
         ...(form.accountNumber ? { accountNumber: form.accountNumber } : {}),
+        ...(form.accountNumber ? { confirmAccountNumber: form.confirm } : {}),
       };
       const requestKey = requestKeyRef.current ?? createIdempotencyKey("bank-verification");
       requestKeyRef.current = requestKey;
@@ -222,7 +258,7 @@ function BankAccountsPage() {
           activeSession.accessToken,
           editingId,
           payload,
-          form.accountNumber ? requestKey : undefined,
+          passbook && requiresPassbook ? passbook : undefined,
         );
       else
         await complianceApi.addBank(
@@ -230,20 +266,25 @@ function BankAccountsPage() {
           {
             ...payload,
             accountNumber: form.accountNumber,
+            confirmAccountNumber: form.confirm,
           },
+          passbook!,
           requestKey,
         );
       requestKeyRef.current = null;
       setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
       setAdding(false);
       setEditingId(null);
+      setEditingAccount(null);
+      setPassbook(null);
+      setFileInputKey((value) => value + 1);
       setCoordinates(null);
       setLocationError("");
       setMessage({
         ok: true,
         text: editingId
-          ? "Bank account updated and sent for verification."
-          : "Bank account verified and added successfully.",
+          ? "Bank account updated. Review-sensitive changes have been sent for admin approval."
+          : "Bank account submitted for admin approval. Provider verification will start after approval.",
       });
       await load(activeSession.accessToken);
     } catch (err) {
@@ -252,12 +293,27 @@ function BankAccountsPage() {
       setBusy(false);
     }
   }
-  const verified = accounts.some(
-    (a) =>
-      a.status === "ACTIVE" &&
-      a.verificationStatus === "VERIFIED" &&
-      a.ownershipStatus === "VERIFIED",
+  const verified = accounts.some(isFullyVerifiedBank);
+  const filteredAccounts = accounts.filter((a) =>
+    activeTab === "AEPS" ? a.purposes.includes("PAYOUT") : a.purposes.includes("DMT"),
   );
+
+  function openAddBank(type: BankTab) {
+    setEditingId(null);
+    setEditingAccount(null);
+    setPassbook(null);
+    setFileInputKey((v) => v + 1);
+    requestKeyRef.current = null;
+    setCoordinates(null);
+    setLocationError("");
+    setForm({
+      ...initial,
+      accountHolderName: activeSession.identity.fullName,
+      purposes: type === "AEPS" ? ["PAYOUT"] : ["DMT"],
+    });
+    setAdding(true);
+  }
+
   return (
     <RoleAwareAccountPage
       identity={session.identity}
@@ -266,15 +322,6 @@ function BankAccountsPage() {
       title="Bank accounts"
       description="Manage verified settlement accounts independently from KYC and AEPS services."
     >
-      {!canManageBank && (
-        <div className="mb-5">
-          <ActionPermissionNotice
-            permission={UI_PERMISSION.BANK_MANAGE}
-            title="Bank accounts are read-only"
-            text="Add, edit, primary-bank and remove actions are not enabled for your active package."
-          />
-        </div>
-      )}
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <section className="rounded-2xl border border-border bg-card p-5 shadow-soft sm:p-7">
           <div className="flex items-center justify-between">
@@ -284,19 +331,43 @@ function BankAccountsPage() {
                 Account details are encrypted; only the last four digits are displayed.
               </p>
             </div>
+            <div className="flex gap-2">
+              <button
+                disabled={!canManageBank}
+                onClick={() => openAddBank("AEPS")}
+                className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus size={16} /> Add AEPS Account
+              </button>
+              <button
+                disabled={!canManageBank}
+                onClick={() => openAddBank("MAIN")}
+                className="flex items-center gap-2 rounded-xl bg-secondary px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus size={16} /> Add Main Account
+              </button>
+            </div>
+          </div>
+          <div className="mt-5 flex gap-2">
             <button
-              disabled={!canManageBank}
-              onClick={() => {
-                setEditingId(null);
-                requestKeyRef.current = null;
-                setCoordinates(null);
-                setLocationError("");
-                setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
-                setAdding(!adding);
-              }}
-              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => setActiveTab("AEPS")}
+              className={`rounded-xl px-5 py-2 text-sm font-bold transition-colors ${
+                activeTab === "AEPS"
+                  ? "bg-primary text-white"
+                  : "border border-border bg-card text-muted-foreground hover:text-secondary"
+              }`}
             >
-              <Plus size={16} /> Add account
+              AEPS Account
+            </button>
+            <button
+              onClick={() => setActiveTab("MAIN")}
+              className={`rounded-xl px-5 py-2 text-sm font-bold transition-colors ${
+                activeTab === "MAIN"
+                  ? "bg-secondary text-white"
+                  : "border border-border bg-card text-muted-foreground hover:text-secondary"
+              }`}
+            >
+              Main Account
             </button>
           </div>
           {message && (
@@ -308,9 +379,9 @@ function BankAccountsPage() {
             <div className="grid h-40 place-items-center">
               <RefreshCw className="animate-spin text-primary" />
             </div>
-          ) : accounts.length ? (
+          ) : filteredAccounts.length ? (
             <div className="mt-6 space-y-3">
-              {accounts.map((a) => (
+              {filteredAccounts.map((a) => (
                 <article key={a.id} className="rounded-2xl border border-border bg-background p-5">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                     <span className="grid h-12 w-12 place-items-center rounded-xl bg-mint text-secondary">
@@ -329,12 +400,34 @@ function BankAccountsPage() {
                         •••• {a.accountNumberLast4} · {a.accountType} · {a.ifsc}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">{a.accountHolderName}</p>
+                      <span
+                        className={`mt-2 inline-block rounded-full px-2 py-1 text-[10px] font-extrabold ${
+                          a.adminReviewStatus === "APPROVED"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : a.adminReviewStatus === "REJECTED"
+                              ? "bg-red-50 text-red-700"
+                              : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        ADMIN REVIEW {a.adminReviewStatus || "PENDING"}
+                      </span>
+                      {a.adminReviewStatus === "REJECTED" && a.adminReviewReason ? (
+                        <p className="mt-2 text-xs font-semibold text-red-600">
+                          Reason: {a.adminReviewReason}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="text-right">
                       <p
-                        className={`text-xs font-extrabold ${a.verificationStatus === "VERIFIED" ? "text-emerald-600" : "text-amber-600"}`}
+                        className={`text-xs font-extrabold ${isFullyVerifiedBank(a) ? "text-emerald-600" : a.adminReviewStatus === "REJECTED" ? "text-red-600" : "text-amber-600"}`}
                       >
-                        {a.verificationStatus}
+                        {isFullyVerifiedBank(a)
+                          ? "VERIFIED"
+                          : a.adminReviewStatus === "REJECTED"
+                            ? "ADMIN REJECTED"
+                            : a.adminReviewStatus !== "APPROVED"
+                              ? "ADMIN REVIEW PENDING"
+                              : `BANK ${a.verificationStatus}`}
                       </p>
                       <p className="text-[10px] text-muted-foreground">
                         Ownership {a.ownershipStatus}
@@ -347,6 +440,9 @@ function BankAccountsPage() {
                           try {
                             const latest = await complianceApi.bank(session.accessToken, a.id);
                             setEditingId(latest.id);
+                            setEditingAccount(latest);
+                            setPassbook(null);
+                            setFileInputKey((value) => value + 1);
                             requestKeyRef.current = null;
                             setAdding(true);
                             setCoordinates(null);
@@ -372,23 +468,27 @@ function BankAccountsPage() {
                       >
                         <Edit3 size={12} /> Edit
                       </button>
-                      {!a.isDefault && a.status === "ACTIVE" && (
-                        <button
-                          disabled={!canManageBank || busy}
-                          onClick={async () => {
-                            try {
-                              await complianceApi.setPrimary(session.accessToken, a.id);
-                              await load(session.accessToken);
-                              setMessage({ ok: true, text: "Primary bank account updated." });
-                            } catch (error) {
-                              setMessage({ ok: false, text: complianceMessage(error) });
-                            }
-                          }}
-                          className="ml-3 mt-2 text-xs font-bold text-primary disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Set as primary
-                        </button>
-                      )}
+                      {!a.isDefault &&
+                        a.status === "ACTIVE" &&
+                        a.adminReviewStatus === "APPROVED" &&
+                        a.verificationStatus === "VERIFIED" &&
+                        a.ownershipStatus === "VERIFIED" && (
+                          <button
+                            disabled={!canManageBank || busy}
+                            onClick={async () => {
+                              try {
+                                await complianceApi.setPrimary(session.accessToken, a.id);
+                                await load(session.accessToken);
+                                setMessage({ ok: true, text: "Primary bank account updated." });
+                              } catch (error) {
+                                setMessage({ ok: false, text: complianceMessage(error) });
+                              }
+                            }}
+                            className="ml-3 mt-2 text-xs font-bold text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Set as primary
+                          </button>
+                        )}
                       {!a.isDefault && (
                         <button
                           disabled={!canManageBank || busy}
@@ -420,9 +520,13 @@ function BankAccountsPage() {
           ) : (
             <div className="mt-6 rounded-2xl border border-dashed border-border p-12 text-center">
               <Building2 className="mx-auto text-muted-foreground" />
-              <p className="mt-3 font-bold text-secondary">No bank account connected</p>
+              <p className="mt-3 font-bold text-secondary">
+                No {activeTab === "AEPS" ? "AEPS" : "Main"} account connected
+              </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Add an account to enable settlement and AEPS onboarding.
+                {activeTab === "AEPS"
+                  ? "Add an AEPS account to enable AEPS payouts."
+                  : "Add a Main account to enable DMT transfers."}
               </p>
             </div>
           )}
@@ -487,29 +591,47 @@ function BankAccountsPage() {
                   <option value="SALARY">Salary</option>
                 </select>
               </label>
-              <fieldset className="text-xs font-bold uppercase text-muted-foreground">
-                Use account for
-                <div className="mt-2 flex gap-4 rounded-xl border border-border bg-card px-4 py-3 normal-case">
-                  {(["PAYOUT", "DMT"] as const).map((purpose) => (
-                    <label key={purpose} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={form.purposes.includes(purpose)}
-                        onChange={(event) => {
-                          requestKeyRef.current = null;
-                          setForm({
-                            ...form,
-                            purposes: event.target.checked
-                              ? [...form.purposes, purpose]
-                              : form.purposes.filter((item) => item !== purpose),
-                          });
-                        }}
-                      />{" "}
-                      {purpose}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+              <label className="text-xs font-bold uppercase text-muted-foreground">
+                Account purpose
+                <input
+                  value={
+                    form.purposes.includes("PAYOUT") ? "AEPS Payout Account" : "Main DMT Account"
+                  }
+                  disabled
+                  className="mt-1.5 w-full rounded-xl border border-border bg-muted px-4 py-3 text-sm font-normal normal-case text-muted-foreground"
+                />
+              </label>
+              <label className="text-xs font-bold uppercase text-muted-foreground sm:col-span-2">
+                Passbook front {editingId ? "(required for sensitive changes or resubmission)" : ""}
+                <span className="mt-1.5 flex items-center gap-3 rounded-xl border border-dashed border-border bg-card px-4 py-3 normal-case">
+                  <FileText size={18} className="shrink-0 text-primary" />
+                  <input
+                    key={fileInputKey}
+                    type="file"
+                    required={
+                      !editingId ||
+                      editingAccount?.adminReviewStatus === "REJECTED" ||
+                      !editingAccount?.passbookOriginalName
+                    }
+                    accept="image/jpeg,image/png,application/pdf"
+                    onChange={(event) => {
+                      requestKeyRef.current = null;
+                      const file = event.target.files?.[0] || null;
+                      if (file && file.size > 5 * 1024 * 1024) {
+                        event.target.value = "";
+                        setPassbook(null);
+                        setMessage({ ok: false, text: "Passbook file must be 5 MB or smaller." });
+                        return;
+                      }
+                      setPassbook(file);
+                    }}
+                    className="w-full text-sm font-normal"
+                  />
+                </span>
+                <span className="mt-1 block font-normal normal-case">
+                  JPG, PNG or PDF, maximum 5 MB. Only authorised reviewers can access it.
+                </span>
+              </label>
               <div className="sm:col-span-2">
                 <button
                   type="button"
@@ -553,13 +675,20 @@ function BankAccountsPage() {
                 disabled={!canManageBank || busy}
                 className="self-end rounded-xl bg-secondary py-3 text-sm font-bold text-white disabled:opacity-50"
               >
-                {busy ? "Saving account…" : editingId ? "Save and re-verify" : "Verify and save"}
+                {busy
+                  ? "Submitting account…"
+                  : editingId
+                    ? "Save bank account"
+                    : "Submit for review"}
               </button>
               {editingId && (
                 <button
                   type="button"
                   onClick={() => {
                     setEditingId(null);
+                    setEditingAccount(null);
+                    setPassbook(null);
+                    setFileInputKey((value) => value + 1);
                     requestKeyRef.current = null;
                     setAdding(false);
                     setCoordinates(null);
@@ -579,7 +708,8 @@ function BankAccountsPage() {
             <ShieldCheck />
             <h2 className="mt-4 text-lg font-extrabold">Bank verification</h2>
             <p className="mt-2 text-sm text-white/65">
-              The Bank service validates account status, IFSC and ownership before saving.
+              Your passbook is reviewed by an administrator first. Provider verification starts only
+              after approval.
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-5">

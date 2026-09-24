@@ -6,6 +6,7 @@ import {
   type ProviderTransaction,
   type ProviderTransactionReceipt,
 } from "@/lib/operations-api";
+import { compactTransactionReference } from "@/lib/transaction-display";
 
 type Props = {
   accessToken: string;
@@ -71,6 +72,111 @@ function displayValue(key: string, value: unknown) {
   return String(value).replaceAll("_", " ");
 }
 
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function printTransactionReceipt(receipt: ProviderTransactionReceipt) {
+  const printableRows: Array<[string, unknown, keyof ProviderTransactionReceipt]> = [
+    ["Service", receipt.transactionTypeLabel, "transactionTypeLabel"],
+    ["Provider", receipt.provider, "provider"],
+    ["Transaction reference", receipt.transactionReferenceId, "transactionReferenceId"],
+    ["Bank reference (RRN)", receipt.rrn, "rrn"],
+    ["Acknowledgement no.", receipt.ackNo, "ackNo"],
+    ["Client reference", receipt.clientRefNo, "clientRefNo"],
+    ["Aadhaar number", receipt.maskedAadhaar, "maskedAadhaar"],
+    ["Bank IIN", receipt.bankIIN, "bankIIN"],
+    ["Transaction result", receipt.statusDescription || receipt.npciMessage, "statusDescription"],
+    ["NPCI response code", receipt.npciCode, "npciCode"],
+    ["Date and time", receipt.transactionDateTime, "transactionDateTime"],
+    ["Available balance", receipt.availableBalance, "availableBalance"],
+    ["Reversal status", receipt.reversed, "reversed"],
+    ["Reversed at", receipt.reversedAt, "reversedAt"],
+  ];
+  const rows = printableRows
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(
+      ([label, value, key]) => `
+        <div class="row">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(displayValue(key, value))}</strong>
+        </div>`,
+    )
+    .join("");
+  const amount = escapeHtml(displayValue("amount", receipt.amount));
+  const status = escapeHtml(displayValue("status", receipt.status));
+  const successful = receipt.status === "SUCCESS";
+  const printWindow = window.open("", "_blank", "popup,width=1050,height=850");
+  if (!printWindow) throw new Error("Allow pop-ups to print the transaction receipt.");
+
+  printWindow.document.write(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>UMOBIPAY receipt - ${escapeHtml(receipt.transactionReferenceId)}</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #eef6f3; color: #053d38; font: 13px/1.45 Arial, sans-serif; }
+      .receipt { width: min(794px, calc(100% - 48px)); min-height: 1040px; margin: 24px auto; padding: 46px 52px; background: #fff; border: 1px solid #b8d8d1; box-shadow: 0 12px 35px rgba(0, 70, 61, .14); }
+      .brand { text-align: center; border-bottom: 2px solid #00675d; padding-bottom: 15px; }
+      .brand h1 { margin: 0; color: #00675d; font-size: 25px; letter-spacing: 1.2px; }
+      .brand p { margin: 3px 0 0; color: #ff6422; font-size: 10px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; }
+      .copy { margin-top: 8px; color: #607a76; font-size: 10px; text-transform: uppercase; }
+      .summary { padding: 20px 0 15px; text-align: center; border-bottom: 1px dashed #9dbdb7; }
+      .amount-label { color: #607a76; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+      .amount { margin: 5px 0 8px; color: #043f39; font-size: 31px; font-weight: 800; }
+      .status { display: inline-block; padding: 5px 12px; border-radius: 20px; background: ${successful ? "#e2f8ed" : "#fff0e8"}; color: ${successful ? "#087443" : "#b43b08"}; font-size: 10px; font-weight: 800; letter-spacing: .6px; }
+      .details { display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; padding-top: 14px; }
+      .row { display: flex; justify-content: space-between; gap: 18px; min-width: 0; padding: 11px 0; border-bottom: 1px dashed #d3e3df; }
+      .row span { flex: 0 0 42%; color: #607a76; }
+      .row strong { overflow-wrap: anywhere; text-align: right; }
+      .footer { padding-top: 18px; text-align: center; }
+      .footer strong { display: block; color: #00675d; }
+      .footer p { margin: 5px 0 0; color: #718783; font-size: 10px; }
+      .generated { margin-top: 14px !important; border-top: 1px solid #dbe8e5; padding-top: 10px; }
+      @page { size: A4 portrait; margin: 14mm; }
+      @media print {
+        html, body { width: 182mm; min-height: 269mm; background: #fff; }
+        .receipt { width: 182mm; min-height: 269mm; margin: 0; padding: 8mm 10mm; border: 1px solid #b8d8d1; box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
+        .brand { padding-bottom: 10px; }
+        .summary { padding: 12px 0 10px; }
+        .details { padding-top: 8px; }
+        .row { padding: 7px 0; }
+        .footer { padding-top: 12px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="receipt">
+      <header class="brand">
+        <h1>UMOBIPAY</h1>
+        <p>Pay Smart. Pay Fast.</p>
+        <div class="copy">AEPS transaction receipt · Customer copy</div>
+      </header>
+      <section class="summary">
+        <div class="amount-label">Transaction amount</div>
+        <div class="amount">${amount}</div>
+        <div class="status">${status}</div>
+      </section>
+      <section class="details">${rows}</section>
+      <footer class="footer">
+        <strong>Thank you for using UMOBIPAY</strong>
+        <p>Please retain this receipt and the transaction reference for support or reconciliation.</p>
+        <p class="generated">System-generated receipt · No signature required</p>
+      </footer>
+    </main>
+    <script>window.addEventListener("load", () => { window.print(); window.onafterprint = () => window.close(); });</script>
+  </body>
+</html>`);
+  printWindow.document.close();
+}
+
 export function TransactionDetailDialog({
   accessToken,
   referenceId,
@@ -126,7 +232,9 @@ export function TransactionDetailDialog({
             <p className="text-xs font-extrabold uppercase tracking-wider text-primary">
               AEPS transaction
             </p>
-            <h2 className="mt-1 break-all text-xl font-black text-secondary">{referenceId}</h2>
+            <h2 className="mt-1 text-xl font-black text-secondary">
+              {compactTransactionReference(referenceId)}
+            </h2>
           </div>
           <button
             type="button"
@@ -160,7 +268,9 @@ export function TransactionDetailDialog({
                       {label}
                     </p>
                     <p className="mt-1 break-all text-xs font-bold text-secondary">
-                      {displayValue(key, detail[key])}
+                      {key === "referenceId"
+                        ? compactTransactionReference(String(detail[key]))
+                        : displayValue(key, detail[key])}
                     </p>
                   </div>
                 ))}
@@ -184,7 +294,13 @@ export function TransactionDetailDialog({
           {receipt && (
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={() => {
+                try {
+                  printTransactionReceipt(receipt);
+                } catch (reason) {
+                  setError(operationsMessage(reason));
+                }
+              }}
               className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-xs font-extrabold"
             >
               <Printer size={15} />
@@ -210,7 +326,9 @@ export function TransactionDetailDialog({
                   >
                     <span className="text-muted-foreground">{label}</span>
                     <strong className="break-all text-right">
-                      {displayValue(key, receipt[key])}
+                      {key === "transactionReferenceId"
+                        ? compactTransactionReference(String(receipt[key]))
+                        : displayValue(key, receipt[key])}
                     </strong>
                   </div>
                 ))}

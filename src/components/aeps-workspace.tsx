@@ -19,7 +19,7 @@ import { ApiError, getSession } from "@/lib/auth-api";
 import {
   credentialsPending,
   managementBasePath,
-  normalizeRole,
+  resolveWorkspaceRole,
   signedInHome,
   type PlatformRole,
 } from "@/lib/role-hierarchy";
@@ -61,6 +61,17 @@ type AepsActionAccess = {
   missingOnboardingPermissions: string[];
   services: Record<AepsTxnCode, boolean>;
 };
+
+const RD_DEVICE_OPTIONS = [
+  { value: "mantra", label: "Mantra" },
+  { value: "morpho", label: "Morpho / IDEMIA" },
+  { value: "startek", label: "Startek" },
+  { value: "secugen", label: "SecuGen" },
+  { value: "tatvik", label: "Tatvik" },
+  { value: "precision", label: "Precision" },
+  { value: "evolute", label: "Evolute" },
+] as const;
+const CUSTOM_RD_DEVICE = "__custom_rd_device__";
 
 const onboardingSteps = [
   { key: "REGISTER", label: "Register" },
@@ -229,7 +240,7 @@ function PrerequisiteNotice({
 export function AepsWorkspace({ requestedService }: { requestedService?: AepsTxnCode } = {}) {
   const navigate = useNavigate();
   const { can, loading: accessLoading, refresh: refreshAccess } = useEffectiveAccess();
-  const currentRole = normalizeRole(getSession()?.identity.role);
+  const currentRole = resolveWorkspaceRole(getSession()?.identity.role);
   const accountPaths = pathsForRole(currentRole);
   const canView = can(UI_PERMISSION.AEPS_VIEW);
   const onboardingPermissions = Array.from(
@@ -1169,8 +1180,7 @@ function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<vo
             }}
             required
           />
-          <Field
-            label="RD device type"
+          <RdDeviceField
             value={deviceType}
             onChange={(value) => {
               setDeviceType(value);
@@ -1513,12 +1523,7 @@ function TransactionForm({
             onChange={(v) => set("bankIIN", v)}
             options={iins.map((i) => ({ value: i.iin || "", label: i.description }))}
           />
-          <Field
-            label="RD device type"
-            value={form.deviceType}
-            onChange={(v) => set("deviceType", v)}
-            required
-          />
+          <RdDeviceField value={form.deviceType} onChange={(v) => set("deviceType", v)} />
           <Field label="Latitude" value={form.lat} onChange={(v) => set("lat", v)} required />
           <Field label="Longitude" value={form.long} onChange={(v) => set("long", v)} required />
         </div>
@@ -1802,6 +1807,7 @@ function SelectField({
   options,
   fieldId,
   error,
+  required = true,
 }: {
   label: string;
   value: string;
@@ -1809,6 +1815,7 @@ function SelectField({
   options: Array<{ value: string; label: string }>;
   fieldId?: string;
   error?: string;
+  required?: boolean;
 }) {
   const errorId = fieldId ? `${fieldId}-error` : undefined;
   return (
@@ -1816,7 +1823,7 @@ function SelectField({
       <span className="text-xs font-bold text-muted-foreground">{label}</span>
       <select
         id={fieldId}
-        required
+        required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-invalid={!!error}
@@ -1838,6 +1845,49 @@ function SelectField({
         </span>
       )}
     </label>
+  );
+}
+
+function RdDeviceField({
+  value,
+  onChange,
+  required = true,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+}) {
+  const isKnownDevice = (candidate: string) =>
+    RD_DEVICE_OPTIONS.some((device) => device.value === candidate.trim().toLowerCase());
+  const [custom, setCustom] = useState(Boolean(value) && !isKnownDevice(value));
+
+  return (
+    <div className="space-y-2">
+      <SelectField
+        label="RD device type"
+        value={custom ? CUSTOM_RD_DEVICE : value.trim().toLowerCase()}
+        onChange={(selected) => {
+          if (selected === CUSTOM_RD_DEVICE) {
+            setCustom(true);
+            onChange("");
+            return;
+          }
+          setCustom(false);
+          onChange(selected);
+        }}
+        required={required}
+        options={[...RD_DEVICE_OPTIONS, { value: CUSTOM_RD_DEVICE, label: "Other RD device" }]}
+      />
+      {custom && (
+        <Field
+          label="RD device/provider name"
+          value={value}
+          onChange={onChange}
+          placeholder="Enter the provider device type"
+          required
+        />
+      )}
+    </div>
   );
 }
 function Submit({ busy, children }: { busy: boolean; children: ReactNode }) {

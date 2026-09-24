@@ -10,10 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { ServiceNotice } from "@/components/business-page";
-import { ActionPermissionNotice } from "@/components/action-permission-notice";
 import { RoleAwareAccountPage } from "@/components/role-aware-account-page";
-import { useEffectiveAccess } from "@/hooks/use-effective-access";
-import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { ApiError, getSession } from "@/lib/auth-api";
 import {
   credentialsPending,
@@ -39,13 +36,10 @@ const docs = [
   { type: "BUSINESS_PROOF", label: "Business proof", number: true },
 ] as const;
 function KycPage() {
-  const { can } = useEffectiveAccess();
-  const canManageKyc = can(UI_PERMISSION.KYC_MANAGE, [
-    "ADMIN",
-    "MASTER_DISTRIBUTOR",
-    "DISTRIBUTOR",
-    "RETAILER",
-  ]);
+  // KYC is a mandatory identity-owned onboarding step, not an optional package
+  // capability. Its backend endpoints require authentication, while the
+  // separate review endpoints are protected by KYC.REVIEW.* permissions.
+  const canManageKyc = true;
   const navigate = useNavigate(),
     [session, setSession] = useState<ReturnType<typeof getSession>>(null),
     [kyc, setKyc] = useState<KycProfile | null>(null),
@@ -93,10 +87,6 @@ function KycPage() {
     );
   const activeSession = session;
   async function run(name: string, task: () => Promise<unknown>, text: string) {
-    if (!canManageKyc) {
-      setMessage({ ok: false, text: `Permission ${UI_PERMISSION.KYC_MANAGE} is required.` });
-      return;
-    }
     setBusy(name);
     setMessage(null);
     try {
@@ -130,15 +120,6 @@ function KycPage() {
       title="KYC verification"
       description="Submit business documents and track approval status. KYC is the first prerequisite for AEPS."
     >
-      {!canManageKyc && (
-        <div className="mb-6">
-          <ActionPermissionNotice
-            permission={UI_PERMISSION.KYC_MANAGE}
-            title="KYC application is read-only"
-            text="Document changes and final submission are not enabled for your active package."
-          />
-        </div>
-      )}
       {message && (
         <div className="mb-6">
           <ServiceNotice ok={message.ok}>{message.text}</ServiceNotice>
@@ -335,6 +316,7 @@ function KycPage() {
                 ) : (
                   <Link
                     to="/retailer/aeps"
+                    search={{ service: undefined }}
                     className="mt-5 inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-bold"
                   >
                     Continue to AEPS

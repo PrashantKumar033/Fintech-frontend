@@ -35,6 +35,7 @@ export type AdminEntity = {
   name: string;
   code?: string;
   prefix?: string;
+  authorityLevel?: number;
   description?: string;
   price?: string;
   isActive: boolean;
@@ -53,7 +54,7 @@ export type RoleRegisterPermission = {
   targetRole: AdminEntity;
 };
 export type RoleEffectiveAccess = {
-  role: { id: string; name: string; isActive: boolean };
+  role: { id: string; name: string; authorityLevel: number; isActive: boolean };
   packages: Array<{ id: string; code: string; name: string }>;
   permissions: Array<{ id: string; code: string; name: string; description?: string | null }>;
   permissionCodes: string[];
@@ -105,6 +106,9 @@ export type TransactionDetail = Record<string, unknown> & {
 };
 export type AdminProviderTransaction = ProviderTransaction & {
   userId: string;
+  userLoginId?: string | null;
+  userDisplayName?: string | null;
+  userRole?: string | null;
   sourceRole?: string | null;
   merchantRefId?: string | null;
   reversedAt?: string | null;
@@ -297,6 +301,17 @@ export type AdminDashboardSummary = {
   generatedAt: string;
 };
 
+export type AdminWalletBalances = {
+  userId: string;
+  wallets: {
+    main: number;
+    mainHeld: number;
+    mainAvailable: number;
+    aeps: number;
+    profit: number;
+  };
+};
+
 export type AdminMember = {
   id: string;
   loginId: string;
@@ -402,6 +417,9 @@ export type AdminBankAccount = {
   status: string;
   verificationStatus: string;
   ownershipStatus: string;
+  adminReviewStatus: "PENDING" | "APPROVED" | "REJECTED";
+  adminReviewReason?: string | null;
+  adminReviewedAt?: string | null;
   verifiedAt?: string | null;
   isDefault: boolean;
   createdAt?: string;
@@ -409,6 +427,12 @@ export type AdminBankAccount = {
 };
 
 export type AdminBankAccountDetail = AdminBankAccount & {
+  passbook?: {
+    originalName: string;
+    mimeType: string;
+    url: string;
+    expiresInSeconds: number;
+  } | null;
   userBankStatusAudits?: Array<Record<string, unknown>>;
   bankAccountVerifications?: Array<Record<string, unknown>>;
 };
@@ -418,8 +442,120 @@ export type AdminBankAccountPage = {
   pagination: { page: number; limit: number; total: number; totalPages: number };
 };
 
+export type AdminFundReceivingBank = {
+  id: string;
+  displayName?: string | null;
+  bankName: string;
+  ifsc: string;
+  branchName?: string | null;
+  accountHolderName: string;
+  accountNumberLast4: string;
+  maskedAccountNumber: string;
+  accountType: "SAVINGS" | "CURRENT" | "SALARY";
+  upiId?: string | null;
+  status: "ACTIVE" | "INACTIVE";
+  isDefault: boolean;
+  displayOrder: number;
+};
+
+export type AdminFundRequest = {
+  id: string;
+  referenceId: string;
+  retailerUserId: string;
+  userLoginId?: string | null;
+  userDisplayName?: string | null;
+  userRole?: string | null;
+  amount: string;
+  paymentMode: string;
+  paymentReference?: string | null;
+  paymentDate: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "REINITIATE" | "CANCELLED";
+  remark?: string | null;
+  adminRemark?: string | null;
+  createdAt: string;
+};
+
+export type AdminFundHold = {
+  id: string;
+  referenceId: string;
+  targetUserId: string;
+  walletType: "MAIN";
+  amount: string;
+  reason: string;
+  status: "ACTIVE" | "SETTLED" | "RELEASED" | "CANCELLED" | "EXPIRED";
+  resolutionReason?: string | null;
+  releasedAt?: string | null;
+  createdAt: string;
+};
+
+export type AdminFundHoldPage = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  data?: AdminFundHold[];
+  items?: AdminFundHold[];
+};
+
 export type ReconciliationAction =
   "RECONCILE_DEBIT" | "CONFIRM_PROVIDER_SUCCESS" | "CONFIRM_PROVIDER_FAILED" | "RETRY_REVERSAL";
+
+export type ProviderRegistryEntry = {
+  id?: string;
+  publicCode: string;
+  internalCode?: string;
+  publicName: string;
+  serviceType: string;
+  isActive: boolean;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+};
+
+export type ServiceControlStatus = {
+  serviceType: string;
+  enabled: boolean;
+  reason?: string | null;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+};
+
+export type AepsOverviewBreakdown = {
+  total: number;
+  successful: number;
+  failed: number;
+  pending: number;
+  volume: string | number;
+  successfulVolume: string | number;
+};
+
+export type AepsOverviewMetrics = {
+  generatedAt: string;
+  range: {
+    fromDate: string;
+    toDate: string;
+    mode: "CUSTOM" | "LAST_24_HOURS";
+  };
+  filters: {
+    provider: string | null;
+    operation: string | null;
+  };
+  totals: {
+    transactions: number;
+    financialTransactions: number;
+    nonFinancialTransactions: number;
+    financialVolume: string | number;
+    successfulFinancialVolume: string | number;
+    averageFinancialTicket: string | number;
+    successRate: number;
+    financialSuccessRate: number;
+    reconciliationRequired: number;
+  };
+  statuses: Record<string, number>;
+  settlement: Record<string, number>;
+  commission: Record<string, string | number> & { settledAmount: string | number };
+  operations: Array<AepsOverviewBreakdown & { operation: string }>;
+  providers: Array<AepsOverviewBreakdown & { provider: string }>;
+};
 
 export type AepsTwoFactorFeeConfiguration = {
   provider: string;
@@ -786,6 +922,16 @@ export const adminAuthApi = {
       "/super-admin/auth/onboarding/change-mpin",
       json("POST", { currentMpin, newMpin }),
     ),
+  setupTpin: (currentMpin: string, newTpin: string) =>
+    call<{ message: string }>(
+      "/super-admin/auth/tpin/setup",
+      json("POST", { currentMpin, newTpin }),
+    ),
+  changeTpin: (currentTpin: string, newTpin: string) =>
+    call<{ message: string }>(
+      "/super-admin/auth/tpin/change",
+      json("POST", { currentTpin, newTpin }),
+    ),
   async logout() {
     const actor = getAdminActor();
     try {
@@ -811,6 +957,30 @@ export function updateAdminOnboarding(nextStep: string | null, onboardingStatus?
 
 export const adminApi = {
   superAdminAeps: {
+    providers: {
+      list: () => call<ProviderRegistryEntry[]>("/super-admin/providers", { cache: "no-store" }),
+      get: (publicCode: string) =>
+        call<ProviderRegistryEntry>(`/super-admin/providers/${encodeURIComponent(publicCode)}`, {
+          cache: "no-store",
+        }),
+      updateStatus: (publicCode: string, isActive: boolean) =>
+        call<ProviderRegistryEntry>(
+          `/super-admin/providers/${encodeURIComponent(publicCode)}/status`,
+          json("PATCH", { isActive }),
+        ),
+    },
+    serviceControl: {
+      get: (serviceType: string) =>
+        call<ServiceControlStatus>(
+          `/super-admin/services/${encodeURIComponent(serviceType)}/status`,
+          { cache: "no-store" },
+        ),
+      update: (serviceType: string, enabled: boolean, reason?: string) =>
+        call<ServiceControlStatus>(
+          `/super-admin/services/${encodeURIComponent(serviceType)}/status`,
+          json("PATCH", { enabled, ...(reason?.trim() ? { reason: reason.trim() } : {}) }),
+        ),
+    },
     twoFactorFee: (provider: string) =>
       call<AepsTwoFactorFeeConfiguration>(
         `/super-admin/aeps/2fa/fees/${encodeURIComponent(provider)}`,
@@ -864,6 +1034,8 @@ export const adminApi = {
       ),
   },
   operations: {
+    walletBalances: () =>
+      call<AdminWalletBalances>("/super-admin/wallet/balances", { cache: "no-store" }),
     dashboardSummary: () =>
       call<AdminDashboardSummary>("/admin/dashboard/summary", { cache: "no-store" }),
     members: (query = "") =>
@@ -887,22 +1059,109 @@ export const adminApi = {
       call<AdminBankAccountDetail>(`/admin/bank-accounts/${encodeURIComponent(bankId)}`, {
         cache: "no-store",
       }),
+    approveBankAccount: (bankId: string) =>
+      call<AdminBankAccountDetail>(
+        `/admin/bank-accounts/${encodeURIComponent(bankId)}/approve`,
+        json("PATCH", {}),
+      ),
+    rejectBankAccount: (bankId: string, reason: string) =>
+      call<AdminBankAccountDetail>(
+        `/admin/bank-accounts/${encodeURIComponent(bankId)}/reject`,
+        json("PATCH", { reason: reason.trim() }),
+      ),
+    fundReceivingBanks: () =>
+      call<AdminFundReceivingBank[]>("/super-admin/fund-receiving-bank-accounts", {
+        cache: "no-store",
+      }),
+    createFundReceivingBank: (body: Record<string, unknown>) =>
+      call<AdminFundReceivingBank>("/super-admin/fund-receiving-bank-accounts", json("POST", body)),
+    setDefaultFundReceivingBank: (id: string) =>
+      call<AdminFundReceivingBank>(
+        `/super-admin/fund-receiving-bank-accounts/${encodeURIComponent(id)}/set-default`,
+        json("PATCH", {}),
+      ),
+    deactivateFundReceivingBank: (id: string) =>
+      call<AdminFundReceivingBank>(
+        `/super-admin/fund-receiving-bank-accounts/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      ),
+    fundRequests: (status = "") =>
+      call<AdminFundRequest[]>(
+        `/super-admin/fund-requests${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+        { cache: "no-store" },
+      ),
+    approveFundRequest: (referenceId: string, tpin: string, adminRemark?: string) =>
+      call<AdminFundRequest>(
+        `/super-admin/fund-requests/${encodeURIComponent(referenceId)}/approve`,
+        json("POST", { tpin, ...(adminRemark?.trim() ? { adminRemark: adminRemark.trim() } : {}) }),
+      ),
+    rejectFundRequest: (referenceId: string, reason: string) =>
+      call<AdminFundRequest>(
+        `/super-admin/fund-requests/${encodeURIComponent(referenceId)}/reject`,
+        json("POST", { reason: reason.trim() }),
+      ),
+    reinitiateFundRequest: (referenceId: string, reason: string) =>
+      call<AdminFundRequest>(
+        `/super-admin/fund-requests/${encodeURIComponent(referenceId)}/reinitiate`,
+        json("POST", { reason: reason.trim() }),
+      ),
+    manualWalletCredit: (
+      walletType: "main" | "aeps",
+      body: { targetLoginId: string; amount: number; reason: string; tpin: string },
+      idempotencyKey: string,
+    ) =>
+      call<Record<string, unknown>>(`/super-admin/wallet/manual-credit/${walletType}`, {
+        ...json("POST", body),
+        headers: { "Idempotency-Key": idempotencyKey },
+      }),
+    directWalletDeduct: (
+      body: { targetLoginId: string; amount: number; reason: string; tpin: string },
+      idempotencyKey: string,
+    ) =>
+      call<Record<string, unknown>>("/super-admin/wallet/deduct", {
+        ...json("POST", body),
+        headers: { "Idempotency-Key": idempotencyKey },
+      }),
+    transferAepsWallet: (
+      body: {
+        sourceLoginId: string;
+        targetLoginId: string;
+        amount: number;
+        reason: string;
+        tpin: string;
+      },
+      idempotencyKey: string,
+    ) =>
+      call<Record<string, unknown>>("/super-admin/wallet/aeps-transfer", {
+        ...json("POST", body),
+        headers: { "Idempotency-Key": idempotencyKey },
+      }),
+    createFundHold: (
+      body: { targetLoginId: string; amount: number; reason: string; tpin: string },
+      idempotencyKey: string,
+    ) =>
+      call<AdminFundHold>("/super-admin/wallet/holds", {
+        ...json("POST", body),
+        headers: { "Idempotency-Key": idempotencyKey },
+      }),
+    fundHolds: (status = "") =>
+      call<AdminFundHoldPage>(
+        `/super-admin/wallet/holds?limit=50${status ? `&status=${encodeURIComponent(status)}` : ""}`,
+        { cache: "no-store" },
+      ),
+    releaseFundHold: (
+      referenceId: string,
+      body: { reason: string; tpin: string },
+      idempotencyKey: string,
+    ) =>
+      call<AdminFundHold>(`/super-admin/wallet/holds/${encodeURIComponent(referenceId)}/release`, {
+        ...json("POST", body),
+        headers: { "Idempotency-Key": idempotencyKey },
+      }),
     updateAepsMerchantStatus: (identityId: string, status: string, reason?: string) =>
       call<Record<string, unknown>>(
         `/admin/aeps/merchants/${encodeURIComponent(identityId)}/status`,
         json("PATCH", { status, ...(reason?.trim() ? { reason: reason.trim() } : {}) }),
-      ),
-    syncAepsMerchantStatus: (
-      identityId: string,
-      body: {
-        mode: "RESET_REGISTRATION" | "LINK_PROVIDER";
-        providerMerchantId?: string;
-        reason: string;
-      },
-    ) =>
-      call<Record<string, unknown>>(
-        `/admin/aeps/merchants/${encodeURIComponent(identityId)}/sync-status`,
-        json("POST", body),
       ),
     walletLedger: (identityId: string, query = "") =>
       call<AdminWalletLedgerPage>(
@@ -989,11 +1248,34 @@ export const adminApi = {
       throw error;
     }
   },
+  async registerableRoles(): Promise<AdminEntity[]> {
+    const actor = getAdminActor();
+    if (actor?.kind !== "SUPER_ADMIN") {
+      return call<AdminEntity[]>("/accounts/registerable-roles", { cache: "no-store" });
+    }
+
+    const roles = asArray<AdminEntity>(await call<unknown>("/roles", { cache: "no-store" }));
+    const registrar = roles.find(
+      (role) => role.name.toUpperCase().replace(/[ -]+/g, "_") === "SUPER_ADMIN",
+    );
+    if (!registrar) return [];
+    const assignments = await call<RoleRegisterPermission[]>(
+      `/roles/${encodeURIComponent(registrar.id)}/register-permissions`,
+      { cache: "no-store" },
+    );
+    return assignments
+      .filter((assignment) => assignment.isActive && assignment.targetRole.isActive)
+      .map((assignment) => assignment.targetRole);
+  },
   auditLogs: (query = "") => {
     const path = getAdminActor()?.kind === "SUPER_ADMIN" ? "/audit" : "/audit/me";
     return call<AuditPage>(`${path}${query ? `?${query}` : ""}`);
   },
   auditLog: (auditId: string) => call<AuditLog>(`/audit/me/${encodeURIComponent(auditId)}`),
+  aepsOverview: (query = "") =>
+    call<AepsOverviewMetrics>(`/admin/transactions/aeps/overview${query ? `?${query}` : ""}`, {
+      cache: "no-store",
+    }),
   transaction: (referenceId: string) =>
     call<TransactionDetail>(`/admin/transactions/provider/${encodeURIComponent(referenceId)}`),
   providerTransactions: (query = "") =>

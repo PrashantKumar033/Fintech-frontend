@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { Eye, Landmark, Loader2, RefreshCw, Search, X } from "lucide-react";
+import {
+  CheckCircle2,
+  Eye,
+  FileText,
+  Landmark,
+  Loader2,
+  RefreshCw,
+  Search,
+  X,
+  XCircle,
+} from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
 import { BankVerificationReconciliation } from "@/components/admin/bank-verification-reconciliation";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
@@ -22,6 +32,7 @@ export function AdminBankOperationsPage() {
   const privileged = actor?.kind === "SUPER_ADMIN";
   const canList = privileged || can(UI_PERMISSION.BANK_ACCOUNT_LIST, ["SUPER_ADMIN", "ADMIN"]);
   const canView = privileged || can(UI_PERMISSION.BANK_ACCOUNT_VIEW, ["SUPER_ADMIN", "ADMIN"]);
+  const canReview = privileged || can(UI_PERMISSION.BANK_ACCOUNT_REVIEW, ["SUPER_ADMIN", "ADMIN"]);
   const [items, setItems] = useState<AdminBankAccount[]>([]);
   const [filters, setFilters] = useState({
     search: "",
@@ -37,6 +48,9 @@ export function AdminBankOperationsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
   const [detail, setDetail] = useState<AdminBankAccountDetail | null>(null);
+  const [reviewReason, setReviewReason] = useState("");
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [passbookBusy, setPassbookBusy] = useState(false);
   const [workspace, setWorkspace] = useState<"accounts" | "reconciliation">("accounts");
 
   const load = useCallback(
@@ -78,6 +92,55 @@ export function AdminBankOperationsPage() {
       setError(messageOf(value));
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  async function review(action: "approve" | "reject") {
+    if (!detail || !canReview) return;
+    if (action === "reject" && !reviewReason.trim()) {
+      setError("Enter a clear rejection reason before rejecting this bank account.");
+      return;
+    }
+    setReviewBusy(true);
+    setError("");
+    try {
+      if (action === "approve") await adminApi.operations.approveBankAccount(detail.id);
+      else await adminApi.operations.rejectBankAccount(detail.id, reviewReason);
+      setDetail(await adminApi.operations.bankAccount(detail.id));
+      setReviewReason("");
+      await load(page);
+    } catch (value) {
+      setError(messageOf(value));
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+
+  async function openPassbook() {
+    if (!detail || passbookBusy) return;
+    const previewWindow = window.open("", "_blank");
+    if (previewWindow) {
+      previewWindow.opener = null;
+      previewWindow.document.title = "Opening passbook...";
+      previewWindow.document.body.textContent = "Opening the secured passbook...";
+    }
+    setPassbookBusy(true);
+    setError("");
+    try {
+      // Signed S3 URLs expire quickly. Always ask the authenticated backend for
+      // a fresh URL at the moment the reviewer opens the document.
+      const freshDetail = await adminApi.operations.bankAccount(detail.id);
+      setDetail(freshDetail);
+      if (!freshDetail.passbook?.url) {
+        throw new Error("No passbook is available for this bank account.");
+      }
+      if (previewWindow) previewWindow.location.replace(freshDetail.passbook.url);
+      else window.open(freshDetail.passbook.url, "_blank", "noopener,noreferrer");
+    } catch (value) {
+      previewWindow?.close();
+      setError(messageOf(value));
+    } finally {
+      setPassbookBusy(false);
     }
   }
 
@@ -191,6 +254,7 @@ export function AdminBankOperationsPage() {
                       "Member ID",
                       "Type",
                       "Status",
+                      "Admin review",
                       "Verification",
                       "Ownership",
                       "Action",
@@ -204,7 +268,7 @@ export function AdminBankOperationsPage() {
                 <tbody className="divide-y divide-border">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="h-44 text-center">
+                      <td colSpan={8} className="h-44 text-center">
                         <Loader2 className="mx-auto animate-spin text-primary" />
                       </td>
                     </tr>
@@ -223,6 +287,9 @@ export function AdminBankOperationsPage() {
                         <td className="px-4 py-3">{item.accountType}</td>
                         <td className="px-4 py-3">
                           <Status value={item.status} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <Status value={item.adminReviewStatus || "PENDING"} />
                         </td>
                         <td className="px-4 py-3">
                           <Status value={item.verificationStatus} />
@@ -245,7 +312,7 @@ export function AdminBankOperationsPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="h-44 text-center text-muted-foreground">
+                      <td colSpan={8} className="h-44 text-center text-muted-foreground">
                         No bank accounts match these filters.
                       </td>
                     </tr>
@@ -315,11 +382,59 @@ export function AdminBankOperationsPage() {
                       label="Ownership"
                       value={<Status value={detail.ownershipStatus} />}
                     />
+                    <DetailRow
+                      label="Admin review"
+                      value={<Status value={detail.adminReviewStatus || "PENDING"} />}
+                    />
+                    <DetailRow label="Review reason" value={detail.adminReviewReason} />
+                    <DetailRow label="Reviewed on" value={formatDate(detail.adminReviewedAt)} />
                     <DetailRow label="Default account" value={detail.isDefault ? "Yes" : "No"} />
                     <DetailRow label="Purposes" value={detail.purposes?.join(", ") || "—"} />
                     <DetailRow label="Verified on" value={formatDate(detail.verifiedAt)} />
                   </DetailGroup>
                 </div>
+                <section className="mt-4 rounded-xl border border-border p-4">
+                  <h3 className="font-black">Passbook &amp; review</h3>
+                  {detail.passbook?.url ? (
+                    <button
+                      type="button"
+                      disabled={passbookBusy}
+                      onClick={() => void openPassbook()}
+                      className="mt-3 inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-bold text-primary"
+                    >
+                      {passbookBusy ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+                      {passbookBusy ? "Opening..." : `Open ${detail.passbook.originalName || "passbook"}`}
+                    </button>
+                  ) : (
+                    <p className="mt-2 text-sm text-muted-foreground">No passbook is available.</p>
+                  )}
+                  {canReview && detail.adminReviewStatus === "PENDING" ? (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+                      <input
+                        value={reviewReason}
+                        onChange={(event) => setReviewReason(event.target.value)}
+                        placeholder="Reason required only when rejecting"
+                        className={control}
+                      />
+                      <button
+                        type="button"
+                        disabled={reviewBusy}
+                        onClick={() => void review("approve")}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                      >
+                        <CheckCircle2 size={16} /> Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={reviewBusy}
+                        onClick={() => void review("reject")}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                      >
+                        <XCircle size={16} /> Reject
+                      </button>
+                    </div>
+                  ) : null}
+                </section>
                 <DetailHistory
                   title="Verification history"
                   items={detail.bankAccountVerifications}
@@ -360,7 +475,7 @@ function Filter({
   );
 }
 function Status({ value }: { value: string }) {
-  const good = ["ACTIVE", "VERIFIED"].includes(value);
+  const good = ["ACTIVE", "VERIFIED", "APPROVED"].includes(value);
   return (
     <span
       className={`rounded-full px-2 py-1 text-[10px] font-black ${good ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}

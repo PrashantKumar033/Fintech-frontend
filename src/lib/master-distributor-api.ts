@@ -2,8 +2,7 @@ import { authenticatedRequest } from "@/lib/auth-api";
 import type { AuditPage, ProviderTransactionPage, WalletBalances } from "@/lib/operations-api";
 import type { HierarchyChild } from "@/lib/distributor-api";
 export const masterDistributorApi = {
-  balances: (id: string) =>
-    authenticatedRequest<WalletBalances>(`/wallet/balances/${encodeURIComponent(id)}`),
+  balances: (_id?: string) => authenticatedRequest<WalletBalances>("/wallet/balances"),
   distributors: (id: string) =>
     authenticatedRequest<HierarchyChild[]>(
       `/commission-hierarchy/parent/${encodeURIComponent(id)}/children`,

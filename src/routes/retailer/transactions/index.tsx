@@ -5,6 +5,7 @@ import { BusinessPage, ServiceNotice } from "@/components/business-page";
 import { TransactionDetailDialog } from "@/components/transaction-detail-dialog";
 import { getSession } from "@/lib/auth-api";
 import { credentialsPending, signedInHome } from "@/lib/role-hierarchy";
+import { compactTransactionReference } from "@/lib/transaction-display";
 import {
   operationsApi,
   operationsMessage,
@@ -152,7 +153,7 @@ function TransactionsPage() {
               const value = e.target.value as ProviderTransactionStatus | "";
               void navigate({
                 to: "/retailer/transactions",
-                search: value ? { status: value } : {},
+                search: { status: value || undefined },
               });
             }}
             className="rounded-xl border border-border bg-background px-4 text-sm"
@@ -207,7 +208,7 @@ function TransactionsPage() {
                         onClick={() => setSelectedReference(row.referenceId)}
                         className="font-bold text-primary hover:underline"
                       >
-                        {row.referenceId}
+                        {compactTransactionReference(row.referenceId)}
                       </button>
                     </td>
                     <td className="px-5 py-4">{row.serviceType || "AEPS"}</td>

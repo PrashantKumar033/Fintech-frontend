@@ -1,25 +1,50 @@
 import { ShieldAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import type { EffectiveAccess } from "@/lib/auth-api";
-import { canAccessUiArea, permissionsForArea, type UiArea } from "@/lib/ui-permissions";
+import type { PlatformRole } from "@/lib/role-hierarchy";
+import {
+  canAccessUiArea,
+  canUseAllPermissions,
+  canUsePermission,
+  permissionsForArea,
+  type UiArea,
+} from "@/lib/ui-permissions";
 
 export function PermissionBoundary({
   area,
+  permission,
+  requireAll = false,
   role,
   access,
   dedicatedSuperAdmin = false,
+  fallbackRoles = [],
   children,
 }: {
-  area: UiArea;
+  area?: UiArea;
+  permission?: string | readonly string[];
+  requireAll?: boolean;
   role?: string | null;
   access?: EffectiveAccess | null;
   dedicatedSuperAdmin?: boolean;
+  fallbackRoles?: readonly PlatformRole[];
   children: ReactNode;
 }) {
-  const allowed = canAccessUiArea(area, { role, access, dedicatedSuperAdmin });
+  const requested = permission ? (typeof permission === "string" ? [permission] : permission) : [];
+  const allowed = permission
+    ? requireAll
+      ? canUseAllPermissions(requested, {
+          role,
+          access,
+          dedicatedSuperAdmin,
+          fallbackRoles,
+        })
+      : canUsePermission(requested, { role, access, dedicatedSuperAdmin, fallbackRoles })
+    : area
+      ? canAccessUiArea(area, { role, access, dedicatedSuperAdmin })
+      : false;
   if (allowed) return <>{children}</>;
 
-  const expected = permissionsForArea(area);
+  const expected = requested.length ? requested : area ? permissionsForArea(area) : [];
   return (
     <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-950 shadow-sm">
       <div className="flex gap-4">

@@ -41,7 +41,7 @@ export const Route = createFileRoute("/activity")({
   validateSearch: (search: Record<string, unknown>) => ({
     view:
       search.view === "aeps" || search.view === "wallet" || search.view === "commission"
-        ? search.view
+        ? (search.view as Exclude<ActivityView, "account">)
         : undefined,
   }),
   head: () => ({ meta: [{ title: "Account Activity — UMOBIPAY" }] }),
@@ -116,7 +116,7 @@ function ActivityPage() {
   return (
     <BusinessPage
       identity={session.identity}
-      active="reports"
+      active="activity"
       eyebrow="Audit service"
       title="Account activity"
       description="A secure record of actions performed through your UMOBIPAY account."

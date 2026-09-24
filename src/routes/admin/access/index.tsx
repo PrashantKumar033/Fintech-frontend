@@ -239,12 +239,14 @@ function EntityManager({
     [name, setName] = useState(""),
     [code, setCode] = useState(""),
     [prefix, setPrefix] = useState(""),
+    [authorityLevel, setAuthorityLevel] = useState("300"),
     [description, setDescription] = useState("");
   function reset(item?: AdminEntity) {
     setEditing(item || null);
     setName(item?.name || "");
     setCode(item?.code || "");
     setPrefix(item?.prefix || "");
+    setAuthorityLevel(String(item?.authorityLevel ?? 300));
     setDescription(item?.description || "");
   }
   async function startEdit(item: AdminEntity) {
@@ -264,6 +266,7 @@ function EntityManager({
       const body = {
         name: name.trim().toUpperCase().replace(/\s+/g, "_"),
         prefix: prefix.trim().toUpperCase(),
+        authorityLevel: Number(authorityLevel),
         description: description.trim() || undefined,
         ...(!editing ? { startingLoginIdNumber: 1001, isActive: true } : {}),
       };
@@ -314,17 +317,36 @@ function EntityManager({
             />
           </Field>
           {kind === "role" && (
-            <Field label="Login ID prefix">
-              <input
-                required
-                maxLength={10}
-                pattern="[A-Z0-9]+"
-                value={prefix}
-                onChange={(e) => setPrefix(e.target.value.toUpperCase())}
-                placeholder="DS"
-                className={inputClass}
-              />
-            </Field>
+            <>
+              <Field label="Login ID prefix">
+                <input
+                  required
+                  maxLength={10}
+                  pattern="[A-Z0-9]+"
+                  value={prefix}
+                  onChange={(e) => setPrefix(e.target.value.toUpperCase())}
+                  placeholder="DS"
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Hierarchy authority level">
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  max="10000"
+                  step="1"
+                  value={authorityLevel}
+                  onChange={(e) => setAuthorityLevel(e.target.value)}
+                  className={inputClass}
+                />
+                <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+                  The creator or reviewer must have a higher level. Workspace bands: Admin 800+,
+                  Master Distributor 650–799, Distributor 450–649, operations Admin 251–449, and
+                  Retailer 1–250.
+                </span>
+              </Field>
+            </>
           )}
           <Field label="Description">
             <textarea
@@ -370,6 +392,7 @@ function EntityManager({
                 <p className="mt-1 text-xs text-muted-foreground">
                   {item.name}
                   {item.prefix ? ` · Prefix ${item.prefix}` : ""}
+                  {kind === "role" ? ` · Authority ${item.authorityLevel ?? 0}` : ""}
                 </p>
               </div>
               <button

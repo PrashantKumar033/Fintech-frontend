@@ -13,7 +13,7 @@ import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
 import { getSession } from "@/lib/auth-api";
 import { masterDistributorApi } from "@/lib/master-distributor-api";
 import { operationsMessage, type WalletBalances } from "@/lib/operations-api";
-import { credentialsPending, normalizeRole, signedInHome } from "@/lib/role-hierarchy";
+import { credentialsPending, resolveWorkspaceRole, signedInHome } from "@/lib/role-hierarchy";
 
 export const Route = createFileRoute("/master-distributor/wallet/")({
   head: () => ({ meta: [{ title: "Wallet — Master Distributor | UMOBIPAY" }] }),
@@ -52,7 +52,7 @@ function MasterDistributorWalletPage() {
       return;
     }
 
-    if (normalizeRole(session.identity.role) !== "MASTER_DISTRIBUTOR") {
+    if (resolveWorkspaceRole(session.identity.role) !== "MASTER_DISTRIBUTOR") {
       window.location.replace(signedInHome(session));
       return;
     }
