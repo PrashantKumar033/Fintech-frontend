@@ -12,7 +12,7 @@ import {
   updateIdentityOnboarding,
   type Identity,
 } from "@/lib/auth-api";
-import { adminAuthApi, AdminApiError, getAdminSession } from "@/lib/admin-api";
+import { adminAuthApi, AdminApiError, clearAdminSession, getAdminSession } from "@/lib/admin-api";
 import { isManagementRole, managementBasePath } from "@/lib/role-hierarchy";
 
 const inputClass =
@@ -58,7 +58,18 @@ export function AdminSettingsPage() {
           {settingsView === "access" ? <IdentitySecurityCenter /> : null}
         </>
       ) : getAdminSession() ? (
-        <SuperAdminSettings />
+        settingsView === "access" ? (
+          <IdentitySecurityCenter
+            sessionApi={adminAuthApi}
+            showEffectiveAccess={false}
+            onSignedOut={() => {
+              clearAdminSession();
+              window.location.assign("/admin/login");
+            }}
+          />
+        ) : (
+          <SuperAdminSettings />
+        )
       ) : null}
     </AdminLayout>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   BadgeCheck,
   Clock3,
@@ -74,16 +74,55 @@ function DeviceIcon({ session }: { session: ActiveSession }) {
 type PendingAction =
   { kind: "session"; session: ActiveSession } | { kind: "others" } | { kind: "all" } | null;
 
-export function IdentitySecurityCenter() {
+export type SessionManagementApi = {
+  getSessions: () => Promise<ActiveSession[]>;
+  getSessionDetails: (sessionId: string) => Promise<ActiveSession>;
+  revokeSession: (sessionId: string) => Promise<{
+    success: boolean;
+    message: string;
+    sessionId: string;
+    isCurrent: boolean;
+  }>;
+  revokeOtherSessions: () => Promise<{
+    success: boolean;
+    message: string;
+    revokedCount: number;
+    currentSessionId: string;
+  }>;
+  revokeAllSessions: () => Promise<{
+    success: boolean;
+    message: string;
+    revokedCount: number;
+  }>;
+};
+
+export function IdentitySecurityCenter({
+  sessionApi = authApi,
+  showEffectiveAccess = true,
+  onSignedOut = () => {
+    clearSession();
+    window.location.assign("/login");
+  },
+}: {
+  sessionApi?: SessionManagementApi;
+  showEffectiveAccess?: boolean;
+  onSignedOut?: () => void;
+}) {
   return (
-    <div className="grid gap-6 2xl:grid-cols-2">
-      <ActiveSessionsPanel />
-      <EffectiveAccessPanel />
+    <div className={showEffectiveAccess ? "grid gap-6 2xl:grid-cols-2" : "grid gap-6"}>
+      <ActiveSessionsPanel sessionApi={sessionApi} onSignedOut={onSignedOut} />
+      {showEffectiveAccess ? <EffectiveAccessPanel /> : null}
     </div>
   );
 }
 
-function ActiveSessionsPanel() {
+function ActiveSessionsPanel({
+  sessionApi,
+  onSignedOut,
+}: {
+  sessionApi: SessionManagementApi;
+  onSignedOut: () => void;
+}) {
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [selected, setSelected] = useState<ActiveSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,28 +134,28 @@ function ActiveSessionsPanel() {
   const current = sessions.find((item) => item.isCurrent);
   const otherCount = sessions.filter((item) => !item.isCurrent).length;
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      setSessions(await authApi.getSessions());
+      setSessions(await sessionApi.getSessions());
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Unable to load active sessions.");
+      setError(caught instanceof Error ? caught.message : "Unable to load active sessions.");
     } finally {
       setLoading(false);
     }
-  }
+  }, [sessionApi]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   async function viewDetails(session: ActiveSession) {
     setError("");
     try {
-      setSelected(await authApi.getSessionDetails(session.id));
+      setSelected(await sessionApi.getSessionDetails(session.id));
     } catch (caught) {
-      setError(caught instanceof ApiError ? caught.message : "Unable to load session details.");
+      setError(caught instanceof Error ? caught.message : "Unable to load session details.");
     }
   }
 
@@ -127,31 +166,27 @@ function ActiveSessionsPanel() {
     setNotice("");
     try {
       if (pending.kind === "session") {
-        const result = await authApi.revokeSession(pending.session.id);
+        const result = await sessionApi.revokeSession(pending.session.id);
         if (result.isCurrent) {
-          clearSession();
-          window.location.assign("/login");
+          onSignedOut();
           return;
         }
         setNotice("Session revoked successfully.");
       } else if (pending.kind === "others") {
-        const result = await authApi.revokeOtherSessions();
+        const result = await sessionApi.revokeOtherSessions();
         setNotice(
           `${result.revokedCount} other session${result.revokedCount === 1 ? "" : "s"} revoked.`,
         );
       } else {
-        await authApi.revokeAllSessions();
-        clearSession();
-        window.location.assign("/login");
+        await sessionApi.revokeAllSessions();
+        onSignedOut();
         return;
       }
       setPending(null);
       setSelected(null);
       await load();
     } catch (caught) {
-      setError(
-        caught instanceof ApiError ? caught.message : "Unable to revoke the selected session.",
-      );
+      setError(caught instanceof Error ? caught.message : "Unable to revoke the selected session.");
     } finally {
       setBusy(false);
     }

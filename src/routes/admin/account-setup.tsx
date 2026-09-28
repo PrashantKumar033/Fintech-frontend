@@ -2,7 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { ArrowRight, BadgeCheck, Loader2, Phone, ShieldCheck } from "lucide-react";
 import logo from "@/assets/logo.png";
-import { authApi, clearSession, getSession, updateIdentityOnboarding } from "@/lib/auth-api";
+import {
+  authApi,
+  clearSession,
+  getSession,
+  refreshSession,
+  updateIdentityOnboarding,
+} from "@/lib/auth-api";
 import { isManagementRole, managementBasePath, resolveWorkspaceRole } from "@/lib/role-hierarchy";
 
 export const Route = createFileRoute("/admin/account-setup")({
@@ -30,6 +36,22 @@ export function AdminIdentitySetup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  async function continueToSecurity(onboardingStatus: string) {
+    updateIdentityOnboarding("CHANGE_PASSWORD", onboardingStatus);
+    sessionStorage.removeItem("admin_setup_pan");
+    try {
+      // Phone verification changes the identity record on the backend. Pull
+      // that canonical identity before Settings evaluates its route guard.
+      await refreshSession();
+    } catch (syncError) {
+      // The explicit CHANGE_PASSWORD step remains sufficient to continue.
+      // A transient refresh failure should not send the user back into the
+      // already-completed phone/PAN steps.
+      console.warn("Unable to synchronize onboarding identity before Settings.", syncError);
+    }
+    window.location.replace(settingsPath);
+  }
 
   useEffect(() => {
     const current = getSession();
@@ -63,9 +85,7 @@ export function AdminIdentitySetup() {
     try {
       if (panOnly) {
         const pan = await authApi.addIdentityOnboardingPan(panNumber);
-        updateIdentityOnboarding("CHANGE_PASSWORD", pan.onboardingStatus);
-        sessionStorage.removeItem("admin_setup_pan");
-        window.location.replace(settingsPath);
+        await continueToSecurity(pan.onboardingStatus);
       } else if (!otpRequested) {
         const result = await authApi.sendIdentityOnboardingPhoneOtp(phone);
         sessionStorage.setItem("admin_setup_pan", panNumber);
@@ -79,9 +99,7 @@ export function AdminIdentitySetup() {
         setPanOnly(true);
         setOtpRequested(false);
         const pan = await authApi.addIdentityOnboardingPan(panNumber);
-        updateIdentityOnboarding("CHANGE_PASSWORD", pan.onboardingStatus);
-        sessionStorage.removeItem("admin_setup_pan");
-        window.location.replace(settingsPath);
+        await continueToSecurity(pan.onboardingStatus);
       }
     } catch (caught) {
       const text =
@@ -91,14 +109,11 @@ export function AdminIdentitySetup() {
         updateIdentityOnboarding("ADD_PAN", "PAN_PENDING");
         try {
           const pan = await authApi.addIdentityOnboardingPan(panNumber);
-          updateIdentityOnboarding("CHANGE_PASSWORD", pan.onboardingStatus);
-          sessionStorage.removeItem("admin_setup_pan");
-          window.location.replace(settingsPath);
+          await continueToSecurity(pan.onboardingStatus);
         } catch (panError) {
           const panText = panError instanceof Error ? panError.message : "PAN could not be added.";
           if (/PAN onboarding is not currently available/i.test(panText)) {
-            updateIdentityOnboarding("CHANGE_PASSWORD", "CREDENTIAL_CHANGE_REQUIRED");
-            window.location.replace(settingsPath);
+            await continueToSecurity("CREDENTIAL_CHANGE_REQUIRED");
           } else {
             setError(panText);
             setMessage(

@@ -1,17 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Activity,
-  Loader2,
-  Power,
-  RefreshCw,
-  ShieldCheck,
-  ToggleLeft,
-  X,
-  Zap,
-} from "lucide-react";
+import { Activity, Loader2, Power, RefreshCw, ShieldCheck, ToggleLeft, X, Zap } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
 import { SuperAdminAepsTwoFactor } from "@/components/admin/super-admin-aeps-two-factor";
+import { SuperAdminPayoutControls } from "@/components/admin/super-admin-payout-controls";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import {
   adminApi,
@@ -25,7 +17,7 @@ import { UI_PERMISSION } from "@/lib/ui-permissions";
 
 export const Route = createFileRoute("/admin/api-settings/")({ component: ApiSettings });
 
-type Workspace = "providerServices" | "providers" | "serviceControl" | "twoFactor";
+type Workspace = "providerServices" | "providers" | "serviceControl" | "payout" | "twoFactor";
 type ToggleTarget = { provider: string; service: AdminAepsProviderService };
 
 function ApiSettings() {
@@ -96,6 +88,7 @@ function ApiSettings() {
     { key: "providerServices", label: "Provider services" },
     { key: "providers", label: "Provider master switch", superAdminOnly: true },
     { key: "serviceControl", label: "Service control", superAdminOnly: true },
+    { key: "payout", label: "Payout controls", superAdminOnly: true },
     { key: "twoFactor", label: "2FA fees & reconciliation", superAdminOnly: true },
   ];
 
@@ -103,8 +96,8 @@ function ApiSettings() {
     <AdminLayout
       active="api"
       eyebrow="Integrations"
-      title="AEPS platform controls"
-      description="Manage provider availability, service switches, daily 2FA fees and financial reconciliation from live backend contracts."
+      title="Platform API controls"
+      description="Manage AEPS and payout provider availability, service switches, charges and financial reconciliation from live backend contracts."
     >
       <div className="mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl border border-border bg-white p-1">
         {tabs.map(({ key, label, superAdminOnly }) => {
@@ -126,7 +119,9 @@ function ApiSettings() {
         })}
       </div>
 
-      {workspace === "twoFactor" && privileged ? (
+      {workspace === "payout" && privileged ? (
+        <SuperAdminPayoutControls />
+      ) : workspace === "twoFactor" && privileged ? (
         <SuperAdminAepsTwoFactor />
       ) : workspace === "providers" && privileged ? (
         <ProvidersPanel />
@@ -274,7 +269,11 @@ function ApiSettings() {
                   disabled={busy}
                   className="mt-5 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {busy ? <Loader2 className="animate-spin" size={18} /> : <ShieldCheck size={18} />}
+                  {busy ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <ShieldCheck size={18} />
+                  )}
                   Confirm change
                 </button>
               </div>
@@ -316,10 +315,7 @@ function ProvidersPanel() {
     setError("");
     setNotice("");
     try {
-      await adminApi.superAdminAeps.providers.updateStatus(
-        provider.publicCode,
-        !provider.isActive,
-      );
+      await adminApi.superAdminAeps.providers.updateStatus(provider.publicCode, !provider.isActive);
       setNotice(
         `${provider.publicName} ${!provider.isActive ? "enabled" : "disabled"} successfully.`,
       );
@@ -378,7 +374,10 @@ function ProvidersPanel() {
               ) : null}
               <button
                 type="button"
-                disabled={busy === p.publicCode}
+                disabled={
+                  busy === p.publicCode ||
+                  (!p.isActive && p.metadata?.integrationStatus !== "AVAILABLE")
+                }
                 onClick={() => setConfirm(p)}
                 className={`mt-4 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50 ${p.isActive ? "border border-red-200 text-red-600 hover:bg-red-50" : "border border-emerald-200 text-emerald-700 hover:bg-emerald-50"}`}
               >
@@ -387,16 +386,18 @@ function ProvidersPanel() {
                 ) : (
                   <Power size={15} />
                 )}
-                {p.isActive ? "Disable provider" : "Enable provider"}
+                {p.isActive
+                  ? "Disable provider"
+                  : p.metadata?.integrationStatus === "AVAILABLE"
+                    ? "Enable provider"
+                    : "Integration not configured"}
               </button>
             </AdminPanel>
           ))}
         </div>
       ) : (
         <AdminPanel>
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            No providers found.
-          </p>
+          <p className="py-10 text-center text-sm text-muted-foreground">No providers found.</p>
         </AdminPanel>
       )}
 
@@ -456,7 +457,10 @@ function ProvidersPanel() {
 
 // ── Service Control Panel ─────────────────────────────────────────────────────
 
-const SERVICE_TYPES = ["AEPS", "DMT", "BBPS", "RECHARGE"] as const;
+// Only expose switches that are enforced by a live request guard. The current
+// backend has that end-to-end contract for AEPS; DMT/BBPS/Recharge do not yet
+// have gateway modules whose traffic could be controlled by these records.
+const SERVICE_TYPES = ["AEPS"] as const;
 
 function ServiceControlPanel() {
   const [statuses, setStatuses] = useState<Record<string, ServiceControlStatus>>({});
@@ -481,6 +485,16 @@ function ServiceControlPanel() {
         if (r.status === "fulfilled") map[SERVICE_TYPES[i]] = r.value;
       });
       setStatuses(map);
+      const failures = results
+        .map((result, index) =>
+          result.status === "rejected"
+            ? `${SERVICE_TYPES[index]}: ${messageOf(result.reason)}`
+            : null,
+        )
+        .filter((message): message is string => Boolean(message));
+      if (failures.length) {
+        setError(`Some service controls could not be loaded. ${failures.join(" ")}`);
+      }
     } catch (e) {
       setError(messageOf(e));
     } finally {
@@ -540,7 +554,7 @@ function ServiceControlPanel() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {SERVICE_TYPES.map((serviceType) => {
             const s = statuses[serviceType];
-            const enabled = s?.enabled ?? true;
+            const enabled = s?.isEnabled === true;
             return (
               <AdminPanel key={serviceType}>
                 <div className="flex items-start justify-between gap-2">
@@ -554,13 +568,15 @@ function ServiceControlPanel() {
                     </div>
                   </div>
                   <span
-                    className={`rounded-full px-2 py-1 text-[10px] font-black ${enabled ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+                    className={`rounded-full px-2 py-1 text-[10px] font-black ${!s ? "bg-amber-50 text-amber-800" : enabled ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
                   >
-                    {enabled ? "ENABLED" : "DISABLED"}
+                    {!s ? "UNAVAILABLE" : enabled ? "ENABLED" : "DISABLED"}
                   </span>
                 </div>
-                {s?.reason ? (
-                  <p className="mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">{s.reason}</p>
+                {s?.disabledReason ? (
+                  <p className="mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-700">
+                    {s.disabledReason}
+                  </p>
                 ) : null}
                 {s?.updatedAt ? (
                   <p className="mt-2 text-[11px] text-muted-foreground">
@@ -595,7 +611,9 @@ function ServiceControlPanel() {
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase text-primary">Platform service control</p>
+                <p className="text-xs font-black uppercase text-primary">
+                  Platform service control
+                </p>
                 <h2 className="text-xl font-black">
                   {confirm.nextEnabled ? "Enable" : "Disable"} {confirm.serviceType}
                 </h2>

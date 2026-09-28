@@ -18,6 +18,14 @@ export function managementSectionTabs(
   area: AdminArea,
 ): SectionTab[] {
   const role = resolveWorkspaceRole(roleValue);
+  if (role === "SUPER_ADMIN") {
+    if (area === "settings")
+      return tabs("/admin", [
+        ["Security", "/settings"],
+        ["Devices & access", "/settings?view=access"],
+      ]);
+    return [];
+  }
   if (role === "MASTER_DISTRIBUTOR") {
     const base = "/master-distributor";
     const map: Partial<Record<AdminArea, SectionTab[]>> = {
@@ -47,6 +55,7 @@ export function managementSectionTabs(
       settlements: tabs(base, [
         ["Balance", "/wallet", UI_PERMISSION.WALLET_VIEW],
         ["Add Money", "/wallet/requests", UI_PERMISSION.WALLET_FUND_REQUEST],
+        ["Payout to Bank", "/wallet/payout", UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE],
         ["Transfer Fund", "/wallet/transfer", UI_PERMISSION.WALLET_TRANSFER],
         ["Wallet History", "/wallet/history", UI_PERMISSION.WALLET_TRANSACTION_VIEW],
         ["Wallet Holds", "/wallet/holds", UI_PERMISSION.WALLET_HOLD_VIEW],
@@ -104,6 +113,7 @@ export function managementSectionTabs(
       settlements: tabs(base, [
         ["Balance", "/wallet", UI_PERMISSION.WALLET_VIEW],
         ["Add Money", "/wallet/requests", UI_PERMISSION.WALLET_FUND_REQUEST],
+        ["Payout to Bank", "/wallet/payout", UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE],
         ["Transfer Fund", "/wallet/transfer", UI_PERMISSION.WALLET_TRANSFER],
         ["Wallet History", "/wallet/history", UI_PERMISSION.WALLET_TRANSACTION_VIEW],
         ["Wallet Holds", "/wallet/holds", UI_PERMISSION.WALLET_HOLD_VIEW],
@@ -141,6 +151,12 @@ export function managementSectionTabs(
         ["Merchants", "/merchants/list", UI_PERMISSION.MEMBER_LIST],
         ["Transactions", "/transactions", UI_PERMISSION.TRANSACTION_ADMIN_LIST],
         ["Provider controls", "/api-settings", UI_PERMISSION.AEPS_PROVIDER_STATUS_VIEW],
+      ]);
+    if (area === "settings")
+      return tabs("/admin", [
+        ["Security", "/settings"],
+        ["Contact verification", "/settings?view=verification"],
+        ["Devices & access", "/settings?view=access"],
       ]);
     return [];
   }

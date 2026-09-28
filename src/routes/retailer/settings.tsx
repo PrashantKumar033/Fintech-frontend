@@ -23,6 +23,7 @@ import {
   authApi,
   getSession,
   refreshSession,
+  updateIdentityOnboarding,
   updateSessionIdentity,
   type Identity,
 } from "@/lib/auth-api";
@@ -293,6 +294,7 @@ function SecuritySettings({
         const synchronized = await refreshSession();
         onIdentityChange(synchronized.identity);
         if (!synchronized.identity.mpinChangedAt) {
+          updateIdentityOnboarding("CHANGE_MPIN", "CREDENTIAL_CHANGE_REQUIRED");
           setMode("mpin");
           setMessage({
             ok: true,
@@ -307,8 +309,10 @@ function SecuritySettings({
         const synchronized = await refreshSession();
         onIdentityChange(synchronized.identity);
         setMessage({ ok: true, text: "MPIN changed. First-login security setup is complete." });
-        if (synchronized.identity.passwordChangedAt && synchronized.identity.mpinChangedAt)
+        if (synchronized.identity.passwordChangedAt && synchronized.identity.mpinChangedAt) {
+          updateIdentityOnboarding(null);
           onUnlocked();
+        }
       } else {
         if (tpinSetup) {
           await authApi.changeTpin(accessToken, { currentTpin: current, newTpin: next });

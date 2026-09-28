@@ -137,7 +137,20 @@ export function credentialsPending(identity?: Identity | null): boolean {
 
 export function identityVerificationPending(session?: Session | null): boolean {
   if (!session || !credentialsPending(session.identity)) return false;
-  return !session.identity.phoneNumber || ["ADD_AND_VERIFY_PHONE", "VERIFY_PHONE_OTP", "ADD_PAN"].includes(session.nextStep || "");
+
+  const nextStep = session.nextStep || "";
+  if (["CHANGE_PASSWORD", "CHANGE_MPIN", "COMPLETE_ONBOARDING"].includes(nextStep)) {
+    return false;
+  }
+  if (["ADD_AND_VERIFY_PHONE", "VERIFY_PHONE_OTP", "ADD_PAN"].includes(nextStep)) {
+    return true;
+  }
+
+  // Older sessions may not contain onboarding metadata. Only then use the
+  // cached identity as a fallback; an explicit server-provided step above is
+  // authoritative and prevents Settings and Account Setup from redirecting
+  // to each other while a freshly verified phone is still being synchronized.
+  return !session.identity.phoneNumber;
 }
 
 export function signedInHome(session: Session): string {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, Loader2, RefreshCw, RotateCcw, WalletCards, X } from "lucide-react";
+import { Eye, Loader2, ReceiptText, RefreshCw, RotateCcw, WalletCards, X } from "lucide-react";
 import { useCallback } from "react";
 import { AdminPanel } from "@/components/admin/admin-layout";
 import {
@@ -15,6 +15,8 @@ import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { ReadableTransactionDetails } from "@/components/readable-transaction-details";
+import { TransactionDetailDialog } from "@/components/transaction-detail-dialog";
+import { getSession } from "@/lib/auth-api";
 
 type View = "transactions" | "income" | "reversals";
 
@@ -31,6 +33,7 @@ const inputClass =
 
 export function AdminTransactionOperations() {
   const actor = getAdminActor();
+  const identitySession = actor?.kind === "IDENTITY_ADMIN" ? getSession() : null;
   const { can } = useEffectiveAccess();
   const allowed = (code: string) =>
     actor?.kind === "SUPER_ADMIN" ||
@@ -44,6 +47,10 @@ export function AdminTransactionOperations() {
   const canViewReversal = allowed(UI_PERMISSION.TRANSACTION_REVERSAL_VIEW);
   const canProcessReversal = allowed(UI_PERMISSION.TRANSACTION_REVERSAL_PROCESS);
   const canRecover = allowed(UI_PERMISSION.TRANSACTION_FINANCIAL_RECOVERY);
+  const canViewOwnReceipt =
+    Boolean(identitySession) && can(UI_PERMISSION.AEPS_TRANSACTION_VIEW, ["ADMIN"]);
+  const canViewNetworkReceipt =
+    Boolean(identitySession) && can(UI_PERMISSION.AEPS_NETWORK_TRANSACTION_VIEW, ["ADMIN"]);
 
   const [view, setView] = useState<View>("transactions");
   const [transactions, setTransactions] = useState<AdminProviderTransaction[]>([]);
@@ -62,6 +69,16 @@ export function AdminTransactionOperations() {
 
   const [reversalDetail, setReversalDetail] = useState<ProviderReversalDetail | null>(null);
   const [reversalDetailLoading, setReversalDetailLoading] = useState(false);
+  const [receiptTarget, setReceiptTarget] = useState<{
+    referenceId: string;
+    scope: "self" | "network";
+  } | null>(null);
+
+  const receiptScope = (item: AdminProviderTransaction): "self" | "network" | null => {
+    if (!identitySession) return null;
+    if (item.userId === identitySession.identity.id) return canViewOwnReceipt ? "self" : null;
+    return canViewNetworkReceipt ? "network" : null;
+  };
 
   useEffect(() => {
     if (view === "transactions" && !canView) {
@@ -330,6 +347,10 @@ export function AdminTransactionOperations() {
             canRequestReversal={canRequestReversal}
             canRecover={canRecover}
             canInspect={canViewDetail}
+            receiptScope={receiptScope}
+            openReceipt={(item, scope) =>
+              setReceiptTarget({ referenceId: item.referenceId, scope })
+            }
           />
         )}
       </div>
@@ -360,6 +381,15 @@ export function AdminTransactionOperations() {
             <ReadableTransactionDetails detail={detail} />
           </div>
         </div>
+      )}
+
+      {identitySession && receiptTarget && (
+        <TransactionDetailDialog
+          accessToken={identitySession.accessToken}
+          referenceId={receiptTarget.referenceId}
+          scope={receiptTarget.scope}
+          onClose={() => setReceiptTarget(null)}
+        />
       )}
 
       {reversalDetailLoading && (
@@ -455,6 +485,8 @@ function TransactionTable({
   canRequestReversal,
   canRecover,
   canInspect,
+  receiptScope,
+  openReceipt,
 }: {
   items: AdminProviderTransaction[];
   view: View;
@@ -466,6 +498,8 @@ function TransactionTable({
   canRequestReversal: boolean;
   canRecover: boolean;
   canInspect: boolean;
+  receiptScope: (item: AdminProviderTransaction) => "self" | "network" | null;
+  openReceipt: (item: AdminProviderTransaction, scope: "self" | "network") => void;
 }) {
   return (
     <table className="w-full min-w-[1000px] text-left text-xs">
@@ -516,6 +550,17 @@ function TransactionTable({
                     className="rounded-lg border p-2"
                   >
                     <Eye size={14} />
+                  </button>
+                )}
+                {receiptScope(item) && (
+                  <button
+                    type="button"
+                    title="View or download receipt"
+                    aria-label={`View receipt ${item.referenceId}`}
+                    onClick={() => openReceipt(item, receiptScope(item)!)}
+                    className="rounded-lg border border-border p-2 text-primary"
+                  >
+                    <ReceiptText size={14} />
                   </button>
                 )}
                 {view === "income" && canReconcileIncome && (

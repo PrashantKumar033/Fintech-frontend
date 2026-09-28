@@ -85,7 +85,7 @@ function LoginPage() {
   }
   async function completeLogin(result: Session) {
     clearAdminSession();
-    saveSession(result.accessToken, result.identity);
+    saveSession(result.accessToken, result.identity, result);
     try {
       await syncMyPermissions(result.accessToken);
     } catch (permissionError) {

@@ -86,6 +86,11 @@ const retailerSectionTabs: Partial<
       permission: UI_PERMISSION.WALLET_AEPS_TO_MAIN_TRANSFER,
     },
     {
+      label: "Payout to Bank",
+      href: "/retailer/wallet/payout",
+      permission: UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE,
+    },
+    {
       label: "Transfer Fund",
       href: "/retailer/wallet/transfer",
       permission: UI_PERMISSION.WALLET_TRANSFER,
@@ -153,12 +158,25 @@ export function BusinessPage({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const securityLocked = credentialsPending(identity);
-  // The KYC page owns its profile request. Avoid asking for the same missing
-  // singleton from the sidebar while that screen is already loading it.
-  const readiness = useServiceReadiness(active !== "kyc");
+  const readiness = useServiceReadiness();
   const { access } = useEffectiveAccess();
   const currentHref = useLocation({ select: (location) => location.href });
   const currentUrl = new URL(currentHref, "http://localhost");
+  const complianceGateActive =
+    !securityLocked &&
+    (readiness.isPending ||
+      (readiness.isSuccess &&
+        readiness.data.complianceStatusAvailable &&
+        !readiness.data.complianceSetupComplete));
+  const complianceAllowedKeys = new Set(["kycSelf", "bankAccounts", "settings"]);
+  const complianceMessage = readiness.data?.kycSubmitted
+    ? "Add a bank account to unlock the remaining services."
+    : "Submit KYC and add a bank account to unlock the remaining services.";
+  const homePath = complianceGateActive
+    ? readiness.data?.kycSubmitted
+      ? "/retailer/bank"
+      : "/retailer/kyc"
+    : "/retailer/dashboard";
   const actionPermission = (() => {
     if (currentUrl.pathname === "/retailer/transactions") {
       return UI_PERMISSION.AEPS_TRANSACTION_VIEW;
@@ -174,6 +192,9 @@ export function BusinessPage({
     }
     if (currentUrl.pathname === "/retailer/wallet/aeps-transfer") {
       return UI_PERMISSION.WALLET_AEPS_TO_MAIN_TRANSFER;
+    }
+    if (currentUrl.pathname === "/retailer/wallet/payout") {
+      return UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE;
     }
     if (currentUrl.pathname === "/retailer/wallet/history") {
       return UI_PERMISSION.WALLET_TRANSACTION_VIEW;
@@ -244,7 +265,7 @@ export function BusinessPage({
           >
             <Menu size={19} />
           </button>
-          <Link to="/retailer/dashboard">
+          <Link to={homePath as never}>
             <img src={logo} className="h-9" alt="UMOBIPAY" />
           </Link>
           <div className="ml-auto flex items-center gap-2">
@@ -341,6 +362,15 @@ export function BusinessPage({
               <BadgeCheck size={14} /> {identity.status} account
             </div>
           </div>
+          {readiness.isSuccess &&
+            readiness.data.complianceStatusAvailable &&
+            !readiness.data.complianceSetupComplete &&
+            !securityLocked && (
+              <div className="mb-4 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                <Lock size={14} className="mt-0.5 shrink-0" />
+                <span>{complianceMessage}</span>
+              </div>
+            )}
           <nav className="space-y-1 overflow-y-auto">
             {nav.map(({ key, active: itemActive, label, icon: Icon, to }) => {
               const status =
@@ -351,6 +381,7 @@ export function BusinessPage({
                     : undefined;
               const itemLocked =
                 (securityLocked && key !== "settings") ||
+                (complianceGateActive && !complianceAllowedKeys.has(key)) ||
                 (key === "aeps" && !readiness.data?.aepsUnlocked);
               return key === "settings" && onSettingsClick ? (
                 <button
@@ -371,9 +402,11 @@ export function BusinessPage({
                   title={
                     key === "aeps"
                       ? "KYC approval and verified bank account required"
-                      : securityLocked
-                        ? "Change temporary password and MPIN in Settings to unlock"
-                        : "Coming soon"
+                      : complianceGateActive && !complianceAllowedKeys.has(key)
+                        ? complianceMessage
+                        : securityLocked
+                          ? "Change temporary password and MPIN in Settings to unlock"
+                          : "Coming soon"
                   }
                   className="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-muted-foreground/55"
                 >
@@ -418,9 +451,15 @@ export function BusinessPage({
                       ),
                     )
                     .map((item) =>
-                      item.key === "aeps" && !readiness.data?.aepsUnlocked ? (
+                      (complianceGateActive && !complianceAllowedKeys.has(item.key)) ||
+                      (item.key === "aeps" && !readiness.data?.aepsUnlocked) ? (
                         <span
                           key={item.key}
+                          title={
+                            complianceGateActive && !complianceAllowedKeys.has(item.key)
+                              ? complianceMessage
+                              : "KYC approval and verified bank account required"
+                          }
                           className="flex min-w-max items-center gap-2 rounded-xl bg-muted px-4 py-2 text-xs font-bold text-muted-foreground"
                         >
                           <Lock size={12} /> {item.label}

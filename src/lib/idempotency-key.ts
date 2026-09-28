@@ -3,7 +3,7 @@
  * contexts. `crypto.randomUUID()` is unavailable on plain LAN HTTP origins in
  * some browsers, while `crypto.getRandomValues()` remains widely available.
  */
-export function createIdempotencyKey(prefix = "web"): string {
+export function createIdempotencyKey(_prefix = "web"): string {
   const cryptoApi = globalThis.crypto;
 
   if (typeof cryptoApi?.randomUUID === "function") return cryptoApi.randomUUID();
@@ -17,5 +17,11 @@ export function createIdempotencyKey(prefix = "web"): string {
     return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
   }
 
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+  // Last-resort RFC 4122-shaped key. Financial endpoints validate UUID format,
+  // so never fall back to a prefixed value that the gateway will reject.
+  const randomNibble = () => Math.floor(Math.random() * 16).toString(16);
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (marker) => {
+    const value = Number.parseInt(randomNibble(), 16);
+    return (marker === "x" ? value : (value & 0x3) | 0x8).toString(16);
+  });
 }

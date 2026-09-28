@@ -212,11 +212,19 @@ async function performSessionRefresh(rejectedAccessToken?: string): Promise<Sess
       throw new ApiError("The server returned an invalid refreshed session.", 500);
     }
     const existing = getSession();
-    const refreshed = {
+    const refreshed: Session = {
       ...session,
-      onboardingRequired: session.onboardingRequired ?? existing?.onboardingRequired,
-      onboardingStatus: session.onboardingStatus ?? existing?.onboardingStatus,
-      nextStep: session.nextStep ?? existing?.nextStep,
+      onboardingRequired:
+        session.onboardingRequired !== undefined
+          ? session.onboardingRequired
+          : existing?.onboardingRequired,
+      onboardingStatus:
+        session.onboardingStatus !== undefined
+          ? session.onboardingStatus
+          : existing?.onboardingStatus,
+      nextStep: Object.prototype.hasOwnProperty.call(session, "nextStep")
+        ? session.nextStep
+        : existing?.nextStep,
     };
     saveSession(refreshed.accessToken, refreshed.identity, refreshed);
     return refreshed;
@@ -452,16 +460,18 @@ export function saveSession(
   onboarding?: Pick<Session, "onboardingRequired" | "onboardingStatus" | "nextStep">,
 ) {
   if (typeof window === "undefined") return;
-  if (!onboarding) localStorage.removeItem(PERMISSION_CACHE_KEY);
   const previousIdentityRaw = localStorage.getItem("nexus_identity");
-  if (!onboarding && previousIdentityRaw) {
+  let identityChanged = !previousIdentityRaw;
+  if (previousIdentityRaw) {
     try {
       const previousIdentity = JSON.parse(previousIdentityRaw) as Identity;
-      if (previousIdentity.id !== identity.id) localStorage.removeItem("nexus_identity_onboarding");
+      identityChanged = previousIdentity.id !== identity.id;
     } catch {
-      localStorage.removeItem("nexus_identity_onboarding");
+      identityChanged = true;
     }
   }
+  if (!onboarding || identityChanged) localStorage.removeItem(PERMISSION_CACHE_KEY);
+  if (identityChanged) localStorage.removeItem("nexus_identity_onboarding");
   localStorage.setItem("nexus_access_token", accessToken);
   localStorage.setItem("nexus_identity", JSON.stringify(identity));
   if (onboarding) {

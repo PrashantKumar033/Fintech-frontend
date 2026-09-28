@@ -1,4 +1,10 @@
-import { clearSession, getSession, logout as identityLogout, refreshSession } from "@/lib/auth-api";
+import {
+  clearSession,
+  getSession,
+  logout as identityLogout,
+  refreshSession,
+  type ActiveSession,
+} from "@/lib/auth-api";
 import { getDeviceId } from "@/lib/device-id";
 import type { ProviderTransaction } from "@/lib/operations-api";
 
@@ -505,18 +511,29 @@ export type ProviderRegistryEntry = {
   publicCode: string;
   internalCode?: string;
   publicName: string;
+  displayName?: string | null;
   serviceType: string;
   isActive: boolean;
+  metadata?: Record<string, unknown> | null;
   updatedBy?: string | null;
   updatedAt?: string | null;
 };
 
 export type ServiceControlStatus = {
   serviceType: string;
-  enabled: boolean;
-  reason?: string | null;
+  isEnabled: boolean;
+  disabledReason?: string | null;
   updatedBy?: string | null;
   updatedAt?: string | null;
+};
+
+export type PayoutSurchargeConfiguration = {
+  type: "PERCENTAGE" | "FIXED";
+  surchargeValue: string;
+  version: number;
+  isActive: boolean;
+  updatedBy?: string | null;
+  updatedAt: string;
 };
 
 export type AepsOverviewBreakdown = {
@@ -932,6 +949,30 @@ export const adminAuthApi = {
       "/super-admin/auth/tpin/change",
       json("POST", { currentTpin, newTpin }),
     ),
+  getSessions: () => call<ActiveSession[]>("/super-admin/auth/sessions", { cache: "no-store" }),
+  getSessionDetails: (sessionId: string) =>
+    call<ActiveSession>(`/super-admin/auth/sessions/${encodeURIComponent(sessionId)}`, {
+      cache: "no-store",
+    }),
+  revokeSession: (sessionId: string) =>
+    call<{
+      success: boolean;
+      message: string;
+      sessionId: string;
+      isCurrent: boolean;
+    }>(`/super-admin/auth/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" }),
+  revokeOtherSessions: () =>
+    call<{
+      success: boolean;
+      message: string;
+      revokedCount: number;
+      currentSessionId: string;
+    }>("/super-admin/auth/sessions/others", { method: "DELETE" }),
+  revokeAllSessions: () =>
+    call<{ success: boolean; message: string; revokedCount: number }>(
+      "/super-admin/auth/sessions",
+      { method: "DELETE" },
+    ),
   async logout() {
     const actor = getAdminActor();
     try {
@@ -956,6 +997,37 @@ export function updateAdminOnboarding(nextStep: string | null, onboardingStatus?
 }
 
 export const adminApi = {
+  superAdminPayout: {
+    providers: {
+      list: () =>
+        call<ProviderRegistryEntry[]>("/super-admin/payout/providers", { cache: "no-store" }),
+      updateStatus: (publicCode: string, isActive: boolean) =>
+        call<ProviderRegistryEntry>(
+          `/super-admin/payout/providers/${encodeURIComponent(publicCode)}/status`,
+          json("PATCH", { isActive }),
+        ),
+    },
+    serviceControl: {
+      get: () =>
+        call<ServiceControlStatus>("/super-admin/payout/service/status", { cache: "no-store" }),
+      update: (enabled: boolean, reason?: string) =>
+        call<ServiceControlStatus>(
+          "/super-admin/payout/service/status",
+          json("PATCH", { enabled, ...(reason?.trim() ? { reason: reason.trim() } : {}) }),
+        ),
+    },
+    surcharge: {
+      get: () =>
+        call<PayoutSurchargeConfiguration>("/super-admin/payout/surcharge", {
+          cache: "no-store",
+        }),
+      update: (type: "PERCENTAGE" | "FIXED", value: number) =>
+        call<PayoutSurchargeConfiguration>(
+          "/super-admin/payout/surcharge",
+          json("PATCH", { type, value }),
+        ),
+    },
+  },
   superAdminAeps: {
     providers: {
       list: () => call<ProviderRegistryEntry[]>("/super-admin/providers", { cache: "no-store" }),

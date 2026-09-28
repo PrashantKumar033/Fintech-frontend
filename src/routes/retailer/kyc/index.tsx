@@ -3,11 +3,14 @@ import { useEffect, useMemo, useState } from "react";
 import {
   BadgeCheck,
   Camera,
+  ExternalLink,
+  Eye,
   FileCheck2,
   FileUp,
   Fingerprint,
   RefreshCw,
   Trash2,
+  X,
 } from "lucide-react";
 import { ServiceNotice } from "@/components/business-page";
 import { RoleAwareAccountPage } from "@/components/role-aware-account-page";
@@ -35,6 +38,15 @@ const docs = [
   { type: "SHOP_FRONT", label: "Shop front", number: false },
   { type: "BUSINESS_PROOF", label: "Business proof", number: true },
 ] as const;
+
+type KycPreview = {
+  title: string;
+  fileName: string;
+  mimeType?: string | null;
+  url: string;
+  video?: boolean;
+};
+
 function KycPage() {
   // KYC is a mandatory identity-owned onboarding step, not an optional package
   // capability. Its backend endpoints require authentication, while the
@@ -44,6 +56,7 @@ function KycPage() {
     [session, setSession] = useState<ReturnType<typeof getSession>>(null),
     [kyc, setKyc] = useState<KycProfile | null>(null),
     [bundle, setBundle] = useState<KycBundle | null>(null),
+    [preview, setPreview] = useState<KycPreview | null>(null),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(""),
     [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -95,6 +108,53 @@ function KycPage() {
       setMessage({ ok: true, text });
     } catch (e) {
       setMessage({ ok: false, text: complianceMessage(e) });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function previewDocument(documentId: string) {
+    const operation = `preview-document-${documentId}`;
+    setBusy(operation);
+    setMessage(null);
+    try {
+      // Signed KYC URLs expire. Refresh the bundle on every preview so a
+      // document never opens with an old or unsigned storage URL.
+      const freshBundle = await complianceApi.bundle(activeSession.accessToken);
+      setBundle(freshBundle);
+      const document = freshBundle.documents.find((item) => item.id === documentId);
+      if (!document?.previewUrl) throw new Error("A secure preview is not available right now.");
+      setPreview({
+        title: document.documentType.replaceAll("_", " "),
+        fileName: document.originalFileName,
+        mimeType: document.mimeType,
+        url: document.previewUrl,
+      });
+    } catch (error) {
+      setMessage({ ok: false, text: complianceMessage(error) });
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function previewVideo() {
+    const operation = "preview-video";
+    setBusy(operation);
+    setMessage(null);
+    try {
+      const freshBundle = await complianceApi.bundle(activeSession.accessToken);
+      setBundle(freshBundle);
+      if (!freshBundle.video?.previewUrl)
+        throw new Error("A secure video preview is not available right now.");
+      setPreview({
+        title: "Verification video",
+        fileName: freshBundle.video.originalFileName || "verification-video",
+        mimeType: freshBundle.video.mimeType,
+        url: freshBundle.video.previewUrl,
+        video: true,
+      });
+    } catch (error) {
+      setMessage({ ok: false, text: complianceMessage(error) });
     } finally {
       setBusy("");
     }
@@ -324,12 +384,12 @@ function KycPage() {
                 )}
               </section>
             )}
-          </section>
-          <aside>
-            <div className="sticky top-6 space-y-4">
-              {editable && (bundle?.documents.length || bundle?.video) && (
+            {(bundle?.documents.length || bundle?.video) && (
                 <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
                   <h3 className="font-extrabold text-secondary">Uploaded files</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Secure previews are available while your application is being reviewed.
+                  </p>
                   <div className="mt-4 space-y-2">
                     {bundle.documents.map((document) => (
                       <div
@@ -337,49 +397,98 @@ function KycPage() {
                         className="flex items-center gap-2 rounded-xl bg-muted p-3 text-xs"
                       >
                         <FileCheck2 size={15} className="text-emerald-600" />
-                        <span className="min-w-0 flex-1 truncate font-semibold">
-                          {document.documentType.replaceAll("_", " ")}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold">
+                            {document.documentType.replaceAll("_", " ")}
+                          </span>
+                          <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                            {document.originalFileName}
+                          </span>
                         </span>
                         <button
-                          disabled={!canManageKyc || !!busy}
-                          aria-label={`Delete ${document.documentType}`}
-                          onClick={() =>
-                            run(
-                              `delete-${document.id}`,
-                              () => complianceApi.deleteDocument(session.accessToken, document.id),
-                              "Document removed. You can upload a replacement.",
-                            )
-                          }
-                          className="text-red-600 disabled:opacity-40"
+                          type="button"
+                          disabled={!!busy}
+                          aria-label={`Preview ${document.documentType}`}
+                          title={`Preview ${document.documentType.replaceAll("_", " ")}`}
+                          onClick={() => void previewDocument(document.id)}
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border bg-card text-secondary transition hover:border-primary hover:text-primary disabled:opacity-40"
                         >
-                          <Trash2 size={15} />
+                          {busy === `preview-document-${document.id}` ? (
+                            <RefreshCw size={14} className="animate-spin" />
+                          ) : (
+                            <Eye size={15} />
+                          )}
                         </button>
+                        {editable && (
+                          <button
+                            disabled={!canManageKyc || !!busy}
+                            aria-label={`Delete ${document.documentType}`}
+                            title={`Delete ${document.documentType.replaceAll("_", " ")}`}
+                            onClick={() =>
+                              run(
+                                `delete-${document.id}`,
+                                () =>
+                                  complianceApi.deleteDocument(session.accessToken, document.id),
+                                "Document removed. You can upload a replacement.",
+                              )
+                            }
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-red-600 transition hover:bg-red-50 disabled:opacity-40"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     ))}
                     {bundle.video && (
                       <div className="flex items-center gap-2 rounded-xl bg-muted p-3 text-xs">
                         <Camera size={15} className="text-emerald-600" />
-                        <span className="flex-1 font-semibold">Verification video</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-semibold">Verification video</span>
+                          <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                            {bundle.video.originalFileName || "Uploaded verification video"}
+                          </span>
+                        </span>
                         <button
-                          disabled={!canManageKyc || !!busy}
-                          aria-label="Delete verification video"
-                          onClick={() =>
-                            run(
-                              "delete-video",
-                              () =>
-                                complianceApi.deleteVideo(session.accessToken, bundle.video!.id),
-                              "Verification video removed.",
-                            )
-                          }
-                          className="text-red-600 disabled:opacity-40"
+                          type="button"
+                          disabled={!!busy}
+                          aria-label="Preview verification video"
+                          title="Preview verification video"
+                          onClick={() => void previewVideo()}
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border bg-card text-secondary transition hover:border-primary hover:text-primary disabled:opacity-40"
                         >
-                          <Trash2 size={15} />
+                          {busy === "preview-video" ? (
+                            <RefreshCw size={14} className="animate-spin" />
+                          ) : (
+                            <Eye size={15} />
+                          )}
                         </button>
+                        {editable && (
+                          <button
+                            disabled={!canManageKyc || !!busy}
+                            aria-label="Delete verification video"
+                            title="Delete verification video"
+                            onClick={() =>
+                              run(
+                                "delete-video",
+                                () =>
+                                  complianceApi.deleteVideo(session.accessToken, bundle.video!.id),
+                                "Verification video removed.",
+                              )
+                            }
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-red-600 transition hover:bg-red-50 disabled:opacity-40"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
                 </div>
               )}
+          </section>
+          <aside>
+            <div className="sticky top-6 space-y-4">
+              
               <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
                 <h3 className="font-extrabold text-secondary">Application checklist</h3>
                 <div className="mt-5 space-y-3">
@@ -410,7 +519,95 @@ function KycPage() {
           </aside>
         </div>
       )}
+      {preview && <KycPreviewDialog preview={preview} onClose={() => setPreview(null)} />}
     </RoleAwareAccountPage>
+  );
+}
+
+function KycPreviewDialog({ preview, onClose }: { preview: KycPreview; onClose: () => void }) {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
+
+  const extension = preview.fileName.split(".").pop()?.toLowerCase();
+  const isImage =
+    preview.mimeType?.startsWith("image/") ||
+    ["jpg", "jpeg", "png", "webp"].includes(extension || "");
+
+  return (
+    <div className="fixed inset-0 z-[100] grid place-items-center p-3 sm:p-6">
+      <button
+        type="button"
+        aria-label="Close document preview"
+        onClick={onClose}
+        className="absolute inset-0 bg-secondary/70 backdrop-blur-sm"
+      />
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kyc-preview-title"
+        className="relative flex h-[min(90vh,900px)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+      >
+        <header className="flex items-center gap-3 border-b border-border px-4 py-3 sm:px-5">
+          <div className="min-w-0 flex-1">
+            <h2 id="kyc-preview-title" className="truncate font-extrabold text-secondary">
+              {preview.title.replaceAll("_", " ")}
+            </h2>
+            <p className="truncate text-xs text-muted-foreground">{preview.fileName}</p>
+          </div>
+          <a
+            href={preview.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-xs font-bold text-secondary transition hover:border-primary hover:text-primary"
+          >
+            <ExternalLink size={14} />
+            <span className="hidden sm:inline">Open separately</span>
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-9 w-9 place-items-center rounded-lg border border-border text-secondary hover:bg-muted"
+            aria-label="Close preview"
+          >
+            <X size={17} />
+          </button>
+        </header>
+        <div className="min-h-0 flex-1 bg-[#eef3f2] p-3 sm:p-5">
+          {preview.video ? (
+            <video
+              src={preview.url}
+              controls
+              autoPlay={false}
+              className="h-full w-full rounded-xl bg-black object-contain"
+            >
+              Your browser does not support video preview.
+            </video>
+          ) : isImage ? (
+            <img
+              src={preview.url}
+              alt={`${preview.title} preview`}
+              className="h-full w-full rounded-xl bg-white object-contain"
+            />
+          ) : (
+            <iframe
+              src={preview.url}
+              title={`${preview.title} preview`}
+              className="h-full w-full rounded-xl border-0 bg-white"
+            />
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 function DocumentCard({

@@ -72,6 +72,7 @@ export type KycDocument = {
   documentType: KycDocumentType;
   documentNumber?: string | null;
   originalFileName: string;
+  mimeType?: string | null;
   verificationStatus: string;
   previewUrl?: string | null;
   createdAt?: string;
@@ -80,6 +81,7 @@ export type KycVideo = {
   id: string;
   status: string;
   originalFileName?: string;
+  mimeType?: string | null;
   previewUrl?: string | null;
 };
 export type KycBundle = {

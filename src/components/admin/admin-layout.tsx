@@ -126,13 +126,14 @@ export function AdminLayout({
     ? navigationForRole(navigationRole).find((item) => item.active === active)?.area
     : undefined;
   const sectionTabsArea: AdminArea = selfServiceCompliance ? "profile" : active;
-  const sectionTabs = managementSectionTabs(identity?.role, sectionTabsArea);
+  const sectionTabs = managementSectionTabs(identity?.role || actor?.role, sectionTabsArea);
   const routePermission = (() => {
     if (selfServiceCompliance) return undefined;
     if (pathname.endsWith("/wallet/transfer")) return UI_PERMISSION.WALLET_TRANSFER;
     if (pathname.endsWith("/wallet/requests")) return UI_PERMISSION.WALLET_FUND_REQUEST;
     if (pathname.endsWith("/wallet/history")) return UI_PERMISSION.WALLET_TRANSACTION_VIEW;
     if (pathname.endsWith("/wallet/holds")) return UI_PERMISSION.WALLET_HOLD_VIEW;
+    if (pathname.endsWith("/wallet/payout")) return UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE;
     if (pathname.endsWith("/aeps/transactions")) {
       return UI_PERMISSION.AEPS_NETWORK_TRANSACTION_VIEW;
     }

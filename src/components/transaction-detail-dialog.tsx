@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Printer, ReceiptText, X } from "lucide-react";
+import { Download, Loader2, Printer, ReceiptText, X } from "lucide-react";
 import {
   operationsApi,
   operationsMessage,
@@ -81,7 +81,7 @@ function escapeHtml(value: unknown) {
     .replaceAll("'", "&#039;");
 }
 
-function printTransactionReceipt(receipt: ProviderTransactionReceipt) {
+function transactionReceiptDocument(receipt: ProviderTransactionReceipt, autoPrint: boolean) {
   const printableRows: Array<[string, unknown, keyof ProviderTransactionReceipt]> = [
     ["Service", receipt.transactionTypeLabel, "transactionTypeLabel"],
     ["Provider", receipt.provider, "provider"],
@@ -111,10 +111,7 @@ function printTransactionReceipt(receipt: ProviderTransactionReceipt) {
   const amount = escapeHtml(displayValue("amount", receipt.amount));
   const status = escapeHtml(displayValue("status", receipt.status));
   const successful = receipt.status === "SUCCESS";
-  const printWindow = window.open("", "_blank", "popup,width=1050,height=850");
-  if (!printWindow) throw new Error("Allow pop-ups to print the transaction receipt.");
-
-  printWindow.document.write(`<!doctype html>
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -171,10 +168,35 @@ function printTransactionReceipt(receipt: ProviderTransactionReceipt) {
         <p class="generated">System-generated receipt · No signature required</p>
       </footer>
     </main>
-    <script>window.addEventListener("load", () => { window.print(); window.onafterprint = () => window.close(); });</script>
+    ${
+      autoPrint
+        ? '<script>window.addEventListener("load", () => { window.print(); window.onafterprint = () => window.close(); });</script>'
+        : ""
+    }
   </body>
-</html>`);
+</html>`;
+}
+
+function printTransactionReceipt(receipt: ProviderTransactionReceipt) {
+  const printWindow = window.open("", "_blank", "popup,width=1050,height=850");
+  if (!printWindow) throw new Error("Allow pop-ups to print the transaction receipt.");
+  printWindow.document.write(transactionReceiptDocument(receipt, true));
   printWindow.document.close();
+}
+
+function downloadTransactionReceipt(receipt: ProviderTransactionReceipt) {
+  const blob = new Blob([transactionReceiptDocument(receipt, false)], {
+    type: "text/html;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const safeReference = receipt.transactionReferenceId.replace(/[^a-z0-9_-]+/gi, "-");
+  link.href = url;
+  link.download = `UMOBIPAY-receipt-${safeReference}.html`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
 export function TransactionDetailDialog({
@@ -292,20 +314,30 @@ export function TransactionDetailDialog({
             View receipt
           </button>
           {receipt && (
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  printTransactionReceipt(receipt);
-                } catch (reason) {
-                  setError(operationsMessage(reason));
-                }
-              }}
-              className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-xs font-extrabold"
-            >
-              <Printer size={15} />
-              Print receipt
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => downloadTransactionReceipt(receipt)}
+                className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-xs font-extrabold"
+              >
+                <Download size={15} />
+                Download receipt
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    printTransactionReceipt(receipt);
+                  } catch (reason) {
+                    setError(operationsMessage(reason));
+                  }
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-xs font-extrabold"
+              >
+                <Printer size={15} />
+                Print receipt
+              </button>
+            </>
           )}
         </div>
         {receipt && (
