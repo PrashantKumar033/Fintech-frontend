@@ -112,18 +112,7 @@ function BankAccountsPage() {
     setLoading(true);
     try {
       const loaded = await complianceApi.banks(token);
-      if (loaded.length) {
-        try {
-          const primary = await complianceApi.primaryBank(token);
-          setAccounts(
-            loaded.map((account) => ({ ...account, isDefault: account.id === primary.id })),
-          );
-        } catch {
-          setAccounts(loaded);
-        }
-      } else {
-        setAccounts([]);
-      }
+      setAccounts(loaded);
     } catch (e) {
       setMessage({ ok: false, text: complianceMessage(e) });
     } finally {
@@ -381,141 +370,154 @@ function BankAccountsPage() {
             </div>
           ) : filteredAccounts.length ? (
             <div className="mt-6 space-y-3">
-              {filteredAccounts.map((a) => (
-                <article key={a.id} className="rounded-2xl border border-border bg-background p-5">
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                    <span className="grid h-12 w-12 place-items-center rounded-xl bg-mint text-secondary">
-                      <Landmark />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-extrabold text-secondary">{a.bankName}</h3>
-                        {a.isDefault && (
-                          <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary">
-                            PRIMARY
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        •••• {a.accountNumberLast4} · {a.accountType} · {a.ifsc}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">{a.accountHolderName}</p>
-                      <span
-                        className={`mt-2 inline-block rounded-full px-2 py-1 text-[10px] font-extrabold ${
-                          a.adminReviewStatus === "APPROVED"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : a.adminReviewStatus === "REJECTED"
-                              ? "bg-red-50 text-red-700"
-                              : "bg-amber-50 text-amber-700"
-                        }`}
-                      >
-                        ADMIN REVIEW {a.adminReviewStatus || "PENDING"}
+              {filteredAccounts.map((a) => {
+                const isPrimary = activeTab === "AEPS" ? a.isDefault : Boolean(a.isDmtDefault);
+                return (
+                  <article
+                    key={a.id}
+                    className="rounded-2xl border border-border bg-background p-5"
+                  >
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                      <span className="grid h-12 w-12 place-items-center rounded-xl bg-mint text-secondary">
+                        <Landmark />
                       </span>
-                      {a.adminReviewStatus === "REJECTED" && a.adminReviewReason ? (
-                        <p className="mt-2 text-xs font-semibold text-red-600">
-                          Reason: {a.adminReviewReason}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-extrabold text-secondary">{a.bankName}</h3>
+                          {isPrimary && (
+                            <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-bold text-primary">
+                              PRIMARY {activeTab === "AEPS" ? "PAYOUT" : "DMT"}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          •••• {a.accountNumberLast4} · {a.accountType} · {a.ifsc}
                         </p>
-                      ) : null}
-                    </div>
-                    <div className="text-right">
-                      <p
-                        className={`text-xs font-extrabold ${isFullyVerifiedBank(a) ? "text-emerald-600" : a.adminReviewStatus === "REJECTED" ? "text-red-600" : "text-amber-600"}`}
-                      >
-                        {isFullyVerifiedBank(a)
-                          ? "VERIFIED"
-                          : a.adminReviewStatus === "REJECTED"
-                            ? "ADMIN REJECTED"
-                            : a.adminReviewStatus !== "APPROVED"
-                              ? "ADMIN REVIEW PENDING"
-                              : `BANK ${a.verificationStatus}`}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        Ownership {a.ownershipStatus}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setBusy(true);
-                          setMessage(null);
-                          try {
-                            const latest = await complianceApi.bank(session.accessToken, a.id);
-                            setEditingId(latest.id);
-                            setEditingAccount(latest);
-                            setPassbook(null);
-                            setFileInputKey((value) => value + 1);
-                            requestKeyRef.current = null;
-                            setAdding(true);
-                            setCoordinates(null);
-                            setLocationError("");
-                            setForm({
-                              bankName: latest.bankName,
-                              ifsc: latest.ifsc,
-                              branchName: latest.branchName || "",
-                              accountHolderName: latest.accountHolderName,
-                              accountNumber: "",
-                              confirm: "",
-                              accountType: latest.accountType,
-                              purposes: latest.purposes,
-                            });
-                          } catch (error) {
-                            setMessage({ ok: false, text: complianceMessage(error) });
-                          } finally {
-                            setBusy(false);
-                          }
-                        }}
-                        disabled={!canManageBank || busy}
-                        className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-primary"
-                      >
-                        <Edit3 size={12} /> Edit
-                      </button>
-                      {!a.isDefault &&
-                        a.status === "ACTIVE" &&
-                        a.adminReviewStatus === "APPROVED" &&
-                        a.verificationStatus === "VERIFIED" &&
-                        a.ownershipStatus === "VERIFIED" && (
+                        <p className="mt-1 text-xs text-muted-foreground">{a.accountHolderName}</p>
+                        <span
+                          className={`mt-2 inline-block rounded-full px-2 py-1 text-[10px] font-extrabold ${
+                            a.adminReviewStatus === "APPROVED"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : a.adminReviewStatus === "REJECTED"
+                                ? "bg-red-50 text-red-700"
+                                : "bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          ADMIN REVIEW {a.adminReviewStatus || "PENDING"}
+                        </span>
+                        {a.adminReviewStatus === "REJECTED" && a.adminReviewReason ? (
+                          <p className="mt-2 text-xs font-semibold text-red-600">
+                            Reason: {a.adminReviewReason}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={`text-xs font-extrabold ${isFullyVerifiedBank(a) ? "text-emerald-600" : a.adminReviewStatus === "REJECTED" ? "text-red-600" : "text-amber-600"}`}
+                        >
+                          {isFullyVerifiedBank(a)
+                            ? "VERIFIED"
+                            : a.adminReviewStatus === "REJECTED"
+                              ? "ADMIN REJECTED"
+                              : a.adminReviewStatus !== "APPROVED"
+                                ? "ADMIN REVIEW PENDING"
+                                : `BANK ${a.verificationStatus}`}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          Ownership {a.ownershipStatus}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setBusy(true);
+                            setMessage(null);
+                            try {
+                              const latest = await complianceApi.bank(session.accessToken, a.id);
+                              setEditingId(latest.id);
+                              setEditingAccount(latest);
+                              setPassbook(null);
+                              setFileInputKey((value) => value + 1);
+                              requestKeyRef.current = null;
+                              setAdding(true);
+                              setCoordinates(null);
+                              setLocationError("");
+                              setForm({
+                                bankName: latest.bankName,
+                                ifsc: latest.ifsc,
+                                branchName: latest.branchName || "",
+                                accountHolderName: latest.accountHolderName,
+                                accountNumber: "",
+                                confirm: "",
+                                accountType: latest.accountType,
+                                purposes: latest.purposes,
+                              });
+                            } catch (error) {
+                              setMessage({ ok: false, text: complianceMessage(error) });
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                          disabled={!canManageBank || busy}
+                          className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-primary"
+                        >
+                          <Edit3 size={12} /> Edit
+                        </button>
+                        {!isPrimary &&
+                          a.status === "ACTIVE" &&
+                          a.adminReviewStatus === "APPROVED" &&
+                          a.verificationStatus === "VERIFIED" &&
+                          a.ownershipStatus === "VERIFIED" && (
+                            <button
+                              disabled={!canManageBank || busy}
+                              onClick={async () => {
+                                try {
+                                  await complianceApi.setPrimary(
+                                    session.accessToken,
+                                    a.id,
+                                    activeTab === "AEPS" ? "PAYOUT" : "DMT",
+                                  );
+                                  await load(session.accessToken);
+                                  setMessage({
+                                    ok: true,
+                                    text: `Primary ${activeTab === "AEPS" ? "payout" : "DMT"} bank account updated.`,
+                                  });
+                                } catch (error) {
+                                  setMessage({ ok: false, text: complianceMessage(error) });
+                                }
+                              }}
+                              className="ml-3 mt-2 text-xs font-bold text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Set as primary
+                            </button>
+                          )}
+                        {!a.isDefault && !a.isDmtDefault && (
                           <button
                             disabled={!canManageBank || busy}
                             onClick={async () => {
+                              if (
+                                !window.confirm(
+                                  `Remove ${a.bankName} account ending ${a.accountNumberLast4}?`,
+                                )
+                              )
+                                return;
                               try {
-                                await complianceApi.setPrimary(session.accessToken, a.id);
+                                await complianceApi.deleteBank(session.accessToken, a.id);
                                 await load(session.accessToken);
-                                setMessage({ ok: true, text: "Primary bank account updated." });
+                                setMessage({ ok: true, text: "Bank account removed." });
                               } catch (error) {
                                 setMessage({ ok: false, text: complianceMessage(error) });
                               }
                             }}
-                            className="ml-3 mt-2 text-xs font-bold text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                            className="ml-3 mt-2 inline-flex items-center gap-1 text-xs font-bold text-red-600"
                           >
-                            Set as primary
+                            <Trash2 size={12} /> Remove
                           </button>
                         )}
-                      {!a.isDefault && (
-                        <button
-                          disabled={!canManageBank || busy}
-                          onClick={async () => {
-                            if (
-                              !window.confirm(
-                                `Remove ${a.bankName} account ending ${a.accountNumberLast4}?`,
-                              )
-                            )
-                              return;
-                            try {
-                              await complianceApi.deleteBank(session.accessToken, a.id);
-                              await load(session.accessToken);
-                              setMessage({ ok: true, text: "Bank account removed." });
-                            } catch (error) {
-                              setMessage({ ok: false, text: complianceMessage(error) });
-                            }
-                          }}
-                          className="ml-3 mt-2 inline-flex items-center gap-1 text-xs font-bold text-red-600"
-                        >
-                          <Trash2 size={12} /> Remove
-                        </button>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           ) : (
             <div className="mt-6 rounded-2xl border border-dashed border-border p-12 text-center">

@@ -11,9 +11,14 @@ export type AepsNextAction =
   | "CONTACT_SUPPORT";
 export type AepsTxnCode = "BE" | "MS" | "CW" | "AP" | "CD";
 export type AuthType = "BA" | "FA";
+export type AepsProvider = {
+  providerCode: string;
+  providerName: string;
+  status: "AVAILABLE";
+};
 export type MasterItem = { code?: string; iin?: string; description: string };
 export type AepsStatus = {
-  provider: "VIMOPAY";
+  provider: string;
   profileId?: string;
   providerMerchantId?: string;
   status?: string;
@@ -90,7 +95,7 @@ export type TransactionResult = {
   [key: string]: unknown;
 };
 export type TransactionOtpResult = {
-  provider?: "VIMOPAY";
+  provider?: string;
   transactionType?: "CWTFA" | "APTFA";
   authRequestId: string;
   amount?: string;
@@ -112,33 +117,71 @@ const post = <T>(token: string, path: string, body?: unknown, idempotencyKey?: s
     headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
   });
 
+let providerCodeRequest: Promise<string> | null = null;
+
+async function activeProviderCode(token: string): Promise<string> {
+  if (!providerCodeRequest) {
+    providerCodeRequest = get<AepsProvider[]>(token, "/aeps/providers")
+      .then((providers) => {
+        const provider = providers.find((item) => item.status === "AVAILABLE") ?? providers[0];
+        if (!provider?.providerCode) {
+          throw new Error("No AEPS provider is currently available.");
+        }
+        return provider.providerCode;
+      })
+      .catch((error) => {
+        providerCodeRequest = null;
+        throw error;
+      });
+  }
+  return providerCodeRequest;
+}
+
+async function providerPath(token: string, suffix: string): Promise<string> {
+  const providerCode = await activeProviderCode(token);
+  return `/aeps/providers/${encodeURIComponent(providerCode)}/${suffix}`;
+}
+
 export const aepsApi = {
-  status: (t: string) => get<AepsStatus>(t, "/aeps/vimopay/status"),
-  banks: (t: string) => get<MasterItem[]>(t, "/aeps/vimopay/banks"),
-  states: (t: string) => get<MasterItem[]>(t, "/aeps/vimopay/states"),
-  districts: (t: string, stateCode: string) =>
-    get<MasterItem[]>(t, `/aeps/vimopay/districts?stateCode=${encodeURIComponent(stateCode)}`),
-  bankIins: (t: string, txnCode: AepsTxnCode, authType: AuthType) =>
-    get<MasterItem[]>(t, `/aeps/vimopay/bank-iins?txnCode=${txnCode}&authType=${authType}`),
+  providers: (t: string) => get<AepsProvider[]>(t, "/aeps/providers"),
+  status: async (t: string) => get<AepsStatus>(t, await providerPath(t, "status")),
+  banks: async (t: string) => get<MasterItem[]>(t, await providerPath(t, "banks")),
+  states: async (t: string) => get<MasterItem[]>(t, await providerPath(t, "states")),
+  districts: async (t: string, stateCode: string) =>
+    get<MasterItem[]>(
+      t,
+      `${await providerPath(t, "districts")}?stateCode=${encodeURIComponent(stateCode)}`,
+    ),
+  bankIins: async (t: string, txnCode: AepsTxnCode, authType: AuthType) =>
+    get<MasterItem[]>(
+      t,
+      `${await providerPath(t, "bank-iins")}?txnCode=${txnCode}&authType=${authType}`,
+    ),
   savedBanks: (t: string) => get<SavedBank[]>(t, "/identity/get-my-bank-accounts"),
   myKyc: (t: string) => get<KycProfile>(t, "/kyc/me"),
-  register: (t: string, body: Record<string, string>) =>
-    post<TransactionResult>(t, "/aeps/vimopay/onboarding/register", body),
-  sendOtp: (t: string, resend = false) =>
-    post<TransactionResult>(t, `/aeps/vimopay/onboarding/otp/${resend ? "resend" : "send"}`),
-  verifyOtp: (t: string, otp: string) =>
-    post<TransactionResult>(t, "/aeps/vimopay/onboarding/otp/verify", { otp }),
-  ekyc: (t: string, pidData: string) =>
-    post<TransactionResult>(t, "/aeps/vimopay/onboarding/ekyc", { pidData }),
+  register: async (t: string, body: Record<string, string>) =>
+    post<TransactionResult>(t, await providerPath(t, "onboarding/register"), body),
+  sendOtp: async (t: string, resend = false) =>
+    post<TransactionResult>(
+      t,
+      await providerPath(t, `onboarding/otp/${resend ? "resend" : "send"}`),
+    ),
+  verifyOtp: async (t: string, otp: string) =>
+    post<TransactionResult>(t, await providerPath(t, "onboarding/otp/verify"), { otp }),
+  ekyc: async (t: string, pidData: string) =>
+    post<TransactionResult>(t, await providerPath(t, "onboarding/ekyc"), { pidData }),
   twoFactor: (
     t: string,
     body: { aadhaarNumber: string; deviceType: string; pidData: string; lat: string; long: string },
     idempotencyKey: string,
-  ) => post<TransactionResult>(t, "/aeps/vimopay/onboarding/2fa", body, idempotencyKey),
-  transactionOtp: (t: string, operation: "CW" | "AP", body: Record<string, string>) =>
+  ) =>
+    providerPath(t, "onboarding/2fa").then((path) =>
+      post<TransactionResult>(t, path, body, idempotencyKey),
+    ),
+  transactionOtp: async (t: string, operation: "CW" | "AP", body: Record<string, string>) =>
     post<TransactionOtpResult>(
       t,
-      `/aeps/vimopay/${operation === "CW" ? "cash-withdrawal" : "aadhaar-pay"}/otp`,
+      await providerPath(t, `${operation === "CW" ? "cash-withdrawal" : "aadhaar-pay"}/otp`),
       body,
     ),
   transact: (
@@ -154,7 +197,9 @@ export const aepsApi = {
       AP: "aadhaar-pay",
       CD: "cash-deposit",
     } as const;
-    return post<TransactionResult>(t, `/aeps/vimopay/${paths[operation]}`, body, key);
+    return providerPath(t, paths[operation]).then((path) =>
+      post<TransactionResult>(t, path, body, key),
+    );
   },
 };
 

@@ -138,6 +138,7 @@ export const APP_NAVIGATION: readonly AppNavigationItem[] = [
   {
     key: "bankAccounts",
     active: "banking",
+    activeByRole: { RETAILER: "bank" },
     label: "Bank accounts",
     destinations: {
       MASTER_DISTRIBUTOR: "/master-distributor/profile/bank",
@@ -200,6 +201,7 @@ export const APP_NAVIGATION: readonly AppNavigationItem[] = [
   {
     key: "earnings",
     active: "commissions",
+    activeByRole: { RETAILER: "commission" },
     label: "Commission & earnings",
     labels: { RETAILER: "Commission" },
     destinations: {
@@ -224,6 +226,7 @@ export const APP_NAVIGATION: readonly AppNavigationItem[] = [
   {
     key: "wallet",
     active: "settlements",
+    activeByRole: { RETAILER: "wallet" },
     label: "Wallet & funds",
     labels: { DISTRIBUTOR: "Wallet", RETAILER: "Wallet & transfer" },
     destinations: {

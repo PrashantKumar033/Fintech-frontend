@@ -3,7 +3,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Fingerprint, Loader2, RefreshCw, Settings2, Users } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
 import { AepsWorkspace } from "@/components/aeps-workspace";
-import { adminApi, getAdminActor, type AepsOverviewMetrics } from "@/lib/admin-api";
+import {
+  adminApi,
+  getAdminActor,
+  type AepsOverviewMetrics,
+  type AepsOverviewRange,
+} from "@/lib/admin-api";
 
 export const Route = createFileRoute("/admin/aeps/")({ component: AdminAepsPage });
 
@@ -62,6 +67,7 @@ function AepsOverviewPanel() {
   const [error, setError] = useState("");
   const [provider, setProvider] = useState("");
   const [operation, setOperation] = useState("");
+  const [range, setRange] = useState<AepsOverviewRange>("LAST_24_HOURS");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -69,18 +75,36 @@ function AepsOverviewPanel() {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams();
-      if (provider) params.set("provider", provider);
-      if (operation) params.set("operation", operation);
-      if (fromDate) params.set("fromDate", fromDate);
-      if (toDate) params.set("toDate", toDate);
-      setData(await adminApi.aepsOverview(params.toString()));
+      if (range === "CUSTOM" && (!fromDate || !toDate)) {
+        throw new Error("Select both start and end date-time for a custom range.");
+      }
+      const customFrom = range === "CUSTOM" ? new Date(fromDate) : null;
+      const customTo = range === "CUSTOM" ? new Date(toDate) : null;
+      if (
+        customFrom &&
+        customTo &&
+        (Number.isNaN(customFrom.getTime()) ||
+          Number.isNaN(customTo.getTime()) ||
+          customFrom.getTime() > customTo.getTime())
+      ) {
+        throw new Error("Custom range start must be before its end.");
+      }
+      setData(
+        await adminApi.aepsOverview({
+          provider,
+          operation: operation as "BE" | "MS" | "CW" | "AP" | "CD" | "",
+          range,
+          ...(customFrom && customTo
+            ? { fromDate: customFrom.toISOString(), toDate: customTo.toISOString() }
+            : {}),
+        }),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load AEPS overview.");
     } finally {
       setLoading(false);
     }
-  }, [provider, operation, fromDate, toDate]);
+  }, [provider, operation, range, fromDate, toDate]);
 
   useEffect(() => void load(), [load]);
 
@@ -124,23 +148,45 @@ function AepsOverviewPanel() {
             </select>
           </label>
           <label className="text-xs font-black uppercase">
-            From date
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="mt-1 block rounded-xl border border-border px-3 py-2 text-sm font-normal normal-case outline-none focus:border-primary"
-            />
+            Range
+            <select
+              value={range}
+              onChange={(e) => setRange(e.target.value as AepsOverviewRange)}
+              className="mt-1 block w-44 rounded-xl border border-border px-3 py-2 text-sm font-normal normal-case outline-none focus:border-primary"
+            >
+              <option value="LAST_30_MINUTES">Last 30 minutes</option>
+              <option value="LAST_1_HOUR">Last 1 hour</option>
+              <option value="LAST_2_HOURS">Last 2 hours</option>
+              <option value="LAST_4_HOURS">Last 4 hours</option>
+              <option value="LAST_6_HOURS">Last 6 hours</option>
+              <option value="LAST_10_HOURS">Last 10 hours</option>
+              <option value="LAST_12_HOURS">Last 12 hours</option>
+              <option value="LAST_24_HOURS">Last 24 hours</option>
+              <option value="CUSTOM">Custom</option>
+            </select>
           </label>
-          <label className="text-xs font-black uppercase">
-            To date
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="mt-1 block rounded-xl border border-border px-3 py-2 text-sm font-normal normal-case outline-none focus:border-primary"
-            />
-          </label>
+          {range === "CUSTOM" ? (
+            <>
+              <label className="text-xs font-black uppercase">
+                From date
+                <input
+                  type="datetime-local"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="mt-1 block rounded-xl border border-border px-3 py-2 text-sm font-normal normal-case outline-none focus:border-primary"
+                />
+              </label>
+              <label className="text-xs font-black uppercase">
+                To date
+                <input
+                  type="datetime-local"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="mt-1 block rounded-xl border border-border px-3 py-2 text-sm font-normal normal-case outline-none focus:border-primary"
+                />
+              </label>
+            </>
+          ) : null}
           <button
             type="button"
             onClick={() => void load()}

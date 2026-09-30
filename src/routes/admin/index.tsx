@@ -22,7 +22,9 @@ import {
   adminApi,
   getAdminActor,
   type AdminDashboardSummary,
+  type AepsOverviewFilters,
   type AepsOverviewMetrics,
+  type AepsOverviewRange,
 } from "@/lib/admin-api";
 import { managementBasePath } from "@/lib/role-hierarchy";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
@@ -124,6 +126,32 @@ const modules: Array<{
   },
 ];
 
+const AEPS_VOLUME_RANGES: Array<{ value: AepsOverviewRange; label: string }> = [
+  { value: "LAST_30_MINUTES", label: "30m" },
+  { value: "LAST_1_HOUR", label: "1h" },
+  { value: "LAST_2_HOURS", label: "2h" },
+  { value: "LAST_4_HOURS", label: "4h" },
+  { value: "LAST_6_HOURS", label: "6h" },
+  { value: "LAST_10_HOURS", label: "10h" },
+  { value: "LAST_12_HOURS", label: "12h" },
+  { value: "LAST_24_HOURS", label: "24h" },
+  { value: "CUSTOM", label: "Custom" },
+];
+
+const AEPS_VOLUME_RANGE_TITLES: Record<AepsOverviewRange, string> = {
+  LAST_30_MINUTES: "last 30 minutes",
+  LAST_1_HOUR: "last 1 hour",
+  LAST_2_HOURS: "last 2 hours",
+  LAST_4_HOURS: "last 4 hours",
+  LAST_6_HOURS: "last 6 hours",
+  LAST_10_HOURS: "last 10 hours",
+  LAST_12_HOURS: "last 12 hours",
+  LAST_24_HOURS: "last 24 hours",
+  CUSTOM: "custom range",
+};
+
+const DEFAULT_AEPS_VOLUME_FILTERS: AepsOverviewFilters = { range: "LAST_24_HOURS" };
+
 export function AdminDashboard() {
   const base = managementBasePath(getAdminActor()?.role);
   const { canShow, canPermission } = usePermissionDashboard();
@@ -136,6 +164,12 @@ export function AdminDashboard() {
   const [aepsVolume, setAepsVolume] = useState<AepsOverviewMetrics | null>(null);
   const [loadingAepsVolume, setLoadingAepsVolume] = useState(false);
   const [aepsVolumeError, setAepsVolumeError] = useState("");
+  const [volumeDraft, setVolumeDraft] = useState<AepsOverviewFilters>({
+    ...DEFAULT_AEPS_VOLUME_FILTERS,
+  });
+  const [volumeFilters, setVolumeFilters] = useState<AepsOverviewFilters>({
+    ...DEFAULT_AEPS_VOLUME_FILTERS,
+  });
   const loadSummary = useCallback(async () => {
     if (!canLoadSummary) return;
     setLoadingSummary(true);
@@ -156,7 +190,7 @@ export function AdminDashboard() {
     setLoadingAepsVolume(true);
     setAepsVolumeError("");
     try {
-      setAepsVolume(await adminApi.aepsOverview());
+      setAepsVolume(await adminApi.aepsOverview(volumeFilters));
     } catch (value) {
       setAepsVolumeError(
         value instanceof Error ? value.message : "Transaction volume could not load.",
@@ -164,7 +198,7 @@ export function AdminDashboard() {
     } finally {
       setLoadingAepsVolume(false);
     }
-  }, [canLoadAepsVolume]);
+  }, [canLoadAepsVolume, volumeFilters]);
   useEffect(() => {
     void loadAepsVolume();
   }, [loadAepsVolume]);
@@ -177,6 +211,38 @@ export function AdminDashboard() {
     if (key === "kyc") return String(summary.kyc.pendingOrInProgress);
     if (key === "aeps") return String(summary.aeps.active);
     return String(summary.bankAccounts.pending);
+  };
+  const applyVolumeFilters = () => {
+    setAepsVolumeError("");
+    const range = volumeDraft.range ?? "LAST_24_HOURS";
+    if (range === "CUSTOM") {
+      if (!volumeDraft.fromDate || !volumeDraft.toDate) {
+        setAepsVolumeError("Select both start and end date-time for a custom range.");
+        return;
+      }
+      const fromDate = new Date(volumeDraft.fromDate);
+      const toDate = new Date(volumeDraft.toDate);
+      if (
+        Number.isNaN(fromDate.getTime()) ||
+        Number.isNaN(toDate.getTime()) ||
+        fromDate.getTime() > toDate.getTime()
+      ) {
+        setAepsVolumeError("Custom range start must be before its end.");
+        return;
+      }
+      setVolumeFilters({
+        ...volumeDraft,
+        range,
+        fromDate: fromDate.toISOString(),
+        toDate: toDate.toISOString(),
+      });
+      return;
+    }
+    setVolumeFilters({
+      provider: volumeDraft.provider,
+      operation: volumeDraft.operation,
+      range,
+    });
   };
   return (
     <AdminLayout
@@ -289,7 +355,9 @@ export function AdminDashboard() {
                 <p className="text-xs font-extrabold uppercase tracking-wider text-primary">
                   Transaction volume
                 </p>
-                <h2 className="mt-1 text-xl font-black">AEPS volume · last 24 hours</h2>
+                <h2 className="mt-1 text-xl font-black">
+                  AEPS volume · {AEPS_VOLUME_RANGE_TITLES[volumeFilters.range ?? "LAST_24_HOURS"]}
+                </h2>
               </div>
               {canShowTransactions ? (
                 <Link
@@ -298,6 +366,96 @@ export function AdminDashboard() {
                 >
                   View transactions <ArrowUpRight size={15} />
                 </Link>
+              ) : null}
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-border bg-secondary/[.025] p-4">
+              <div className="flex flex-wrap gap-2" aria-label="AEPS volume time range">
+                {AEPS_VOLUME_RANGES.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() =>
+                      setVolumeDraft((current) => ({
+                        ...current,
+                        range: item.value,
+                        ...(item.value === "CUSTOM" ? {} : { fromDate: "", toDate: "" }),
+                      }))
+                    }
+                    className={`rounded-lg px-3 py-2 text-xs font-extrabold transition ${
+                      volumeDraft.range === item.value
+                        ? "bg-secondary text-white"
+                        : "border border-border bg-white text-secondary hover:border-primary/40"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_auto]">
+                <input
+                  value={volumeDraft.provider ?? ""}
+                  onChange={(event) =>
+                    setVolumeDraft((current) => ({ ...current, provider: event.target.value }))
+                  }
+                  placeholder="Provider alias (optional)"
+                  className="min-w-0 rounded-xl border border-border bg-white px-3 py-2.5 text-sm outline-none focus:border-primary"
+                />
+                <select
+                  value={volumeDraft.operation ?? ""}
+                  onChange={(event) =>
+                    setVolumeDraft((current) => ({
+                      ...current,
+                      operation: event.target.value as AepsOverviewFilters["operation"],
+                    }))
+                  }
+                  className="min-w-0 rounded-xl border border-border bg-white px-3 py-2.5 text-sm outline-none focus:border-primary"
+                >
+                  <option value="">All operations</option>
+                  <option value="BE">Balance enquiry</option>
+                  <option value="MS">Mini statement</option>
+                  <option value="CW">Cash withdrawal</option>
+                  <option value="AP">Aadhaar Pay</option>
+                  <option value="CD">Cash deposit</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={applyVolumeFilters}
+                  disabled={loadingAepsVolume}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-extrabold text-white disabled:opacity-50"
+                >
+                  <RefreshCw size={15} className={loadingAepsVolume ? "animate-spin" : ""} />
+                  Apply
+                </button>
+              </div>
+              {volumeDraft.range === "CUSTOM" ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">
+                    From
+                    <input
+                      type="datetime-local"
+                      value={volumeDraft.fromDate ?? ""}
+                      onChange={(event) =>
+                        setVolumeDraft((current) => ({
+                          ...current,
+                          fromDate: event.target.value,
+                        }))
+                      }
+                      className="mt-1 block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm font-normal normal-case outline-none focus:border-primary"
+                    />
+                  </label>
+                  <label className="text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">
+                    To
+                    <input
+                      type="datetime-local"
+                      value={volumeDraft.toDate ?? ""}
+                      onChange={(event) =>
+                        setVolumeDraft((current) => ({ ...current, toDate: event.target.value }))
+                      }
+                      className="mt-1 block w-full rounded-xl border border-border bg-white px-3 py-2.5 text-sm font-normal normal-case outline-none focus:border-primary"
+                    />
+                  </label>
+                </div>
               ) : null}
             </div>
 

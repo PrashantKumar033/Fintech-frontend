@@ -7,6 +7,13 @@ import {
 } from "@/lib/auth-api";
 import { getDeviceId } from "@/lib/device-id";
 import type { ProviderTransaction } from "@/lib/operations-api";
+import type {
+  PayoutPage,
+  PayoutPaymentMode,
+  PayoutSettlementDetail,
+  PayoutSettlementStatus,
+  PayoutSourceWallet,
+} from "@/lib/payout-api";
 
 const defaultUrl =
   typeof window !== "undefined"
@@ -536,6 +543,108 @@ export type PayoutSurchargeConfiguration = {
   updatedAt: string;
 };
 
+export type AdminPayoutSettlement = PayoutSettlementDetail & {
+  identityId: string;
+};
+
+export type AdminPayoutSettlementPage = PayoutPage<AdminPayoutSettlement>;
+
+export type AdminPayoutSettlementFilters = {
+  page?: number;
+  limit?: number;
+  status?: PayoutSettlementStatus | "";
+  identityId?: string;
+  paymentMode?: PayoutPaymentMode | "";
+  providerCode?: string;
+  fromDate?: string;
+  toDate?: string;
+};
+
+export type AdminPayoutOverviewRange =
+  | "LAST_30_MINUTES"
+  | "LAST_1_HOUR"
+  | "LAST_2_HOURS"
+  | "LAST_4_HOURS"
+  | "LAST_6_HOURS"
+  | "LAST_10_HOURS"
+  | "LAST_24_HOURS"
+  | "CUSTOM";
+
+export type AdminPayoutOverviewFilters = {
+  range?: AdminPayoutOverviewRange;
+  fromDate?: string;
+  toDate?: string;
+  identityId?: string;
+  providerCode?: string;
+  paymentMode?: PayoutPaymentMode | "";
+  sourceWallet?: PayoutSourceWallet | "";
+};
+
+export type AdminPayoutOverviewBreakdown = {
+  total: number;
+  successful: number;
+  failed: number;
+  pending: number;
+  volume: string;
+  successfulVolume: string;
+};
+
+export type AdminPayoutOverview = {
+  generatedAt: string;
+  range: {
+    fromDate: string;
+    toDate: string;
+    mode: AdminPayoutOverviewRange;
+  };
+  filters: {
+    identityId: string | null;
+    providerCode: string | null;
+    paymentMode: PayoutPaymentMode | null;
+    sourceWallet: PayoutSourceWallet | null;
+  };
+  totals: {
+    transactions: number;
+    requestedVolume: string;
+    successfulVolume: string;
+    failedVolume: string;
+    pendingVolume: string;
+    totalWalletDebit: string;
+    successfulWalletDebit: string;
+    totalSurcharge: string;
+    successfulSurcharge: string;
+    successfulRetailerNetCommission: string;
+    successfulAdminNetIncome: string;
+    averageTicket: string;
+    successRate: number;
+    reconciliationRequired: number;
+  };
+  statuses: Record<string, number>;
+  walletStates: Record<string, number>;
+  providers: Array<AdminPayoutOverviewBreakdown & { providerCode: string }>;
+  paymentModes: Array<AdminPayoutOverviewBreakdown & { paymentMode: PayoutPaymentMode }>;
+  sourceWallets: Array<AdminPayoutOverviewBreakdown & { sourceWallet: PayoutSourceWallet }>;
+};
+
+export type AdminPayoutReconciliation = AdminPayoutSettlement & {
+  reconciliation: {
+    reason: string;
+    recoveryAttemptCount: number;
+    providerSubmissionStartedAt: string | null;
+  };
+};
+
+export type AdminPayoutReconciliationPage = PayoutPage<AdminPayoutReconciliation>;
+
+export type ResolvePayoutReconciliationInput = {
+  resolution: "SUCCESS" | "FAILED";
+  reason: string;
+  evidenceReference: string;
+  providerTxnId?: string;
+  rrn?: string;
+  providerStatusCode?: string;
+  providerStatusMessage?: string;
+};
+
 export type AepsOverviewBreakdown = {
   total: number;
   successful: number;
@@ -545,12 +654,31 @@ export type AepsOverviewBreakdown = {
   successfulVolume: string | number;
 };
 
+export type AepsOverviewRange =
+  | "LAST_30_MINUTES"
+  | "LAST_1_HOUR"
+  | "LAST_2_HOURS"
+  | "LAST_4_HOURS"
+  | "LAST_6_HOURS"
+  | "LAST_10_HOURS"
+  | "LAST_12_HOURS"
+  | "LAST_24_HOURS"
+  | "CUSTOM";
+
+export type AepsOverviewFilters = {
+  provider?: string;
+  operation?: "BE" | "MS" | "CW" | "AP" | "CD" | "";
+  range?: AepsOverviewRange;
+  fromDate?: string;
+  toDate?: string;
+};
+
 export type AepsOverviewMetrics = {
   generatedAt: string;
   range: {
     fromDate: string;
     toDate: string;
-    mode: "CUSTOM" | "LAST_24_HOURS";
+    mode: AepsOverviewRange;
   };
   filters: {
     provider: string | null;
@@ -884,6 +1012,15 @@ const json = (method: string, body?: unknown): RequestInit => ({
   ...(body === undefined ? {} : { body: JSON.stringify(body) }),
 });
 
+function queryString(values: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams();
+  Object.entries(values).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  });
+  const encoded = query.toString();
+  return encoded ? `?${encoded}` : "";
+}
+
 export const adminAuthApi = {
   async login(identifier: string, loginWith: AdminLoginMethod, credential: string) {
     const response = await fetch(`${API_URL}/super-admin/auth/login`, {
@@ -1001,6 +1138,11 @@ export const adminApi = {
     providers: {
       list: () =>
         call<ProviderRegistryEntry[]>("/super-admin/payout/providers", { cache: "no-store" }),
+      get: (publicCode: string) =>
+        call<ProviderRegistryEntry>(
+          `/super-admin/payout/providers/${encodeURIComponent(publicCode)}`,
+          { cache: "no-store" },
+        ),
       updateStatus: (publicCode: string, isActive: boolean) =>
         call<ProviderRegistryEntry>(
           `/super-admin/payout/providers/${encodeURIComponent(publicCode)}/status`,
@@ -1025,6 +1167,66 @@ export const adminApi = {
         call<PayoutSurchargeConfiguration>(
           "/super-admin/payout/surcharge",
           json("PATCH", { type, value }),
+        ),
+    },
+  },
+  adminPayout: {
+    settlements: {
+      list: (filters: AdminPayoutSettlementFilters = {}) =>
+        call<AdminPayoutSettlementPage>(
+          `/admin/payout/settlements${queryString({
+            page: filters.page,
+            limit: filters.limit,
+            status: filters.status || undefined,
+            identityId: filters.identityId?.trim() || undefined,
+            paymentMode: filters.paymentMode || undefined,
+            providerCode: filters.providerCode?.trim().toUpperCase() || undefined,
+            fromDate: filters.fromDate || undefined,
+            toDate: filters.toDate || undefined,
+          })}`,
+          { cache: "no-store" },
+        ),
+      overview: (filters: AdminPayoutOverviewFilters = {}) =>
+        call<AdminPayoutOverview>(
+          `/admin/payout/settlements/overview${queryString({
+            range: filters.range,
+            fromDate: filters.fromDate || undefined,
+            toDate: filters.toDate || undefined,
+            identityId: filters.identityId?.trim() || undefined,
+            providerCode: filters.providerCode?.trim().toUpperCase() || undefined,
+            paymentMode: filters.paymentMode || undefined,
+            sourceWallet: filters.sourceWallet || undefined,
+          })}`,
+          { cache: "no-store" },
+        ),
+      get: (settlementId: string) =>
+        call<AdminPayoutSettlement>(
+          `/admin/payout/settlements/${encodeURIComponent(settlementId)}`,
+          { cache: "no-store" },
+        ),
+    },
+    reconciliation: {
+      list: (
+        filters: {
+          page?: number;
+          limit?: number;
+          identityId?: string;
+          status?: "SUBMITTING" | "UNKNOWN" | "SUCCESS" | "FAILED" | "";
+        } = {},
+      ) =>
+        call<AdminPayoutReconciliationPage>(
+          `/admin/payout/reconciliation${queryString({
+            page: filters.page,
+            limit: filters.limit,
+            identityId: filters.identityId?.trim() || undefined,
+            status: filters.status || undefined,
+          })}`,
+          { cache: "no-store" },
+        ),
+      resolve: (settlementId: string, body: ResolvePayoutReconciliationInput) =>
+        call<AdminPayoutSettlement>(
+          `/admin/payout/reconciliation/${encodeURIComponent(settlementId)}/resolve`,
+          json("POST", body),
         ),
     },
   },
@@ -1344,10 +1546,17 @@ export const adminApi = {
     return call<AuditPage>(`${path}${query ? `?${query}` : ""}`);
   },
   auditLog: (auditId: string) => call<AuditLog>(`/audit/me/${encodeURIComponent(auditId)}`),
-  aepsOverview: (query = "") =>
-    call<AepsOverviewMetrics>(`/admin/transactions/aeps/overview${query ? `?${query}` : ""}`, {
-      cache: "no-store",
-    }),
+  aepsOverview: (filters: AepsOverviewFilters = {}) =>
+    call<AepsOverviewMetrics>(
+      `/admin/transactions/aeps/overview${queryString({
+        provider: filters.provider?.trim().toUpperCase() || undefined,
+        operation: filters.operation || undefined,
+        range: filters.range,
+        fromDate: filters.fromDate || undefined,
+        toDate: filters.toDate || undefined,
+      })}`,
+      { cache: "no-store" },
+    ),
   transaction: (referenceId: string) =>
     call<TransactionDetail>(`/admin/transactions/provider/${encodeURIComponent(referenceId)}`),
   providerTransactions: (query = "") =>

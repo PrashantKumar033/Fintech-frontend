@@ -28,6 +28,7 @@ export type BankAccount = {
   passbookMimeType?: string | null;
   verifiedAt?: string | null;
   isDefault: boolean;
+  isDmtDefault?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -119,9 +120,9 @@ export const complianceApi = {
       { cache: "no-store" },
       token,
     ),
-  primaryBank: (token: string) =>
+  primaryBank: (token: string, purpose: BankAccountPurpose = "PAYOUT") =>
     authenticatedRequest<BankAccount>(
-      "/identity/my-bank-accounts/primary",
+      `/identity/my-bank-accounts/primary?purpose=${encodeURIComponent(purpose)}`,
       { cache: "no-store" },
       token,
     ),
@@ -156,10 +157,10 @@ export const complianceApi = {
       { method: "DELETE" },
       token,
     ),
-  setPrimary: (token: string, id: string) =>
+  setPrimary: (token: string, id: string, purpose: BankAccountPurpose = "PAYOUT") =>
     authenticatedRequest<BankAccount>(
       `/identity/my-bank-accounts/${id}/set-primary`,
-      { method: "PATCH" },
+      { method: "PATCH", body: JSON.stringify({ purpose }) },
       token,
     ),
   getKyc: (token: string) =>

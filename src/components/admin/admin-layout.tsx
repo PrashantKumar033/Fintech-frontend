@@ -50,6 +50,19 @@ export function AdminLayout({
   const compliance = useServiceReadiness(
     Boolean(identity && isManagementRole(identity.role) && !credentialsPending(identity)),
   );
+  const securityLocked = credentialsPending(identity);
+  const complianceGateActive = Boolean(
+    identity &&
+    !securityLocked &&
+    (compliance.isPending ||
+      (compliance.isSuccess &&
+        compliance.data.complianceStatusAvailable &&
+        !compliance.data.complianceSetupComplete)),
+  );
+  const complianceMessage = compliance.data?.kycSubmitted
+    ? "Add a bank account to unlock the remaining services."
+    : "Submit KYC and add a bank account to unlock the remaining services.";
+  const aepsLocked = Boolean(identity && (!compliance.isSuccess || !compliance.data.aepsUnlocked));
 
   useEffect(() => {
     const currentActor = getAdminActor();
@@ -133,7 +146,9 @@ export function AdminLayout({
     if (pathname.endsWith("/wallet/requests")) return UI_PERMISSION.WALLET_FUND_REQUEST;
     if (pathname.endsWith("/wallet/history")) return UI_PERMISSION.WALLET_TRANSACTION_VIEW;
     if (pathname.endsWith("/wallet/holds")) return UI_PERMISSION.WALLET_HOLD_VIEW;
-    if (pathname.endsWith("/wallet/payout")) return UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE;
+    if (pathname.endsWith("/wallet/payout")) {
+      return [UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE, UI_PERMISSION.PAYOUT_SETTLEMENT_VIEW_SELF];
+    }
     if (pathname.endsWith("/aeps/transactions")) {
       return UI_PERMISSION.AEPS_NETWORK_TRANSACTION_VIEW;
     }
@@ -202,7 +217,12 @@ export function AdminLayout({
         </div>
       </header>
       <div className="flex min-h-[calc(100vh-74px)]">
-        <AdminSidebar active={active} />
+        <AdminSidebar
+          active={active}
+          complianceGateActive={complianceGateActive}
+          complianceMessage={complianceMessage}
+          aepsLocked={aepsLocked}
+        />
         {menu && (
           <>
             <button
@@ -210,7 +230,14 @@ export function AdminLayout({
               onClick={() => setMenu(false)}
               className="fixed inset-0 z-40 bg-secondary/45 lg:hidden"
             />
-            <AdminSidebar active={active} mobile onClose={() => setMenu(false)} />
+            <AdminSidebar
+              active={active}
+              complianceGateActive={complianceGateActive}
+              complianceMessage={complianceMessage}
+              aepsLocked={aepsLocked}
+              mobile
+              onClose={() => setMenu(false)}
+            />
           </>
         )}
         <main className="min-w-0 flex-1 p-5 sm:p-8 lg:p-10">

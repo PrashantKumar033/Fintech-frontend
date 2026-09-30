@@ -13,7 +13,7 @@ function MasterDistributorPayoutPage() {
       active="settlements"
       eyebrow="Payout service"
       title="Payout to bank"
-      description="Settle AEPS wallet funds to your approved payout-enabled bank account."
+      description="Settle AEPS or MAIN wallet funds to your approved payout-enabled bank account."
     >
       <PayoutSettlementWorkspace />
     </AdminLayout>

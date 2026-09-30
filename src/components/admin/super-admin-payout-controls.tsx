@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   BadgeIndianRupee,
   CircleAlert,
+  Eye,
   Loader2,
   Power,
   RefreshCw,
@@ -32,6 +33,8 @@ export function SuperAdminPayoutControls() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const [providerDetail, setProviderDetail] = useState<ProviderRegistryEntry | null>(null);
+  const [detailLoading, setDetailLoading] = useState("");
   const [reason, setReason] = useState("");
 
   const load = useCallback(async () => {
@@ -130,6 +133,18 @@ export function SuperAdminPayoutControls() {
       setError(messageOf(requestError));
     } finally {
       setBusy("");
+    }
+  }
+
+  async function viewProvider(publicCode: string) {
+    setDetailLoading(publicCode);
+    setError("");
+    try {
+      setProviderDetail(await adminApi.superAdminPayout.providers.get(publicCode));
+    } catch (requestError) {
+      setError(messageOf(requestError));
+    } finally {
+      setDetailLoading("");
     }
   }
 
@@ -236,18 +251,42 @@ export function SuperAdminPayoutControls() {
                           Integration: {provider.metadata.integrationStatus.replaceAll("_", " ")}
                         </p>
                       ) : null}
-                      <button
-                        type="button"
-                        disabled={Boolean(busy)}
-                        onClick={() => {
-                          setReason("");
-                          setConfirmation({ kind: "provider", provider });
-                        }}
-                        className={`mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold disabled:opacity-50 ${provider.isActive ? "border-red-200 text-red-700" : "border-emerald-200 text-emerald-700"}`}
-                      >
-                        <Power size={15} />{" "}
-                        {provider.isActive ? "Disable provider" : "Enable provider"}
-                      </button>
+                      <div className="mt-4 grid grid-cols-[auto_1fr] gap-2">
+                        <button
+                          type="button"
+                          disabled={Boolean(busy) || detailLoading === provider.publicCode}
+                          onClick={() => void viewProvider(provider.publicCode)}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm font-bold disabled:opacity-50"
+                          aria-label={`View ${provider.publicName} details`}
+                          title="View provider details"
+                        >
+                          {detailLoading === provider.publicCode ? (
+                            <Loader2 className="animate-spin" size={15} />
+                          ) : (
+                            <Eye size={15} />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            Boolean(busy) ||
+                            (!provider.isActive &&
+                              provider.metadata?.integrationStatus !== "AVAILABLE")
+                          }
+                          onClick={() => {
+                            setReason("");
+                            setConfirmation({ kind: "provider", provider });
+                          }}
+                          className={`inline-flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold disabled:opacity-50 ${provider.isActive ? "border-red-200 text-red-700" : "border-emerald-200 text-emerald-700"}`}
+                        >
+                          <Power size={15} />{" "}
+                          {provider.isActive
+                            ? "Disable provider"
+                            : provider.metadata?.integrationStatus === "AVAILABLE"
+                              ? "Enable provider"
+                              : "Integration unavailable"}
+                        </button>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -377,6 +416,61 @@ export function SuperAdminPayoutControls() {
                 Confirm
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {providerDetail ? (
+        <div className="fixed inset-0 z-[120] grid place-items-center bg-secondary/65 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase text-primary">Payout provider detail</p>
+                <h2 className="mt-1 text-xl font-black text-secondary">
+                  {providerDetail.publicName}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProviderDetail(null)}
+                className="grid h-9 w-9 place-items-center rounded-xl border border-border"
+                aria-label="Close provider detail"
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {[
+                ["Public code", providerDetail.publicCode],
+                ["Public name", providerDetail.publicName],
+                ["Internal mapping", providerDetail.internalCode || "—"],
+                ["Display name", providerDetail.displayName || "—"],
+                ["Service", providerDetail.serviceType],
+                ["Status", providerDetail.isActive ? "ACTIVE" : "INACTIVE"],
+                ["Updated by", providerDetail.updatedBy || "—"],
+                [
+                  "Updated at",
+                  providerDetail.updatedAt
+                    ? new Date(providerDetail.updatedAt).toLocaleString("en-IN")
+                    : "—",
+                ],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl bg-muted p-4">
+                  <p className="text-[10px] font-black uppercase text-muted-foreground">{label}</p>
+                  <p className="mt-1 break-all text-sm font-extrabold text-secondary">{value}</p>
+                </div>
+              ))}
+            </div>
+            {providerDetail.metadata ? (
+              <div className="mt-4 rounded-2xl border border-border p-4">
+                <p className="text-[10px] font-black uppercase text-muted-foreground">
+                  Integration metadata
+                </p>
+                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all text-xs text-secondary">
+                  {JSON.stringify(providerDetail.metadata, null, 2)}
+                </pre>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

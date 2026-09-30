@@ -55,7 +55,11 @@ export function managementSectionTabs(
       settlements: tabs(base, [
         ["Balance", "/wallet", UI_PERMISSION.WALLET_VIEW],
         ["Add Money", "/wallet/requests", UI_PERMISSION.WALLET_FUND_REQUEST],
-        ["Payout to Bank", "/wallet/payout", UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE],
+        [
+          "Payout to Bank",
+          "/wallet/payout",
+          [UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE, UI_PERMISSION.PAYOUT_SETTLEMENT_VIEW_SELF],
+        ],
         ["Transfer Fund", "/wallet/transfer", UI_PERMISSION.WALLET_TRANSFER],
         ["Wallet History", "/wallet/history", UI_PERMISSION.WALLET_TRANSACTION_VIEW],
         ["Wallet Holds", "/wallet/holds", UI_PERMISSION.WALLET_HOLD_VIEW],
@@ -113,7 +117,11 @@ export function managementSectionTabs(
       settlements: tabs(base, [
         ["Balance", "/wallet", UI_PERMISSION.WALLET_VIEW],
         ["Add Money", "/wallet/requests", UI_PERMISSION.WALLET_FUND_REQUEST],
-        ["Payout to Bank", "/wallet/payout", UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE],
+        [
+          "Payout to Bank",
+          "/wallet/payout",
+          [UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE, UI_PERMISSION.PAYOUT_SETTLEMENT_VIEW_SELF],
+        ],
         ["Transfer Fund", "/wallet/transfer", UI_PERMISSION.WALLET_TRANSFER],
         ["Wallet History", "/wallet/history", UI_PERMISSION.WALLET_TRANSACTION_VIEW],
         ["Wallet Holds", "/wallet/holds", UI_PERMISSION.WALLET_HOLD_VIEW],

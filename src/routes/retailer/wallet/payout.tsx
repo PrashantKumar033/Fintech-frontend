@@ -35,7 +35,7 @@ function RetailerPayoutPage() {
       active="wallet"
       eyebrow="Payout service"
       title="Payout to bank"
-      description="Settle your AEPS wallet balance to an approved payout-enabled bank account."
+      description="Settle your AEPS or MAIN wallet balance to an approved payout-enabled bank account."
     >
       <PayoutSettlementWorkspace />
     </BusinessPage>

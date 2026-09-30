@@ -88,7 +88,10 @@ const retailerSectionTabs: Partial<
     {
       label: "Payout to Bank",
       href: "/retailer/wallet/payout",
-      permission: UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE,
+      permission: [
+        UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE,
+        UI_PERMISSION.PAYOUT_SETTLEMENT_VIEW_SELF,
+      ],
     },
     {
       label: "Transfer Fund",
@@ -246,6 +249,11 @@ export function BusinessPage({
   const nav = navigationForRole("RETAILER").filter((item) =>
     canAccessUiArea(item.area, { role: identity.role, access }),
   );
+  const pathnameItem = [...nav]
+    .filter(
+      (item) => currentUrl.pathname === item.to || currentUrl.pathname.startsWith(`${item.to}/`),
+    )
+    .sort((left, right) => right.to.length - left.to.length)[0];
   async function signOut() {
     setMobileMenuOpen(false);
     await logout();
@@ -373,6 +381,7 @@ export function BusinessPage({
             )}
           <nav className="space-y-1 overflow-y-auto">
             {nav.map(({ key, active: itemActive, label, icon: Icon, to }) => {
+              const selected = pathnameItem ? pathnameItem.key === key : active === itemActive;
               const status =
                 key === "kycSelf"
                   ? readiness.data?.kycStatus?.replaceAll("_", " ")
@@ -391,7 +400,8 @@ export function BusinessPage({
                     onSettingsClick();
                     setMobileMenuOpen(false);
                   }}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active === itemActive ? "bg-primary text-white shadow-sm" : "text-secondary hover:bg-mint"}`}
+                  aria-current={selected ? "page" : undefined}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${selected ? "bg-primary text-white shadow-sm" : "text-secondary hover:bg-mint"}`}
                 >
                   <Icon size={17} />
                   <span>{label}</span>
@@ -419,7 +429,8 @@ export function BusinessPage({
                   key={key}
                   to={to as never}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active === itemActive ? "bg-primary text-white shadow-sm" : "text-secondary hover:bg-mint"}`}
+                  aria-current={selected ? "page" : undefined}
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${selected ? "bg-primary text-white shadow-sm" : "text-secondary hover:bg-mint"}`}
                 >
                   <Icon size={17} />
                   <span>{label}</span>

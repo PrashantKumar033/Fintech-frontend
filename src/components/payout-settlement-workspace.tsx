@@ -5,12 +5,15 @@ import {
   Building2,
   CircleAlert,
   Crosshair,
+  History,
   LoaderCircle,
+  Plus,
   RefreshCw,
   ShieldCheck,
   X,
 } from "lucide-react";
 import { ActionPermissionNotice } from "@/components/action-permission-notice";
+import { PayoutHistoryPanel } from "@/components/payout-history-panel";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { getSession } from "@/lib/auth-api";
 import { complianceApi, type BankAccount } from "@/lib/compliance-api";
@@ -76,14 +79,37 @@ function settlementTone(status: PayoutSettlement["status"]): string {
 }
 
 export function PayoutSettlementWorkspace() {
+  const [view, setView] = useState<"create" | "history">("create");
+
+  return (
+    <>
+      <div className="mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl border border-border bg-white p-1 shadow-sm">
+        <button
+          type="button"
+          onClick={() => setView("create")}
+          className={`inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-5 py-3 text-sm font-black ${view === "create" ? "bg-primary text-white" : "text-secondary"}`}
+        >
+          <Plus size={16} /> New payout
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("history")}
+          className={`inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-5 py-3 text-sm font-black ${view === "history" ? "bg-primary text-white" : "text-secondary"}`}
+        >
+          <History size={16} /> Payout history
+        </button>
+      </div>
+
+      {view === "create" ? <CreatePayoutSettlementPanel /> : <PayoutHistoryPanel />}
+    </>
+  );
+}
+
+function CreatePayoutSettlementPanel() {
   const session = getSession();
   const accessToken = session?.accessToken;
   const { can } = useEffectiveAccess();
-  const allowed = can(UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE, [
-    "MASTER_DISTRIBUTOR",
-    "DISTRIBUTOR",
-    "RETAILER",
-  ]);
+  const allowed = can(UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE, ["RETAILER"]);
   const [providers, setProviders] = useState<PayoutProvider[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [balances, setBalances] = useState<WalletBalances | null>(null);
@@ -91,11 +117,13 @@ export function PayoutSettlementWorkspace() {
   const [bankAccountId, setBankAccountId] = useState("");
   const [paymentMode, setPaymentMode] = useState<PayoutPaymentMode>("IMPS");
   const [amount, setAmount] = useState("");
+  const [tpin, setTpin] = useState("");
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
   const [loading, setLoading] = useState(true);
   const [locationBusy, setLocationBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [confirmationError, setConfirmationError] = useState("");
   const [error, setError] = useState("");
   const [result, setResult] = useState<PayoutSettlement | null>(null);
   const idempotencyKey = useRef<string | null>(null);
@@ -104,6 +132,9 @@ export function PayoutSettlementWorkspace() {
   const selectedAccount = eligibleAccounts.find((account) => account.id === bankAccountId);
   const selectedProvider = providers.find((provider) => provider.providerCode === providerCode);
   const aepsBalance = Number(balances?.wallets.aeps ?? 0);
+  const payoutServiceDisabled = error
+    .toLowerCase()
+    .includes("payout service is temporarily unavailable");
 
   const load = useCallback(async () => {
     if (!accessToken || !allowed) {
@@ -191,6 +222,10 @@ export function PayoutSettlementWorkspace() {
       setError("Minimum payout amount is ₹100.00.");
       return false;
     }
+    if (numericAmount > 49_000) {
+      setError("Maximum payout amount is ₹49,000.00 per request.");
+      return false;
+    }
     if (numericAmount > aepsBalance) {
       setError("Payout amount cannot exceed your available AEPS wallet balance.");
       return false;
@@ -206,13 +241,20 @@ export function PayoutSettlementWorkspace() {
     event.preventDefault();
     setError("");
     if (!allowed || !validateIntent()) return;
+    setTpin("");
+    setConfirmationError("");
     setReviewing(true);
   }
 
   async function confirm() {
     if (!accessToken || !allowed || submitting || !coordinates || !validateIntent()) return;
+    if (!/^\d{4,6}$/.test(tpin)) {
+      setConfirmationError("Enter your valid 4 to 6 digit financial TPIN.");
+      return;
+    }
     setSubmitting(true);
     setError("");
+    setConfirmationError("");
     idempotencyKey.current ||= createIdempotencyKey("payout");
     try {
       const settlement = await payoutApi.createSettlement(
@@ -222,6 +264,8 @@ export function PayoutSettlementWorkspace() {
           bankAccountId,
           amount: Number(amount),
           paymentMode,
+          sourceWallet: "AEPS",
+          tpin,
           ...coordinates,
         },
         idempotencyKey.current,
@@ -229,14 +273,15 @@ export function PayoutSettlementWorkspace() {
       setResult(settlement);
       setReviewing(false);
       setAmount("");
+      setTpin("");
       idempotencyKey.current = null;
       const refreshed = await operationsApi.balances(accessToken).catch(() => null);
       if (refreshed) setBalances(refreshed);
     } catch (requestError) {
       // Keep the same idempotency key. A retry after a timeout cannot create a
       // second settlement for the same intent.
-      setError(payoutMessage(requestError));
-      setReviewing(false);
+      setConfirmationError(payoutMessage(requestError));
+      setTpin("");
     } finally {
       setSubmitting(false);
     }
@@ -256,7 +301,15 @@ export function PayoutSettlementWorkspace() {
       {error ? (
         <div className="mb-5 flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-800">
           <CircleAlert className="mt-0.5 shrink-0" size={18} />
-          <span>{error}</span>
+          <div>
+            <p>{error}</p>
+            {payoutServiceDisabled ? (
+              <p className="mt-1 font-medium text-red-700">
+                A Super Admin must enable the PAYOUT master switch after confirming the commercial
+                configuration and provider readiness.
+              </p>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -295,7 +348,7 @@ export function PayoutSettlementWorkspace() {
               ["Reference", result.merchantRefId],
               ["Payout amount", inr.format(Number(result.amount))],
               ["Surcharge", inr.format(Number(result.surcharge.amount))],
-              ["Total AEPS debit", inr.format(Number(result.totalWalletDebit))],
+              [`Total ${result.sourceWallet} debit`, inr.format(Number(result.totalWalletDebit))],
               ["Mode", result.paymentMode],
               ["Bank account", `•••• ${result.bankAccount.last4}`],
               ["Wallet state", result.walletState.replaceAll("_", " ")],
@@ -409,9 +462,13 @@ export function PayoutSettlementWorkspace() {
           </label>
 
           <label className="text-sm font-bold text-secondary">
-            Amount (minimum ₹100)
+            Amount
             <input
               required
+              type="number"
+              min={100}
+              max={49_000}
+              step="0.01"
               inputMode="decimal"
               value={amount}
               onChange={(event) => {
@@ -422,6 +479,9 @@ export function PayoutSettlementWorkspace() {
               disabled={!allowed || loading}
               className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
             />
+            <span className="mt-1 block text-xs font-medium text-muted-foreground">
+              Allowed range: ₹100.00 – ₹49,000.00
+            </span>
           </label>
 
           <label className="text-sm font-bold text-secondary">
@@ -468,8 +528,8 @@ export function PayoutSettlementWorkspace() {
 
           <div className="rounded-xl bg-amber-50 p-4 text-xs leading-5 text-amber-900 md:col-span-2">
             The configured payout surcharge is added to the requested amount and the total is
-            debited from your AEPS wallet. The exact surcharge and total debit are returned before
-            the result is displayed.
+            debited from your AEPS wallet. The exact surcharge and total debit are returned with the
+            payout result.
           </div>
 
           <button
@@ -499,7 +559,11 @@ export function PayoutSettlementWorkspace() {
               </div>
               <button
                 type="button"
-                onClick={() => setReviewing(false)}
+                onClick={() => {
+                  setReviewing(false);
+                  setTpin("");
+                  setConfirmationError("");
+                }}
                 disabled={submitting}
                 className="grid h-10 w-10 place-items-center rounded-xl border border-border"
                 aria-label="Close payout confirmation"
@@ -526,15 +590,47 @@ export function PayoutSettlementWorkspace() {
               ))}
             </div>
 
+            <label className="mt-4 block text-sm font-bold text-secondary">
+              Financial TPIN
+              <input
+                required
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                minLength={4}
+                maxLength={6}
+                value={tpin}
+                onChange={(event) => {
+                  setTpin(event.target.value.replace(/\D/g, "").slice(0, 6));
+                  setConfirmationError("");
+                }}
+                placeholder="4–6 digit TPIN"
+                className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 text-center text-lg font-black tracking-[0.4em] outline-none focus:border-primary"
+              />
+              <span className="mt-1 block text-xs font-medium text-muted-foreground">
+                Your TPIN is verified securely and is never included in the payout command.
+              </span>
+            </label>
+
+            {confirmationError ? (
+              <p className="mt-3 flex gap-2 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">
+                <CircleAlert className="shrink-0" size={17} /> {confirmationError}
+              </p>
+            ) : null}
+
             <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
-              The backend will calculate the active surcharge, reserve the total AEPS debit and
-              submit this payout immediately. Verify the bank and amount carefully.
+              The backend will verify your TPIN, calculate the active surcharge, reserve the total
+              AEPS debit and submit this payout immediately. Verify the bank and amount carefully.
             </p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
-                onClick={() => setReviewing(false)}
+                onClick={() => {
+                  setReviewing(false);
+                  setTpin("");
+                  setConfirmationError("");
+                }}
                 disabled={submitting}
                 className="rounded-xl border border-border py-3 text-sm font-bold text-secondary"
               >
@@ -543,7 +639,7 @@ export function PayoutSettlementWorkspace() {
               <button
                 type="button"
                 onClick={() => void confirm()}
-                disabled={submitting}
+                disabled={submitting || !/^\d{4,6}$/.test(tpin)}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-black text-white disabled:opacity-50"
               >
                 {submitting ? (
