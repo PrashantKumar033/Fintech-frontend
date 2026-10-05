@@ -12,6 +12,7 @@ import {
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { authApi, type RegistrationDetails, type RegistrationResult } from "@/lib/auth-api";
+import { INDIAN_STATES } from "@/lib/indian-states";
 import logo from "@/assets/logo.png";
 
 export const Route = createFileRoute("/register")({
@@ -22,26 +23,6 @@ type Step = 1 | 2 | 3 | 4 | 5;
 const labels = ["Role", "Phone", "OTP", "PAN", "Details"];
 const inputClass =
   "w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-secondary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20";
-const states = [
-  "Andhra Pradesh",
-  "Assam",
-  "Bihar",
-  "Delhi",
-  "Gujarat",
-  "Haryana",
-  "Jharkhand",
-  "Karnataka",
-  "Kerala",
-  "Madhya Pradesh",
-  "Maharashtra",
-  "Odisha",
-  "Punjab",
-  "Rajasthan",
-  "Tamil Nadu",
-  "Telangana",
-  "Uttar Pradesh",
-  "West Bengal",
-];
 const initialDetails = {
   fullName: "",
   aadhaarNumber: "",
@@ -418,7 +399,7 @@ function DetailsStep({
           className={inputClass}
         >
           <option value="">Select state</option>
-          {states.map((s) => (
+          {INDIAN_STATES.map((s) => (
             <option key={s}>{s}</option>
           ))}
         </select>
@@ -437,7 +418,7 @@ function DetailsStep({
           className={inputClass}
         >
           <option value="">Select state</option>
-          {states.map((s) => (
+          {INDIAN_STATES.map((s) => (
             <option key={s}>{s}</option>
           ))}
         </select>

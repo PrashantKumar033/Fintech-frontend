@@ -129,7 +129,7 @@ function transactionReceiptDocument(receipt: ProviderTransactionReceipt, autoPri
       .amount-label { color: #607a76; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
       .amount { margin: 5px 0 8px; color: #043f39; font-size: 31px; font-weight: 800; }
       .status { display: inline-block; padding: 5px 12px; border-radius: 20px; background: ${successful ? "#e2f8ed" : "#fff0e8"}; color: ${successful ? "#087443" : "#b43b08"}; font-size: 10px; font-weight: 800; letter-spacing: .6px; }
-      .details { display: grid; grid-template-columns: 1fr 1fr; column-gap: 36px; padding-top: 14px; }
+      .details { display: grid; grid-template-columns: 1fr; column-gap: 36px; padding-top: 14px; }
       .row { display: flex; justify-content: space-between; gap: 18px; min-width: 0; padding: 11px 0; border-bottom: 1px dashed #d3e3df; }
       .row span { flex: 0 0 42%; color: #607a76; }
       .row strong { overflow-wrap: anywhere; text-align: right; }
@@ -348,7 +348,7 @@ export function TransactionDetailDialog({
                 AEPS transaction receipt
               </p>
             </div>
-            <div className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-x-6 gap-y-3">
               {receiptFields
                 .filter(({ key }) => receipt[key] !== null && receipt[key] !== undefined)
                 .map(({ key, label }) => (

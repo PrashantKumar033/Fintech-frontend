@@ -551,11 +551,6 @@ function EffectiveAccessPanel() {
                         <p className="mt-1 text-xs font-semibold text-muted-foreground">
                           {permission.name}
                         </p>
-                        {permission.description && (
-                          <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                            {permission.description}
-                          </p>
-                        )}
                       </div>
                     </div>
                   </div>

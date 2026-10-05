@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2, Mail, Plus, UserPlus, Users } from "lucide-react
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
 import { ActionPermissionNotice } from "@/components/action-permission-notice";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
+import { INDIAN_STATES } from "@/lib/indian-states";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import {
   adminApi,
@@ -238,13 +239,19 @@ export function CreateMemberPage() {
                 />
               </Field>
               <Field label="State">
-                <input
+                <select
                   required
-                  maxLength={100}
                   className={inputClass}
                   value={form.state}
                   onChange={(e) => update("state", e.target.value)}
-                />
+                >
+                  <option value="">Select state</option>
+                  {INDIAN_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Pincode">
                 <input
@@ -275,12 +282,18 @@ export function CreateMemberPage() {
                 />
               </Field>
               <Field label="Shop state">
-                <input
-                  maxLength={100}
+                <select
                   className={inputClass}
                   value={form.shopState}
                   onChange={(e) => update("shopState", e.target.value)}
-                />
+                >
+                  <option value="">Select state</option>
+                  {INDIAN_STATES.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Shop address" wide>
                 <textarea
