@@ -6,7 +6,11 @@ export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
       { title: "Privacy Policy | UMOBIPAY" },
-      { name: "description", content: "Learn how UMOBIPAY protects your information and handles personal data with transparency and care." },
+      {
+        name: "description",
+        content:
+          "Learn how UMOBIPAY protects your information and handles personal data with transparency and care.",
+      },
     ],
   }),
   component: PrivacyPage,

@@ -4,8 +4,17 @@ import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { authApi, ApiError } from "@/lib/auth-api";
 import logo from "@/assets/logo.png";
-import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, ShieldCheck, User, MessageSquare, KeyRound } from "lucide-react";
-
+import {
+  ArrowLeft,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Loader2,
+  ShieldCheck,
+  User,
+  MessageSquare,
+  KeyRound,
+} from "lucide-react";
 
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({ meta: [{ title: "Forgot Password — UMOBIPAY" }] }),
@@ -29,6 +38,7 @@ function ForgotPasswordPage() {
   const [aadharLast4, setAadharLast4] = useState("");
   const [otp, setOtp] = useState("");
   const [shownOtp, setShownOtp] = useState("");
+  const [otpMessage, setOtpMessage] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -58,6 +68,7 @@ function ForgotPasswordPage() {
         });
         setDraftId(r.draftId);
         setShownOtp(r.otp || "");
+        setOtpMessage(r.message || "OTP sent successfully.");
         setStep(2);
       });
       return;
@@ -81,6 +92,20 @@ function ForgotPasswordPage() {
       });
       return;
     }
+  }
+
+  function resendOtp() {
+    void run(async () => {
+      const r = await authApi.forgotPasswordVerifyUser({
+        loginId: loginId.trim(),
+        panNumber: panNumber.trim().toUpperCase(),
+        aadharLast4: aadharLast4.trim(),
+      });
+      setDraftId(r.draftId);
+      setOtp("");
+      setShownOtp(r.otp || "");
+      setOtpMessage(r.message || "A fresh OTP has been sent.");
+    });
   }
 
   return (
@@ -206,57 +231,73 @@ function ForgotPasswordPage() {
                       Development OTP: <strong>{shownOtp}</strong>
                     </div>
                   )}
+                  {otpMessage ? (
+                    <p
+                      role="status"
+                      className="text-center text-xs font-medium text-muted-foreground"
+                    >
+                      {otpMessage}
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={resendOtp}
+                    className="w-full rounded-xl border border-primary px-4 py-3 text-sm font-semibold text-primary disabled:opacity-60"
+                  >
+                    {loading ? "Sending OTP..." : "Resend OTP"}
+                  </button>
                 </>
               )}
 
               {step === 3 && (
                 <>
-                    <h2 className="text-xl font-extrabold text-secondary">Set new password</h2>
-                    <div>
-                        <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                            New Password
-                        </label>
-                        <div className="relative">
-                            <input
-                            type={showNewPassword ? "text" : "password"}
-                            className={`${inputClass} pr-11`}
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
-                            minLength={8}
-                            required
-                            />
-                            <button
-                            type="button"
-                            onClick={() => setShowNewPassword(!showNewPassword)}
-                            aria-label="Toggle password visibility"
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                            >
-                            {showNewPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                            </button>
-                        </div>
+                  <h2 className="text-xl font-extrabold text-secondary">Set new password</h2>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? "text" : "password"}
+                        className={`${inputClass} pr-11`}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        minLength={8}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        aria-label="Toggle password visibility"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                      >
+                        {showNewPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
                     </div>
-                    <div>
-                        <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                            Confirm New Password
-                        </label>
-                        <div className="relative">
-                            <input
-                            type={showConfirmPassword ? "text" : "password"}
-                            className={`${inputClass} pr-11`}
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            required
-                            />
-                            <button
-                            type="button"
-                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            aria-label="Toggle password visibility"
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                            >
-                            {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                            </button>
-                        </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                      Confirm New Password
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        className={`${inputClass} pr-11`}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        aria-label="Toggle password visibility"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                      >
+                        {showConfirmPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
                     </div>
+                  </div>
                 </>
               )}
 

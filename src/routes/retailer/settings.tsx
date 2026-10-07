@@ -1,0 +1,566 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  BadgeCheck,
+  Bell,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Mail,
+  MonitorSmartphone,
+  Network,
+  Phone,
+  RefreshCw,
+  Shield,
+  ShieldCheck,
+  User,
+} from "lucide-react";
+import { BusinessPage } from "@/components/business-page";
+import { IdentitySecurityCenter } from "@/components/account-security-center";
+import { ContactVerificationCenter } from "@/components/contact-verification-center";
+import {
+  ApiError,
+  authApi,
+  getSession,
+  refreshSession,
+  updateIdentityOnboarding,
+  updateSessionIdentity,
+  type Identity,
+} from "@/lib/auth-api";
+import { identityVerificationPending } from "@/lib/role-hierarchy";
+
+export const Route = createFileRoute("/retailer/settings")({
+  head: () => ({ meta: [{ title: "Settings & preferences — UMOBIPAY" }] }),
+  component: RetailerSettingsPage,
+});
+
+type SettingsView = "profile" | "security" | "access" | "preferences";
+
+function RetailerSettingsPage() {
+  const navigate = useNavigate();
+  const [session, setSession] = useState<ReturnType<typeof getSession>>(null);
+
+  useEffect(() => {
+    const stored = getSession();
+    if (!stored) {
+      void navigate({ to: "/login" });
+      return;
+    }
+    if (identityVerificationPending(stored)) {
+      window.location.replace("/retailer/account-setup");
+      return;
+    }
+    setSession(stored);
+  }, [navigate]);
+
+  if (!session)
+    return (
+      <div className="grid min-h-screen place-items-center bg-background">
+        <RefreshCw className="animate-spin text-primary" />
+      </div>
+    );
+
+  const updateIdentity = (identity: Identity) => {
+    updateSessionIdentity(identity);
+    setSession((current) => (current ? { ...current, identity } : current));
+  };
+
+  return (
+    <BusinessPage identity={session.identity} active="settings" showPageHeader={false}>
+      {!session.identity.passwordChangedAt || !session.identity.mpinChangedAt ? (
+        <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <strong>Complete first-login security</strong>
+          <p className="mt-1 text-amber-800/80">
+            Change both the temporary password and temporary MPIN once to unlock all services.
+          </p>
+        </div>
+      ) : null}
+      <SettingsPage
+        identity={session.identity}
+        accessToken={session.accessToken}
+        onIdentityChange={updateIdentity}
+        onUnlocked={() => void navigate({ to: "/retailer/dashboard" })}
+      />
+    </BusinessPage>
+  );
+}
+
+function SettingsPage({
+  identity,
+  accessToken,
+  onIdentityChange,
+  onUnlocked,
+}: {
+  identity: Identity;
+  accessToken: string;
+  onIdentityChange: (i: Identity) => void;
+  onUnlocked: () => void;
+}) {
+  const [tab, setTab] = useState<SettingsView>(
+    identity.passwordChangedAt && identity.mpinChangedAt ? "profile" : "security",
+  );
+  const tabs = [
+    ["profile", User, "Profile"],
+    ["security", ShieldCheck, "Security"],
+    ["access", MonitorSmartphone, "Devices & access"],
+    ["preferences", Bell, "Preferences"],
+  ] as const;
+  return (
+    <div className="mx-auto max-w-6xl">
+      <div className="mb-6">
+        <p className="text-sm font-bold text-primary">ACCOUNT SETTINGS</p>
+        <h1 className="mt-1 text-3xl font-extrabold text-secondary">Settings & preferences</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Manage your profile, security and preferences.
+        </p>
+      </div>
+      <div>
+        <nav
+          aria-label="Settings sections"
+          className="mb-6 flex gap-1 overflow-x-auto rounded-2xl border border-border bg-card p-2 shadow-soft"
+        >
+          {tabs.map(([key, Icon, label]) => (
+            <button
+              type="button"
+              key={key}
+              onClick={() => setTab(key)}
+              aria-current={tab === key ? "page" : undefined}
+              className={`flex min-w-max flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${tab === key ? "bg-secondary text-secondary-foreground shadow-sm" : "text-secondary hover:bg-mint"}`}
+            >
+              <Icon size={17} />
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="min-w-0 flex gap-6 sm:flex-row sm:gap-6">
+          {tab === "profile" && <ProfileSettings identity={identity} />}
+          {tab === "security" && (
+            <>
+              <SecuritySettings
+                identity={identity}
+                accessToken={accessToken}
+                onIdentityChange={onIdentityChange}
+                onUnlocked={onUnlocked}
+              />
+              <ContactVerificationCenter identity={identity} />
+            </>
+          )}
+          {tab === "access" && <IdentitySecurityCenter />}
+          {tab === "preferences" && <PreferenceSettings identity={identity} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+function Panel({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl w-full border border-border bg-card p-5 shadow-soft sm:p-7">
+      <h2 className="text-xl font-extrabold text-secondary">{title}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      <div className="mt-6">{children}</div>
+    </section>
+  );
+}
+function Info({ icon: Icon, label, value }: { icon: typeof User; label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-background p-4">
+      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+        <Icon size={14} />
+        {label}
+      </div>
+      <p className="mt-2 truncate text-sm font-bold text-secondary">{value || "Not provided"}</p>
+    </div>
+  );
+}
+function ProfileSettings({ identity }: { identity: Identity }) {
+  return (
+    <Panel
+      title="Personal & business profile"
+      description="Verified registration information associated with your account."
+    >
+      <div className="mb-6 flex items-center gap-4 rounded-2xl bg-secondary p-5 text-secondary-foreground">
+        <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/10 text-xl font-extrabold">
+          {identity.fullName?.[0] || "U"}
+        </span>
+        <div>
+          <p className="font-extrabold">{identity.fullName}</p>
+          <p className="text-xs text-white/60">
+            {identity.role} · {identity.status}
+          </p>
+        </div>
+        <BadgeCheck className="ml-auto text-emerald-300" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Info icon={User} label="Full name" value={identity.fullName} />
+        <Info icon={Mail} label="Email address" value={identity.email} />
+        <Info icon={Phone} label="Phone number" value={identity.phoneNumber} />
+        <Info icon={Network} label="Username" value={identity.username} />
+        <Info icon={BadgeCheck} label="Login ID" value={identity.loginId} />
+        <Info icon={Shield} label="Account status" value={identity.status} />
+      </div>
+      <p className="mt-5 rounded-xl bg-mint p-4 text-xs text-secondary">
+        To update verified personal or business details, contact the UMOBIPAY compliance desk.
+      </p>
+    </Panel>
+  );
+}
+
+function SecuritySettings({
+  identity,
+  accessToken,
+  onIdentityChange,
+  onUnlocked,
+}: {
+  identity: Identity;
+  accessToken: string;
+  onIdentityChange: (i: Identity) => void;
+  onUnlocked: () => void;
+}) {
+  const [mode, setMode] = useState<"password" | "mpin" | "tpin">(
+    identity.passwordChangedAt ? "mpin" : "password",
+  );
+
+  const [tpinSetup, setTpinSetup] = useState(false);
+
+  const [current, setCurrent] = useState("");
+
+  const [next, setNext] = useState("");
+
+  const [confirm, setConfirm] = useState("");
+
+  const [visible, setVisible] = useState(false);
+
+  const [busy, setBusy] = useState(false);
+
+  const [message, setMessage] = useState<{
+    ok: boolean;
+    text: string;
+  } | null>(null);
+
+  function resetFields() {
+    setCurrent("");
+    setNext("");
+    setConfirm("");
+    setMessage(null);
+  }
+
+  const isTpin = mode === "tpin";
+  const isPin = mode === "mpin" || isTpin;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setMessage(null);
+    if (!current) {
+      setMessage({
+        ok: false,
+        text: `Enter your ${isTpin ? (tpinSetup ? "current TPIN" : "MPIN") : `current ${mode}`}.`,
+      });
+      return;
+    }
+    if (next !== confirm) {
+      setMessage({
+        ok: false,
+        text: `New ${isTpin ? "TPIN" : mode} and confirmation do not match.`,
+      });
+      return;
+    }
+    if (isTpin && !/^\d{4,6}$/.test(next)) {
+      setMessage({ ok: false, text: "TPIN must contain 4 to 6 digits." });
+      return;
+    }
+    if (mode === "mpin" && !/^\d{4}$/.test(next)) {
+      setMessage({ ok: false, text: "New MPIN must contain exactly 4 digits." });
+      return;
+    }
+    if (mode === "password" && !/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(next)) {
+      setMessage({
+        ok: false,
+        text: "Password needs 8+ characters with uppercase, lowercase, number and special character.",
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      if (mode === "password") {
+        await authApi.changePassword(accessToken, { currentPassword: current, newPassword: next });
+        const synchronized = await refreshSession();
+        onIdentityChange(synchronized.identity);
+        if (!synchronized.identity.mpinChangedAt) {
+          updateIdentityOnboarding("CHANGE_MPIN", "CREDENTIAL_CHANGE_REQUIRED");
+          setMode("mpin");
+          setMessage({
+            ok: true,
+            text: "Password changed. Now change your temporary MPIN to finish setup.",
+          });
+        } else {
+          setMessage({ ok: true, text: "Password updated successfully." });
+          onUnlocked();
+        }
+      } else if (mode === "mpin") {
+        await authApi.changeMpin(accessToken, { currentMpin: current, newMpin: next });
+        const synchronized = await refreshSession();
+        onIdentityChange(synchronized.identity);
+        setMessage({ ok: true, text: "MPIN changed. First-login security setup is complete." });
+        if (synchronized.identity.passwordChangedAt && synchronized.identity.mpinChangedAt) {
+          updateIdentityOnboarding(null);
+          onUnlocked();
+        }
+      } else {
+        if (tpinSetup) {
+          await authApi.changeTpin(accessToken, { currentTpin: current, newTpin: next });
+          setMessage({ ok: true, text: "TPIN changed successfully." });
+        } else {
+          await authApi.setupTpin(accessToken, { currentMpin: current, newTpin: next });
+          setMessage({
+            ok: true,
+            text: "TPIN set up. Use it for financial operations like wallet transfers.",
+          });
+          setTpinSetup(true);
+        }
+      }
+      setCurrent("");
+      setNext("");
+      setConfirm("");
+    } catch (error) {
+      setMessage({
+        ok: false,
+        text: error instanceof ApiError ? error.message : "Unable to update security credentials.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+  const fieldType = visible ? "text" : "password";
+  return (
+    <Panel
+      title="Login & security"
+      description="Manage your password, MPIN and transaction PIN without resetting the other credentials."
+    >
+      <div className="mb-5 grid grid-cols-2 gap-3">
+        <StatusCard label="Password" done={!!identity.passwordChangedAt} />
+        <StatusCard label="MPIN" done={!!identity.mpinChangedAt} />
+      </div>
+      <div className="mb-5 flex rounded-xl bg-muted p-1">
+        {(["password", "mpin", "tpin"] as const).map((item) => (
+          <button
+            type="button"
+            key={item}
+            disabled={
+              (!identity.passwordChangedAt && item === "mpin") ||
+              ((!identity.passwordChangedAt || !identity.mpinChangedAt) && item === "tpin")
+            }
+            onClick={() => {
+              setMode(item);
+              resetFields();
+            }}
+            className={`flex-1 rounded-lg py-2 text-sm font-bold uppercase disabled:cursor-not-allowed disabled:opacity-40 ${mode === item ? "bg-card text-secondary shadow-sm" : "text-muted-foreground"}`}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+      {isTpin && (
+        <div className="mb-4 flex rounded-xl bg-muted p-1">
+          {([false, true] as const).map((isChange) => (
+            <button
+              type="button"
+              key={String(isChange)}
+              onClick={() => {
+                setTpinSetup(isChange);
+                resetFields();
+              }}
+              className={`flex-1 rounded-lg py-2 text-sm font-bold ${
+                tpinSetup === isChange
+                  ? "bg-card text-secondary shadow-sm"
+                  : "text-muted-foreground"
+              }`}
+            >
+              {isChange ? "Change TPIN" : "Setup TPIN"}
+            </button>
+          ))}
+        </div>
+      )}
+      {isTpin && (
+        <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">
+          {tpinSetup
+            ? "Enter your current TPIN to change it."
+            : "First-time setup: verify with your MPIN, then set a 4\u20136 digit TPIN used for financial operations."}
+        </p>
+      )}
+      <form onSubmit={submit} className="space-y-4">
+        <SecureInput
+          label={
+            isTpin ? (tpinSetup ? "Current TPIN" : "Current MPIN (to verify)") : `Current ${mode}`
+          }
+          value={current}
+          onChange={setCurrent}
+          type={fieldType}
+          maxLength={isTpin && !tpinSetup ? 4 : isTpin ? 6 : isPin ? 4 : undefined}
+        />
+        <SecureInput
+          label={isTpin ? "New TPIN" : `New ${mode}`}
+          value={next}
+          onChange={setNext}
+          type={fieldType}
+          maxLength={isTpin ? 6 : isPin ? 4 : undefined}
+        />
+        <SecureInput
+          label={isTpin ? "Confirm new TPIN" : `Confirm new ${mode}`}
+          value={confirm}
+          onChange={setConfirm}
+          type={fieldType}
+          maxLength={isTpin ? 6 : isPin ? 4 : undefined}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible(!visible)}
+          className="flex items-center gap-2 text-xs font-bold text-primary"
+        >
+          {visible ? <EyeOff size={15} /> : <Eye size={15} />}
+          {visible ? "Hide values" : "Show values"}
+        </button>
+        {message && (
+          <div
+            className={`rounded-xl p-4 text-sm font-semibold ${message.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+          >
+            {message.text}
+          </div>
+        )}
+        <button
+          disabled={busy}
+          className="w-full rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground disabled:opacity-60"
+        >
+          {busy
+            ? "Updating\u2026"
+            : isTpin
+              ? tpinSetup
+                ? "Change TPIN"
+                : "Setup TPIN"
+              : `Update ${mode}`}
+        </button>
+      </form>
+      <div className="mt-6 grid gap-3 border-t border-border pt-6 sm:grid-cols-2">
+        <Info icon={KeyRound} label="Preferred login" value={identity.preferredLoginMethod} />
+        <Info
+          icon={ShieldCheck}
+          label="Security setup"
+          value={
+            identity.passwordChangedAt && identity.mpinChangedAt ? "Complete" : "Action required"
+          }
+        />
+      </div>
+    </Panel>
+  );
+}
+function StatusCard({ label, done }: { label: string; done: boolean }) {
+  return (
+    <div
+      className={`rounded-xl border p-3 text-sm font-bold ${done ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-800"}`}
+    >
+      {label}: {done ? "Changed" : "Temporary"}
+    </div>
+  );
+}
+function SecureInput({
+  label,
+  value,
+  onChange,
+  type,
+  maxLength,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type: string;
+  maxLength?: number;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+      <input
+        required
+        type={type}
+        value={value}
+        maxLength={maxLength}
+        inputMode={maxLength ? "numeric" : undefined}
+        minLength={maxLength ? 4 : 8}
+        onChange={(e) => onChange(maxLength ? e.target.value.replace(/\D/g, "") : e.target.value)}
+        className="mt-1.5 w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+      />
+    </label>
+  );
+}
+function PreferenceSettings({ identity }: { identity: Identity }) {
+  const [states, setStates] = useState({ transactions: true, security: true, marketing: false });
+  return (
+    <Panel
+      title="Notifications & preferences"
+      description="Choose which account updates you want to receive."
+    >
+      <div className="space-y-3">
+        <ToggleRow
+          title="Transaction alerts"
+          text={`Send payment and settlement updates to ${identity.email}`}
+          checked={states.transactions}
+          onChange={() => setStates({ ...states, transactions: !states.transactions })}
+        />
+        <ToggleRow
+          title="Security alerts"
+          text="Login, password and account safety notifications"
+          checked={states.security}
+          onChange={() => setStates({ ...states, security: !states.security })}
+        />
+        <ToggleRow
+          title="Product updates"
+          text="New UMOBIPAY services, offers and announcements"
+          checked={states.marketing}
+          onChange={() => setStates({ ...states, marketing: !states.marketing })}
+        />
+      </div>
+      <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
+        Preference persistence will be enabled when the notification settings API is available.
+      </div>
+    </Panel>
+  );
+}
+function ToggleRow({
+  title,
+  text,
+  checked,
+  onChange,
+}: {
+  title: string;
+  text: string;
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-4 rounded-xl border border-border p-4">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-secondary">{title}</p>
+        <p className="text-xs text-muted-foreground">{text}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onChange}
+        role="switch"
+        aria-checked={checked}
+        className={`relative h-6 w-11 rounded-full transition ${checked ? "bg-primary" : "bg-muted-foreground/30"}`}
+      >
+        <span
+          className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${checked ? "left-6" : "left-1"}`}
+        />
+      </button>
+    </div>
+  );
+}

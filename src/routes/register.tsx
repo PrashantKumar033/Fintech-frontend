@@ -12,6 +12,7 @@ import {
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { authApi, type RegistrationDetails, type RegistrationResult } from "@/lib/auth-api";
+import { INDIAN_STATES } from "@/lib/indian-states";
 import logo from "@/assets/logo.png";
 
 export const Route = createFileRoute("/register")({
@@ -22,26 +23,6 @@ type Step = 1 | 2 | 3 | 4 | 5;
 const labels = ["Role", "Phone", "OTP", "PAN", "Details"];
 const inputClass =
   "w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-secondary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20";
-const states = [
-  "Andhra Pradesh",
-  "Assam",
-  "Bihar",
-  "Delhi",
-  "Gujarat",
-  "Haryana",
-  "Jharkhand",
-  "Karnataka",
-  "Kerala",
-  "Madhya Pradesh",
-  "Maharashtra",
-  "Odisha",
-  "Punjab",
-  "Rajasthan",
-  "Tamil Nadu",
-  "Telangana",
-  "Uttar Pradesh",
-  "West Bengal",
-];
 const initialDetails = {
   fullName: "",
   aadhaarNumber: "",
@@ -63,6 +44,7 @@ function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [shownOtp, setShownOtp] = useState("");
+  const [otpMessage, setOtpMessage] = useState("");
   const [pan, setPan] = useState("");
   const [details, setDetails] = useState(initialDetails);
   const [result, setResult] = useState<RegistrationResult>();
@@ -95,6 +77,7 @@ function RegisterPage() {
         const r = await authApi.registerPhone(draftId, normalized);
         setPhone(normalized);
         setShownOtp(r.otp || "");
+        setOtpMessage(r.message || "OTP sent successfully.");
         setStep(3);
         return;
       }
@@ -123,6 +106,13 @@ function RegisterPage() {
       setResult(r);
     });
   };
+  const resendOtp = () =>
+    run(async () => {
+      const r = await authApi.registerPhone(draftId, phone);
+      setOtp("");
+      setShownOtp(r.otp || "");
+      setOtpMessage(r.message || "A fresh OTP has been sent.");
+    });
   if (result)
     return (
       <Shell>
@@ -216,6 +206,22 @@ function RegisterPage() {
                     Development OTP: <strong>{shownOtp}</strong>
                   </p>
                 )}
+                {otpMessage ? (
+                  <p
+                    role="status"
+                    className="text-center text-xs font-medium text-muted-foreground"
+                  >
+                    {otpMessage}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void resendOtp()}
+                  className="w-full rounded-xl border border-primary px-4 py-3 text-sm font-semibold text-primary disabled:opacity-60"
+                >
+                  {loading ? "Sending OTP..." : "Resend OTP"}
+                </button>
               </>
             )}{" "}
             {step === 4 && (
@@ -393,7 +399,7 @@ function DetailsStep({
           className={inputClass}
         >
           <option value="">Select state</option>
-          {states.map((s) => (
+          {INDIAN_STATES.map((s) => (
             <option key={s}>{s}</option>
           ))}
         </select>
@@ -412,7 +418,7 @@ function DetailsStep({
           className={inputClass}
         >
           <option value="">Select state</option>
-          {states.map((s) => (
+          {INDIAN_STATES.map((s) => (
             <option key={s}>{s}</option>
           ))}
         </select>

@@ -6,7 +6,11 @@ export const Route = createFileRoute("/terms")({
   head: () => ({
     meta: [
       { title: "Terms of Use | UMOBIPAY" },
-      { name: "description", content: "Review UMOBIPAY's terms of use for using our platform, services, and customer support." },
+      {
+        name: "description",
+        content:
+          "Review UMOBIPAY's terms of use for using our platform, services, and customer support.",
+      },
     ],
   }),
   component: TermsPage,

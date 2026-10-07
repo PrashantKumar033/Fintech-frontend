@@ -1,0 +1,9 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect,useState } from "react";
+import { Network,Users } from "lucide-react";
+import { AdminLayout,AdminPanel } from "@/components/admin/admin-layout";
+import { getSession } from "@/lib/auth-api";
+import { masterDistributorApi } from "@/lib/master-distributor-api";
+import type { HierarchyChild } from "@/lib/distributor-api";
+export const Route=createFileRoute("/master-distributor/network/tree/")({component:Page});
+function Page(){const s=getSession(),[rows,setRows]=useState<HierarchyChild[]>([]),[error,setError]=useState("");useEffect(()=>{if(s)masterDistributorApi.distributors(s.identity.id).then(v=>setRows(Array.isArray(v)?v:[])).catch(e=>setError(e instanceof Error?e.message:"Network unavailable."));},[s?.identity.id]);return <AdminLayout active="merchants" eyebrow="Hierarchy" title="Distribution network" description="Your direct Distributor branches from the live hierarchy service."><AdminPanel>{error&&<p className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<div className="rounded-xl bg-primary p-4 text-primary-foreground"><Network/><p className="mt-2 font-black">Master Distributor</p></div><div className="ml-6 border-l border-border pl-6">{rows.map((r,i)=><div key={r.id||i} className="my-4 rounded-xl border border-border p-4"><div className="flex items-center gap-3"><Users className="text-primary"/><div><p className="font-black">Distributor {r.childUserId||r.id}</p><p className="text-xs text-muted-foreground">{r.isActive===false?"Inactive":"Active"}</p></div></div><p className="mt-3 rounded-lg bg-muted p-2 text-xs text-muted-foreground">Retailer branch aggregation pending backend support.</p></div>)}{!rows.length&&!error&&<p className="py-8 text-sm text-muted-foreground">No direct Distributor branches found.</p>}</div></AdminPanel></AdminLayout>}

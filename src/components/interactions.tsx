@@ -173,7 +173,13 @@ export function SpotlightCard({
 }
 
 /* ── Magnetic wrapper ────────────────────────────────────────── */
-export function Magnetic({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function Magnetic({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
 
   const onMove = (e: React.MouseEvent<HTMLDivElement>) => {

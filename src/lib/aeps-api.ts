@@ -11,14 +11,14 @@ export type AepsNextAction =
   | "CONTACT_SUPPORT";
 export type AepsTxnCode = "BE" | "MS" | "CW" | "AP" | "CD";
 export type AuthType = "BA" | "FA";
-export type MasterItem = { code?: string; iin?: string; description: string };
 export type AepsProvider = {
   providerCode: string;
   providerName: string;
-  status: string;
+  status: "AVAILABLE";
 };
+export type MasterItem = { code?: string; iin?: string; description: string };
 export type AepsStatus = {
-  provider?: string;
+  provider: string;
   profileId?: string;
   providerMerchantId?: string;
   status?: string;
@@ -58,15 +58,51 @@ export type BiometricPayload = {
   udf2?: string;
   udf3?: string;
 };
+export type AepsAccounting = {
+  grossAmount?: string;
+  commissionAmount?: string;
+  customerPayoutAmount?: string;
+  netPrincipalAmount?: string;
+};
+export type AepsSettlement = {
+  status?: "NOT_REQUIRED" | "PENDING" | "SETTLED" | "FAILED" | "COMPENSATED" | string;
+  walletType?: string | null;
+  amount?: string | null;
+  transactionReference?: string | null;
+  compensationTransactionReference?: string | null;
+};
+export type AepsCommission = {
+  status?: string;
+  commissionReference?: string | null;
+  walletTransactionReference?: string | null;
+  reason?: string | null;
+  distributions?: unknown[];
+};
 export type TransactionResult = {
   provider?: string;
   transactionType?: string;
   transactionReferenceId?: string;
   profileId?: string;
+  merchantRefId?: string;
+  providerMerchantId?: string;
+  amount?: string;
+  accounting?: AepsAccounting;
+  settlement?: AepsSettlement;
+  commission?: AepsCommission;
   result?: Record<string, unknown>;
   status?: string;
   message?: string;
   [key: string]: unknown;
+};
+export type TransactionOtpResult = {
+  provider?: string;
+  transactionType?: "CWTFA" | "APTFA";
+  authRequestId: string;
+  amount?: string;
+  bankIIN?: string;
+  expiresAt: string;
+  message?: string;
+  nextAction?: "CAPTURE_BIOMETRIC_WITH_OTP";
 };
 
 async function call<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
@@ -81,65 +117,75 @@ const post = <T>(token: string, path: string, body?: unknown, idempotencyKey?: s
     headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
   });
 
-const providerPath = (providerCode: string) =>
-  `/aeps/providers/${encodeURIComponent(providerCode)}`;
+let providerCodeRequest: Promise<string> | null = null;
+
+async function activeProviderCode(token: string): Promise<string> {
+  if (!providerCodeRequest) {
+    providerCodeRequest = get<AepsProvider[]>(token, "/aeps/providers")
+      .then((providers) => {
+        const provider = providers.find((item) => item.status === "AVAILABLE") ?? providers[0];
+        if (!provider?.providerCode) {
+          throw new Error("No AEPS provider is currently available.");
+        }
+        return provider.providerCode;
+      })
+      .catch((error) => {
+        providerCodeRequest = null;
+        throw error;
+      });
+  }
+  return providerCodeRequest;
+}
+
+async function providerPath(token: string, suffix: string): Promise<string> {
+  const providerCode = await activeProviderCode(token);
+  return `/aeps/providers/${encodeURIComponent(providerCode)}/${suffix}`;
+}
 
 export const aepsApi = {
   providers: (t: string) => get<AepsProvider[]>(t, "/aeps/providers"),
-  status: (t: string, providerCode: string) =>
-    get<AepsStatus>(t, `${providerPath(providerCode)}/status`),
-  banks: (t: string, providerCode: string) =>
-    get<MasterItem[]>(t, `${providerPath(providerCode)}/banks`),
-  states: (t: string, providerCode: string) =>
-    get<MasterItem[]>(t, `${providerPath(providerCode)}/states`),
-  districts: (t: string, providerCode: string, stateCode: string) =>
+  status: async (t: string) => get<AepsStatus>(t, await providerPath(t, "status")),
+  banks: async (t: string) => get<MasterItem[]>(t, await providerPath(t, "banks")),
+  states: async (t: string) => get<MasterItem[]>(t, await providerPath(t, "states")),
+  districts: async (t: string, stateCode: string) =>
     get<MasterItem[]>(
       t,
-      `${providerPath(providerCode)}/districts?stateCode=${encodeURIComponent(stateCode)}`,
+      `${await providerPath(t, "districts")}?stateCode=${encodeURIComponent(stateCode)}`,
     ),
-  bankIins: (t: string, providerCode: string, txnCode: AepsTxnCode, authType: AuthType) =>
+  bankIins: async (t: string, txnCode: AepsTxnCode, authType: AuthType) =>
     get<MasterItem[]>(
       t,
-      `${providerPath(providerCode)}/bank-iins?txnCode=${txnCode}&authType=${authType}`,
+      `${await providerPath(t, "bank-iins")}?txnCode=${txnCode}&authType=${authType}`,
     ),
   savedBanks: (t: string) => get<SavedBank[]>(t, "/identity/get-my-bank-accounts"),
   myKyc: (t: string) => get<KycProfile>(t, "/kyc/me"),
-  register: (t: string, providerCode: string, body: Record<string, string>) =>
-    post<TransactionResult>(t, `${providerPath(providerCode)}/onboarding/register`, body),
-  sendOtp: (t: string, providerCode: string, resend = false) =>
+  register: async (t: string, body: Record<string, string>) =>
+    post<TransactionResult>(t, await providerPath(t, "onboarding/register"), body),
+  sendOtp: async (t: string, resend = false) =>
     post<TransactionResult>(
       t,
-      `${providerPath(providerCode)}/onboarding/otp/${resend ? "resend" : "send"}`,
+      await providerPath(t, `onboarding/otp/${resend ? "resend" : "send"}`),
     ),
-  verifyOtp: (t: string, providerCode: string, otp: string) =>
-    post<TransactionResult>(t, `${providerPath(providerCode)}/onboarding/otp/verify`, { otp }),
-  ekyc: (t: string, providerCode: string, pidData: string) =>
-    post<TransactionResult>(t, `${providerPath(providerCode)}/onboarding/ekyc`, { pidData }),
+  verifyOtp: async (t: string, otp: string) =>
+    post<TransactionResult>(t, await providerPath(t, "onboarding/otp/verify"), { otp }),
+  ekyc: async (t: string, pidData: string) =>
+    post<TransactionResult>(t, await providerPath(t, "onboarding/ekyc"), { pidData }),
   twoFactor: (
     t: string,
-    providerCode: string,
     body: { aadhaarNumber: string; deviceType: string; pidData: string; lat: string; long: string },
+    idempotencyKey: string,
   ) =>
-    post<TransactionResult>(
-      t,
-      `${providerPath(providerCode)}/onboarding/2fa`,
-      body,
-      newIdempotencyKey(),
+    providerPath(t, "onboarding/2fa").then((path) =>
+      post<TransactionResult>(t, path, body, idempotencyKey),
     ),
-  transactionOtp: (
-    t: string,
-    providerCode: string,
-    operation: "CW" | "AP",
-    body: Record<string, string>,
-  ) =>
-    post<{ authRequestId: string; expiresAt: string; message?: string }>(
+  transactionOtp: async (t: string, operation: "CW" | "AP", body: Record<string, string>) =>
+    post<TransactionOtpResult>(
       t,
-      `${providerPath(providerCode)}/${operation === "CW" ? "cash-withdrawal" : "aadhaar-pay"}/otp`,
+      await providerPath(t, `${operation === "CW" ? "cash-withdrawal" : "aadhaar-pay"}/otp`),
       body,
     ),
   transact: (
     t: string,
-    providerCode: string,
     operation: AepsTxnCode,
     body: BiometricPayload & { amount?: string; authRequestId?: string },
     key?: string,
@@ -151,11 +197,8 @@ export const aepsApi = {
       AP: "aadhaar-pay",
       CD: "cash-deposit",
     } as const;
-    return post<TransactionResult>(
-      t,
-      `${providerPath(providerCode)}/${paths[operation]}`,
-      body,
-      key,
+    return providerPath(t, paths[operation]).then((path) =>
+      post<TransactionResult>(t, path, body, key),
     );
   },
 };
@@ -166,34 +209,45 @@ export function newIdempotencyKey(): string {
   return globalThis.crypto.randomUUID();
 }
 
-// actual code for the biometric capture is commented out because of testing
-// export async function capturePid(rdUrl: string, otp?: string): Promise<string> {
-//   const options = `<?xml version="1.0"?><PidOptions ver="1.0"><Opts fCount="1" fType="2" iCount="0" pCount="0" format="0" pidVer="2.0" timeout="10000" otp="${otp || ""}" env="P" wadh="" posh="UNKNOWN"/></PidOptions>`;
-//   const response = await fetch(rdUrl, { method: "CAPTURE", headers: { "Content-Type": "text/xml" }, body: options });
-//   const xml = await response.text();
-//   if (!response.ok || !xml.includes("<PidData")) throw new Error("RD capture failed. Check the device service and try again.");
-//   const error = xml.match(/errCode=["']([^"']+)["']/)?.[1];
-//   if (error && error !== "0") throw new Error(xml.match(/errInfo=["']([^"']*)["']/)?.[1] || `RD device error ${error}`);
-//   return xml;
-// }
-
-// ⚠️ DEV-ONLY MOCK — asli fingerprint scanner na hone par testing ke liye.
-// Isko production build se pehle wapas hatana/comment karna hai!
-const USE_MOCK_FINGERPRINT = true;
+// Mock PID is opt-in and development-only. Production always calls the configured RD service.
+export const USE_MOCK_FINGERPRINT =
+  import.meta.env.DEV && import.meta.env.VITE_AEPS_USE_MOCK_PID === "true";
 
 export async function capturePid(rdUrl: string, otp?: string): Promise<string> {
   if (USE_MOCK_FINGERPRINT) {
-    console.warn("⚠️ Using MOCK fingerprint data — real RD device call skipped.");
-    // return `<PidData><Resp errCode="0" errInfo="Success" fCount="1" fType="2" nmPoints="40" qScore="80"/><DeviceInfo dpId="TEST" rdsId="TEST" rdsVer="1.0" dc="TEST" mi="TEST" mc="TEST"/><Skey ci="20260901">TEST</Skey><Hmac>TEST</Hmac><Data type="X">TEST</Data></PidData>`
+    console.warn("Using development-only mock fingerprint data.");
     return '<PidData><Resp errCode="0" errInfo="Success" fCount="1" fType="2" nmPoints="40" qScore="80"/><DeviceInfo dpId="TEST" rdsId="TEST" rdsVer="1.0" dc="TEST" mi="TEST" mc="TEST"/><Skey ci="20260901">TEST</Skey><Hmac>TEST</Hmac><Data type="X">TEST</Data></PidData>';
   }
 
+  let endpoint: URL;
+  try {
+    endpoint = new URL(rdUrl);
+  } catch {
+    throw new Error("Enter a valid RD service capture URL.");
+  }
+  if (!["http:", "https:"].includes(endpoint.protocol))
+    throw new Error("RD service URL must use HTTP or HTTPS.");
+  if (otp && !/^\d{4,8}$/.test(otp)) throw new Error("RD provider OTP must contain 4 to 8 digits.");
   const options = `<?xml version="1.0"?><PidOptions ver="1.0"><Opts fCount="1" fType="2" iCount="0" pCount="0" format="0" pidVer="2.0" timeout="10000" otp="${otp || ""}" env="P" wadh="" posh="UNKNOWN"/></PidOptions>`;
-  const response = await fetch(rdUrl, {
-    method: "CAPTURE",
-    headers: { "Content-Type": "text/xml" },
-    body: options,
-  });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12_000);
+  let response: Response;
+  try {
+    response = await fetch(endpoint.toString(), {
+      method: "CAPTURE",
+      headers: { "Content-Type": "text/xml" },
+      body: options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError")
+      throw new Error("RD device capture timed out. Check the device and retry.");
+    throw new Error(
+      "Cannot connect to the RD service. Start the registered device service and confirm its capture URL.",
+    );
+  } finally {
+    window.clearTimeout(timeout);
+  }
   const xml = await response.text();
   if (!response.ok || !xml.includes("<PidData"))
     throw new Error("RD capture failed. Check the device service and try again.");
