@@ -162,12 +162,9 @@ export function AdminLayout({
             <Menu size={20} />
           </button>
           <img src={logo} alt="UMOBIPAY" className="h-9 w-auto" />
-          <div className="ml-auto hidden lg:block">
-            <WalletBalanceHeader identity={identity} role={actor?.role} />
-          </div>
           <button
             aria-label="Notifications"
-            className="ml-3 grid h-10 w-10 place-items-center rounded-xl border border-border"
+            className="ml-auto grid h-10 w-10 place-items-center rounded-xl border border-border"
           >
             <Bell size={18} />
           </button>
@@ -176,8 +173,10 @@ export function AdminLayout({
             <p className="text-[10px] text-muted-foreground">{actor?.role || "ADMIN"}</p>
           </div>
         </div>
-        <div className="border-t border-border/60 px-4 py-2 lg:hidden">
-          <WalletBalanceHeader identity={identity} role={actor?.role} />
+        <div className="border-t border-border/60 bg-[#f8fbfa] px-4 py-2 sm:px-7">
+          <div className="ml-auto w-full max-w-2xl">
+            <WalletBalanceHeader identity={identity} role={actor?.role} />
+          </div>
         </div>
       </header>
       <div className="flex min-h-[calc(100vh-74px)]">

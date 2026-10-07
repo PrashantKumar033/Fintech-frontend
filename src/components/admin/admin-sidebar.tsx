@@ -75,7 +75,7 @@ export function AdminSidebar({
 
   return (
     <aside
-      className={`${mobile ? "fixed inset-y-0 left-0 z-50 shadow-2xl" : "sticky top-[74px] hidden h-[calc(100vh-74px)] self-start lg:flex"} w-[278px] shrink-0 flex-col overflow-hidden border-r border-border bg-white p-5`}
+      className={`${mobile ? "fixed inset-y-0 left-0 z-50 shadow-2xl" : "sticky top-[143px] hidden h-[calc(100vh-143px)] self-start lg:flex"} w-[278px] shrink-0 flex-col overflow-hidden border-r border-border bg-white p-5`}
     >
       {mobile && (
         <button
