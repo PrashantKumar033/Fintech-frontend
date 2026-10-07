@@ -507,6 +507,7 @@ function TransactionTable({
         <tr>
           {[
             "Reference",
+            "Provider reference",
             "User",
             "Provider",
             "Amount",
@@ -526,6 +527,9 @@ function TransactionTable({
         {items.map((item) => (
           <tr key={item.referenceId} className="border-t">
             <td className="p-3 font-bold">{item.referenceId}</td>
+            <td className="p-3 font-mono text-[11px]">
+              {item.providerReference || item.providerTxnRefId || "—"}
+            </td>
             <td className="p-3">
               <p className="font-bold">{item.userLoginId || item.merchantRefId || "Unknown"}</p>
               <p className="mt-0.5 text-[10px] text-muted-foreground">

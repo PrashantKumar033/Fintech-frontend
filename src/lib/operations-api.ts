@@ -171,6 +171,7 @@ export type ProviderTransaction = {
   amount: string;
   status: ProviderTransactionStatus;
   providerMerchantRefId?: string | null;
+  providerReference?: string | null;
   providerTxnRefId?: string | null;
   rrn?: string | null;
   npciCode?: string | null;
@@ -204,6 +205,7 @@ export type ProviderTransactionReceipt = {
   status: ProviderTransactionStatus;
   statusDescription?: string | null;
   transactionReferenceId: string;
+  providerReference?: string | null;
   ackNo?: string | null;
   rrn?: string | null;
   clientRefNo?: string | null;
@@ -350,11 +352,14 @@ export const operationsApi = {
     ),
 
   transactionLedgerEntry: (token: string, referenceId: string) =>
-    authenticatedRequest<WalletLedgerEntry & { sequence: string; updatedAt: string; description?: string | null; externalReference?: string | null }>(
-      `/transaction-ledger/me/${encodeURIComponent(referenceId)}`,
-      { cache: "no-store" },
-      token,
-    ),
+    authenticatedRequest<
+      WalletLedgerEntry & {
+        sequence: string;
+        updatedAt: string;
+        description?: string | null;
+        externalReference?: string | null;
+      }
+    >(`/transaction-ledger/me/${encodeURIComponent(referenceId)}`, { cache: "no-store" }, token),
 
   transactionLedgerSummary: (token: string, filters: TransactionLedgerFilters = {}) =>
     authenticatedRequest<TransactionLedgerSummary>(
@@ -370,10 +375,7 @@ export const operationsApi = {
       token,
     ),
 
-  walletHolds: (
-    token: string,
-    filters: { status?: string; page?: number; limit?: number } = {},
-  ) =>
+  walletHolds: (token: string, filters: { status?: string; page?: number; limit?: number } = {}) =>
     authenticatedRequest<{
       page: number;
       limit: number;

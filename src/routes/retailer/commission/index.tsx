@@ -123,6 +123,7 @@ function CommissionPage() {
                 <tr>
                   {[
                     "Reference",
+                    "Provider reference",
                     "Operation",
                     "Transaction amount",
                     "Commission",
@@ -139,6 +140,9 @@ function CommissionPage() {
                 {rows.map((row) => (
                   <tr key={row.id || row.referenceId} className="border-t border-border">
                     <td className="px-5 py-4 font-bold text-primary">{row.referenceId}</td>
+                    <td className="px-5 py-4 font-mono text-[11px]">
+                      {row.providerReference || row.providerTxnRefId || "—"}
+                    </td>
                     <td className="px-5 py-4">{row.operation}</td>
                     <td className="px-5 py-4">{money(row.amount)}</td>
                     <td className="px-5 py-4 font-extrabold">{money(row.commissionAmount)}</td>

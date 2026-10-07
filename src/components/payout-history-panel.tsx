@@ -336,6 +336,7 @@ export function PayoutHistoryPanel() {
             <thead className="bg-muted text-[11px] uppercase text-muted-foreground">
               <tr>
                 <th className="p-3">Reference</th>
+                <th className="p-3">Provider reference</th>
                 <th className="p-3">Provider</th>
                 <th className="p-3">Bank</th>
                 <th className="p-3">Mode</th>
@@ -349,7 +350,7 @@ export function PayoutHistoryPanel() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="p-12 text-center">
+                  <td colSpan={10} className="p-12 text-center">
                     <LoaderCircle className="mx-auto animate-spin text-primary" />
                   </td>
                 </tr>
@@ -359,6 +360,7 @@ export function PayoutHistoryPanel() {
                     <td className="p-3 font-bold text-secondary" title={item.merchantRefId}>
                       {shortReference(item.merchantRefId)}
                     </td>
+                    <td className="p-3 font-mono text-xs">{item.providerReference || "—"}</td>
                     <td className="p-3">{item.providerCode}</td>
                     <td className="p-3">•••• {item.bankAccount.last4}</td>
                     <td className="p-3">
@@ -424,7 +426,7 @@ export function PayoutHistoryPanel() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={9} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={10} className="p-12 text-center text-muted-foreground">
                     <Search className="mx-auto mb-3" size={24} /> No payout settlements found.
                   </td>
                 </tr>

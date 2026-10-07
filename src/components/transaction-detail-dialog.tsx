@@ -24,6 +24,7 @@ const operationLabels: Record<string, string> = {
 
 const transactionFields: Array<{ key: keyof ProviderTransaction; label: string }> = [
   { key: "referenceId", label: "Transaction reference" },
+  { key: "providerReference", label: "Provider reference" },
   { key: "operation", label: "Service" },
   { key: "amount", label: "Amount" },
   { key: "status", label: "Status" },
@@ -41,6 +42,7 @@ const transactionFields: Array<{ key: keyof ProviderTransaction; label: string }
 const receiptFields: Array<{ key: keyof ProviderTransactionReceipt; label: string }> = [
   { key: "transactionTypeLabel", label: "Service" },
   { key: "transactionReferenceId", label: "Transaction reference" },
+  { key: "providerReference", label: "Provider reference" },
   { key: "status", label: "Status" },
   { key: "statusDescription", label: "Transaction result" },
   { key: "amount", label: "Amount" },
@@ -86,6 +88,7 @@ function transactionReceiptDocument(receipt: ProviderTransactionReceipt, autoPri
     ["Service", receipt.transactionTypeLabel, "transactionTypeLabel"],
     ["Provider", receipt.provider, "provider"],
     ["Transaction reference", receipt.transactionReferenceId, "transactionReferenceId"],
+    ["Provider reference", receipt.providerReference, "providerReference"],
     ["Bank reference (RRN)", receipt.rrn, "rrn"],
     ["Acknowledgement no.", receipt.ackNo, "ackNo"],
     ["Client reference", receipt.clientRefNo, "clientRefNo"],

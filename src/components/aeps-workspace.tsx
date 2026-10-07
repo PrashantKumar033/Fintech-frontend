@@ -1689,6 +1689,10 @@ function Receipt({ result, again }: { result: TransactionResult; again: () => vo
       <dl className="mt-5 grid gap-3 sm:grid-cols-2">
         {[
           ["Platform reference", result.transactionReferenceId],
+          [
+            "Provider reference",
+            result.providerReference ?? detail.providerReference ?? detail.providerTxnRefId,
+          ],
           ["Provider merchant reference", result.merchantRefId],
           ["Transaction type", result.transactionType],
           ["Amount", result.amount ? `₹${result.amount}` : undefined],

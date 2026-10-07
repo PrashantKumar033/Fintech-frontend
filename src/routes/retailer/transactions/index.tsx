@@ -84,7 +84,7 @@ function TransactionsPage() {
   const rows = useMemo(
     () =>
       (page?.data ?? []).filter((item) =>
-        `${item.referenceId} ${item.serviceType || "AEPS"} ${item.provider} ${item.operation} ${item.rrn ?? ""}`
+        `${item.referenceId} ${item.providerReference ?? item.providerTxnRefId ?? ""} ${item.serviceType || "AEPS"} ${item.provider} ${item.operation} ${item.rrn ?? ""}`
           .toLowerCase()
           .includes(query.toLowerCase()),
       ),
@@ -98,10 +98,11 @@ function TransactionsPage() {
     );
   function exportCsv() {
     const csv = [
-      "Reference,Service,Provider,Operation,Amount,Commission,Commission Status,Status,RRN,Created",
+      "Reference,Provider Reference,Service,Provider,Operation,Amount,Commission,Commission Status,Status,RRN,Created",
       ...rows.map((row) =>
         [
           row.referenceId,
+          row.providerReference ?? row.providerTxnRefId ?? "",
           row.serviceType || "AEPS",
           row.provider,
           row.operation,
@@ -143,7 +144,7 @@ function TransactionsPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search reference, provider or RRN"
+              placeholder="Search transaction/provider reference or RRN"
               className="w-full bg-transparent py-3 text-sm outline-none"
             />
           </label>
@@ -184,6 +185,7 @@ function TransactionsPage() {
                 <tr className="bg-muted text-[10px] uppercase text-muted-foreground">
                   {[
                     "Reference",
+                    "Provider reference",
                     "Service",
                     "Provider",
                     "Operation",
@@ -210,6 +212,9 @@ function TransactionsPage() {
                       >
                         {compactTransactionReference(row.referenceId)}
                       </button>
+                    </td>
+                    <td className="px-5 py-4 font-mono text-[11px]">
+                      {row.providerReference || row.providerTxnRefId || "—"}
                     </td>
                     <td className="px-5 py-4">{row.serviceType || "AEPS"}</td>
                     <td className="px-5 py-4">{row.provider}</td>

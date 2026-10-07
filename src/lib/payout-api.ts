@@ -34,6 +34,7 @@ export type PayoutWalletState =
 export type PayoutSettlement = {
   id: string;
   merchantRefId: string;
+  providerReference?: string | null;
   providerCode: string;
   status: PayoutSettlementStatus;
   walletState: PayoutWalletState;

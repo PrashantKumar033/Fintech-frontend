@@ -170,6 +170,7 @@ export function NetworkAepsTransactions({
               <tr className="border-b border-border text-xs uppercase text-muted-foreground">
                 <th className="p-3">Retailer / identity</th>
                 <th className="p-3">Reference</th>
+                <th className="p-3">Provider reference</th>
                 <th className="p-3">Operation</th>
                 <th className="p-3">Provider</th>
                 <th className="p-3">Amount</th>
@@ -200,6 +201,9 @@ export function NetworkAepsTransactions({
                     >
                       {row.referenceId}
                     </button>
+                  </td>
+                  <td className="p-3 font-mono text-xs">
+                    {row.providerReference || row.providerTxnRefId || "—"}
                   </td>
                   <td className="p-3">{operationLabels[row.operation] ?? row.operation}</td>
                   <td className="p-3">{row.provider}</td>

@@ -82,6 +82,7 @@ export type TransactionResult = {
   provider?: string;
   transactionType?: string;
   transactionReferenceId?: string;
+  providerReference?: string | null;
   profileId?: string;
   merchantRefId?: string;
   providerMerchantId?: string;
