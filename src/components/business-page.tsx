@@ -277,6 +277,9 @@ export function BusinessPage({
             <img src={logo} className="h-9" alt="UMOBIPAY" />
           </Link>
           <div className="ml-auto flex items-center gap-2">
+            <div className="hidden min-w-0 px-1 sm:px-3 lg:block">
+              <WalletBalanceHeader identity={identity} />
+            </div>
             <button
               type="button"
               onClick={() => setNotificationsOpen((open) => !open)}
@@ -331,11 +334,6 @@ export function BusinessPage({
             </Link>
           </div>
         </div>
-        <div className="border-t border-border/60 bg-muted/25 px-4 py-2 lg:px-6">
-          <div className="ml-auto w-full max-w-2xl">
-            <WalletBalanceHeader identity={identity} />
-          </div>
-        </div>
       </header>
       <div className="flex">
         {mobileMenuOpen && (
@@ -348,7 +346,7 @@ export function BusinessPage({
         )}
         <aside
           id="retailer-navigation"
-          className={`fixed inset-y-0 left-0 z-50 flex w-[min(18rem,86vw)] shrink-0 flex-col border-r border-border bg-card p-4 shadow-2xl transition-transform duration-200 lg:sticky lg:top-[133px] lg:z-20 lg:h-[calc(100vh-133px)] lg:w-72 lg:translate-x-0 lg:shadow-none ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
+          className={`fixed inset-y-0 left-0 z-50 flex w-[min(18rem,86vw)] shrink-0 flex-col border-r border-border bg-card p-4 shadow-2xl transition-transform duration-200 lg:sticky lg:top-16 lg:z-20 lg:h-[calc(100vh-4rem)] lg:w-72 lg:translate-x-0 lg:shadow-none ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
         >
           <div className="mb-4 flex items-center justify-between px-1 lg:hidden">
             <img src={logo} className="h-8" alt="UMOBIPAY" />
@@ -384,6 +382,9 @@ export function BusinessPage({
                 <span>{complianceMessage}</span>
               </div>
             )}
+          <div className="mb-4 lg:hidden">
+            <WalletBalanceHeader identity={identity} compact />
+          </div>
           <nav className="space-y-1 overflow-y-auto">
             {nav.map(({ key, active: itemActive, label, icon: Icon, to }) => {
               const selected = pathnameItem ? pathnameItem.key === key : active === itemActive;

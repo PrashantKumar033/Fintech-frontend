@@ -9,6 +9,7 @@ import {
 } from "@/lib/role-hierarchy";
 import { navigationForRole } from "@/lib/app-navigation";
 import { canAccessUiArea } from "@/lib/ui-permissions";
+import { WalletBalanceHeader } from "@/components/wallet-balance-header";
 
 export type AdminArea =
   | "dashboard"
@@ -75,7 +76,7 @@ export function AdminSidebar({
 
   return (
     <aside
-      className={`${mobile ? "fixed inset-y-0 left-0 z-50 shadow-2xl" : "sticky top-[143px] hidden h-[calc(100vh-143px)] self-start lg:flex"} w-[278px] shrink-0 flex-col overflow-hidden border-r border-border bg-white p-5`}
+      className={`${mobile ? "fixed inset-y-0 left-0 z-50 shadow-2xl" : "sticky top-[74px] hidden h-[calc(100vh-74px)] self-start lg:flex"} w-[278px] shrink-0 flex-col overflow-hidden border-r border-border bg-white p-5`}
     >
       {mobile && (
         <button
@@ -101,6 +102,11 @@ export function AdminSidebar({
         <div className="mt-4 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
           <Lock size={14} className="mt-0.5 shrink-0" />
           <span>{complianceMessage}</span>
+        </div>
+      ) : null}
+      {mobile ? (
+        <div className="mt-4">
+          <WalletBalanceHeader identity={identity} role={actor?.role} compact />
         </div>
       ) : null}
       <nav

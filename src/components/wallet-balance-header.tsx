@@ -29,7 +29,15 @@ function isSuperAdmin(role: string) {
   );
 }
 
-export function WalletBalanceHeader({ identity, role }: { identity?: Identity; role?: string }) {
+export function WalletBalanceHeader({
+  identity,
+  role,
+  compact = false,
+}: {
+  identity?: Identity;
+  role?: string;
+  compact?: boolean;
+}) {
   const walletRole = role || identity?.role || "";
   const superAdmin = isSuperAdmin(walletRole);
   const balanceQuery = useQuery({
@@ -47,19 +55,22 @@ export function WalletBalanceHeader({ identity, role }: { identity?: Identity; r
       label: "Main wallet",
       value: balances?.mainAvailable ?? balances?.main ?? identity?.mainWalletBalance,
       icon: Wallet,
-      tone: "border-emerald-200 bg-emerald-50/80 text-emerald-700",
+      cardClass: "border-emerald-200/80 bg-emerald-50/65 shadow-emerald-100/70",
+      iconClass: "bg-gradient-to-br from-emerald-500 to-teal-700 text-white",
     },
     {
       label: "AEPS wallet",
       value: balances?.aeps ?? identity?.aepsWalletBalance,
       icon: Fingerprint,
-      tone: "border-orange-200 bg-orange-50/80 text-orange-700",
+      cardClass: "border-orange-200/80 bg-orange-50/65 shadow-orange-100/70",
+      iconClass: "bg-gradient-to-br from-orange-400 to-orange-600 text-white",
     },
     {
       label: "Profit wallet",
       value: balances?.profit ?? identity?.profitWalletBalance,
       icon: CircleDollarSign,
-      tone: "border-violet-200 bg-violet-50/80 text-violet-700",
+      cardClass: "border-emerald-200/80 bg-emerald-50/65 shadow-emerald-100/70",
+      iconClass: "bg-gradient-to-br from-teal-500 to-teal-700 text-white",
     },
   ] as const;
 
@@ -72,21 +83,25 @@ export function WalletBalanceHeader({ identity, role }: { identity?: Identity; r
 
   return (
     <div
-      className="grid w-full min-w-0 grid-cols-3 gap-1.5 sm:gap-2"
+      className={`grid min-w-0 ${compact ? "grid-cols-1 gap-2" : "grid-cols-3 gap-1.5 sm:gap-2.5"}`}
       aria-label="Wallet balances"
       title={balanceQuery.isError ? "Wallet balances could not be refreshed" : undefined}
     >
-      {items.map(({ label, value, icon: Icon, tone }) => (
+      {items.map(({ label, value, icon: Icon, cardClass, iconClass }) => (
         <div
           key={label}
-          className={`flex min-h-[52px] min-w-0 items-center gap-2 rounded-xl border px-2.5 py-2 shadow-sm sm:px-3 ${tone}`}
+          className={`flex min-w-0 items-center gap-1.5 rounded-2xl border p-1.5 shadow-sm sm:gap-2 sm:pr-2 ${compact ? "w-full" : "sm:min-w-36"} ${cardClass}`}
         >
-          <Icon size={16} className="hidden shrink-0 sm:block" />
-          <div className="min-w-0">
-            <p className="truncate text-[8px] font-black uppercase tracking-wide sm:text-[9px]">
+          <span
+            className={`${compact ? "grid" : "hidden sm:grid"} h-9 w-9 shrink-0 place-items-center rounded-xl shadow-sm lg:h-10 lg:w-10 ${iconClass}`}
+          >
+            <Icon size={19} strokeWidth={2.1} />
+          </span>
+          <div className="min-w-0 flex-1 px-0.5">
+            <p className="truncate text-[7px] font-black uppercase tracking-[0.08em] text-muted-foreground sm:text-[8px] lg:text-[9px]">
               {label}
             </p>
-            <p className="truncate text-[11px] font-black tabular-nums text-secondary sm:text-sm">
+            <p className="truncate text-[10px] font-black tabular-nums text-secondary sm:text-xs lg:text-[15px]">
               {balanceText(value)}
             </p>
           </div>

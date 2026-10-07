@@ -162,20 +162,20 @@ export function AdminLayout({
             <Menu size={20} />
           </button>
           <img src={logo} alt="UMOBIPAY" className="h-9 w-auto" />
+          <div className="ml-auto hidden min-w-0 max-w-xl flex-1 px-2 sm:px-4 lg:block">
+            <div className="ml-auto w-fit">
+              <WalletBalanceHeader identity={identity} role={actor?.role} />
+            </div>
+          </div>
           <button
             aria-label="Notifications"
-            className="ml-auto grid h-10 w-10 place-items-center rounded-xl border border-border"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border"
           >
             <Bell size={18} />
           </button>
           <div className="ml-3 hidden rounded-xl border border-border px-4 py-2 sm:block">
             <p className="text-xs font-extrabold">{actor?.name || "Administrator"}</p>
             <p className="text-[10px] text-muted-foreground">{actor?.role || "ADMIN"}</p>
-          </div>
-        </div>
-        <div className="border-t border-border/60 bg-[#f8fbfa] px-4 py-2 sm:px-7">
-          <div className="ml-auto w-full max-w-2xl">
-            <WalletBalanceHeader identity={identity} role={actor?.role} />
           </div>
         </div>
       </header>
