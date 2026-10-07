@@ -20,6 +20,7 @@ import {
   capturePid,
   newIdempotencyKey,
   type AepsNextAction,
+  type AepsProvider,
   type AepsStatus,
   type AepsTxnCode,
   type AuthType,
@@ -33,7 +34,7 @@ import { BusinessPage } from "@/components/business-page";
 import { useServiceReadiness } from "@/lib/service-readiness";
 
 export const Route = createFileRoute("/aeps")({
-  head: () => ({ meta: [{ title: "VimoPay AEPS — UMOBIPAY" }] }),
+  head: () => ({ meta: [{ title: "AEPS — UMOBIPAY" }] }),
   component: AepsPage,
 });
 
@@ -51,6 +52,7 @@ const actionCopy: Record<AepsNextAction, string> = {
 function AepsPage() {
   const navigate = useNavigate();
   const [session, setSession] = useState<ReturnType<typeof getSession>>(null);
+  const [provider, setProvider] = useState<AepsProvider | null>(null);
   const [status, setStatus] = useState<AepsStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -61,7 +63,11 @@ function AepsPage() {
     setLoading(true);
     setError("");
     try {
-      setStatus(await aepsApi.status(current.accessToken));
+      const providers = await aepsApi.providers(current.accessToken);
+      const activeProvider = providers.find((item) => item.status === "AVAILABLE") ?? providers[0];
+      if (!activeProvider) throw new Error("No AEPS provider is currently available.");
+      setProvider(activeProvider);
+      setStatus(await aepsApi.status(current.accessToken, activeProvider.providerCode));
     } catch (e) {
       setError(messageOf(e));
     } finally {
@@ -81,11 +87,12 @@ function AepsPage() {
     if (readiness.isSuccess && !readiness.data.aepsUnlocked) navigate({ to: "/dashboard" });
   }, [navigate, readiness.data, readiness.isSuccess]);
   if (!session) return null;
+  const providerName = isSuperAdmin(session.identity.role) ? provider?.providerName : undefined;
   return (
     <BusinessPage
       identity={session.identity}
       active="aeps"
-      eyebrow="VimoPay"
+      eyebrow={providerName || "AEPS services"}
       title="Aadhaar Enabled Payment System"
       description="Merchant onboarding and Aadhaar-enabled transactions become available after approved KYC and a verified bank account."
     >
@@ -115,7 +122,7 @@ function AepsPage() {
             </p>
           </div>
           <span className="rounded-full bg-white/10 px-4 py-2 text-xs font-bold">
-            {status?.status || "CHECKING"}
+            {publicProviderText(status?.status || "CHECKING")}
           </span>
         </div>
       </div>
@@ -123,7 +130,15 @@ function AepsPage() {
       {loading ? (
         <Loading />
       ) : (
-        status && <AepsFlow token={session.accessToken} status={status} refresh={refresh} />
+        status &&
+        provider && (
+          <AepsFlow
+            token={session.accessToken}
+            providerCode={provider.providerCode}
+            status={status}
+            refresh={refresh}
+          />
+        )
       )}
     </BusinessPage>
   );
@@ -131,10 +146,12 @@ function AepsPage() {
 
 function AepsFlow({
   token,
+  providerCode,
   status,
   refresh,
 }: {
   token: string;
+  providerCode: string;
   status: AepsStatus;
   refresh: () => Promise<void>;
 }) {
@@ -144,25 +161,26 @@ function AepsFlow({
       return (
         <Registration
           token={token}
+          providerCode={providerCode}
           retry={status.nextAction === "RETRY_REGISTRATION"}
           done={refresh}
         />
       );
     case "OTP":
-      return <OnboardingOtp token={token} done={refresh} />;
+      return <OnboardingOtp token={token} providerCode={providerCode} done={refresh} />;
     case "EKYC":
       return (
         <BiometricStep
           title="Merchant e-KYC"
           description="Capture a fresh fingerprint using your registered RD device."
-          submit={(pidData) => aepsApi.ekyc(token, pidData)}
+          submit={(pidData) => aepsApi.ekyc(token, providerCode, pidData)}
           done={refresh}
         />
       );
     case "TWO_FACTOR_AUTH":
-      return <DailyTwoFactor token={token} done={refresh} />;
+      return <DailyTwoFactor token={token} providerCode={providerCode} done={refresh} />;
     case "AEPS_TRANSACTION":
-      return <TransactionWorkspace token={token} />;
+      return <TransactionWorkspace token={token} providerCode={providerCode} />;
     case "WAIT":
       return (
         <StateCard
@@ -178,7 +196,7 @@ function AepsFlow({
           icon={<ShieldAlert />}
           title="AEPS access needs support"
           text={
-            status.reason ||
+            publicProviderText(status.reason) ||
             "Transactions are disabled for this merchant profile. Please contact the service desk."
           }
         />
@@ -189,7 +207,7 @@ function AepsFlow({
 const emptyRegistration = {
   bankAccountId: "",
   kycProfileId: "",
-  vimopayBankCode: "",
+  bankCode: "",
   lat: "",
   long: "",
   firstName: "",
@@ -217,10 +235,12 @@ const emptyRegistration = {
 
 function Registration({
   token,
+  providerCode,
   retry,
   done,
 }: {
   token: string;
+  providerCode: string;
   retry: boolean;
   done: () => Promise<void>;
 }) {
@@ -238,8 +258,8 @@ function Registration({
   useEffect(() => {
     let active = true;
     Promise.allSettled([
-      aepsApi.banks(token),
-      aepsApi.states(token),
+      aepsApi.banks(token, providerCode),
+      aepsApi.states(token, providerCode),
       aepsApi.savedBanks(token),
       aepsApi.myKyc(token),
     ]).then((results) => {
@@ -247,7 +267,7 @@ function Registration({
       const [bankResult, stateResult, savedResult, kycResult] = results;
       const issues: string[] = [];
       if (bankResult.status === "fulfilled") setBanks(bankResult.value);
-      else issues.push(`VimoPay bank list: ${messageOf(bankResult.reason)}`);
+      else issues.push(`Registration bank list: ${messageOf(bankResult.reason)}`);
       if (stateResult.status === "fulfilled") setStates(stateResult.value);
       else issues.push(`State list: ${messageOf(stateResult.reason)}`);
       if (savedResult.status === "fulfilled") {
@@ -277,21 +297,21 @@ function Registration({
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [providerCode, token]);
   useEffect(() => {
     if (!form.merchantState) return;
     aepsApi
-      .districts(token, form.merchantState)
+      .districts(token, providerCode, form.merchantState)
       .then(setDistricts)
       .catch((e) => setError(messageOf(e)));
-  }, [form.merchantState, token]);
+  }, [form.merchantState, providerCode, token]);
   useEffect(() => {
     if (!form.shopState) return;
     aepsApi
-      .districts(token, form.shopState)
+      .districts(token, providerCode, form.shopState)
       .then(setShopDistricts)
       .catch((e) => setError(messageOf(e)));
-  }, [form.shopState, token]);
+  }, [form.shopState, providerCode, token]);
   const set = (name: keyof typeof form, value: string) => setForm((f) => ({ ...f, [name]: value }));
   const locate = () =>
     navigator.geolocation?.getCurrentPosition(
@@ -313,6 +333,7 @@ function Registration({
     try {
       await aepsApi.register(
         token,
+        providerCode,
         Object.fromEntries(Object.entries(form).filter(([, v]) => v !== "")),
       );
       await done();
@@ -340,14 +361,14 @@ function Registration({
   ];
   return (
     <Panel
-      title={retry ? "Retry VimoPay registration" : "Merchant registration"}
+      title={retry ? "Retry merchant registration" : "Merchant registration"}
       description="Use a verified bank account and approved KYC profile. Sensitive identity details stay only in this form until submission."
     >
       <form onSubmit={submit} className="space-y-6">
         {error && <Notice tone="error">{error}</Notice>}
         {loadingPrerequisites && (
           <Notice tone="info">
-            Checking approved KYC, verified bank accounts, and VimoPay master data…
+            Checking approved KYC, verified bank accounts, and AEPS master data…
           </Notice>
         )}
         {!loadingPrerequisites && prerequisiteErrors.length > 0 && (
@@ -376,10 +397,13 @@ function Registration({
             }))}
           />
           <SelectField
-            label="VimoPay registration bank"
-            value={form.vimopayBankCode}
-            onChange={(v) => set("vimopayBankCode", v)}
-            options={banks.map((b) => ({ value: b.code || "", label: b.description }))}
+            label="AEPS registration bank"
+            value={form.bankCode}
+            onChange={(v) => set("bankCode", v)}
+            options={banks.map((b) => ({
+              value: b.code || "",
+              label: publicProviderText(b.description),
+            }))}
           />
           {fields.map(([name, label, placeholder]) => (
             <Field
@@ -457,7 +481,15 @@ function Registration({
   );
 }
 
-function OnboardingOtp({ token, done }: { token: string; done: () => Promise<void> }) {
+function OnboardingOtp({
+  token,
+  providerCode,
+  done,
+}: {
+  token: string;
+  providerCode: string;
+  done: () => Promise<void>;
+}) {
   const [otp, setOtp] = useState(""),
     [sent, setSent] = useState(false),
     [busy, setBusy] = useState(false),
@@ -466,7 +498,7 @@ function OnboardingOtp({ token, done }: { token: string; done: () => Promise<voi
     setBusy(true);
     setError("");
     try {
-      await aepsApi.sendOtp(token, resend);
+      await aepsApi.sendOtp(token, providerCode, resend);
       setSent(true);
     } catch (e) {
       setError(messageOf(e));
@@ -479,7 +511,7 @@ function OnboardingOtp({ token, done }: { token: string; done: () => Promise<voi
     setBusy(true);
     setError("");
     try {
-      await aepsApi.verifyOtp(token, otp);
+      await aepsApi.verifyOtp(token, providerCode, otp);
       setOtp("");
       await done();
     } catch (x) {
@@ -571,7 +603,15 @@ function BiometricStep({
   );
 }
 
-function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<void> }) {
+function DailyTwoFactor({
+  token,
+  providerCode,
+  done,
+}: {
+  token: string;
+  providerCode: string;
+  done: () => Promise<void>;
+}) {
   const [aadhaar, setAadhaar] = useState(""),
     [lat, setLat] = useState(""),
     [long, setLong] = useState(""),
@@ -590,7 +630,7 @@ function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<vo
     setBusy(true);
     setError("");
     try {
-      await aepsApi.twoFactor(token, {
+      await aepsApi.twoFactor(token, providerCode, {
         aadhaarNumber: aadhaar,
         deviceType,
         pidData: pid,
@@ -609,7 +649,7 @@ function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<vo
   return (
     <Panel
       title="Daily merchant verification"
-      description="VimoPay requires one fresh biometric 2FA per India calendar day."
+      description="AEPS requires one fresh biometric verification per India calendar day."
     >
       <form onSubmit={submit} className="space-y-4">
         {error && <Notice tone="error">{error}</Notice>}
@@ -644,7 +684,7 @@ const services: Array<{
   { code: "CD", title: "Cash Deposit", icon: Landmark, financial: true },
 ];
 
-function TransactionWorkspace({ token }: { token: string }) {
+function TransactionWorkspace({ token, providerCode }: { token: string; providerCode: string }) {
   const [operation, setOperation] = useState<AepsTxnCode | null>(null),
     [result, setResult] = useState<TransactionResult | null>(null);
   if (result)
@@ -661,6 +701,7 @@ function TransactionWorkspace({ token }: { token: string }) {
     return (
       <TransactionForm
         token={token}
+        providerCode={providerCode}
         operation={operation}
         done={setResult}
         cancel={() => setOperation(null)}
@@ -700,11 +741,13 @@ function TransactionWorkspace({ token }: { token: string }) {
 
 function TransactionForm({
   token,
+  providerCode,
   operation,
   done,
   cancel,
 }: {
   token: string;
+  providerCode: string;
   operation: AepsTxnCode;
   done: (r: TransactionResult) => void;
   cancel: () => void;
@@ -731,10 +774,10 @@ function TransactionForm({
   const highValue = (operation === "CW" || operation === "AP") && Number(form.amount) > 5000;
   useEffect(() => {
     aepsApi
-      .bankIins(token, operation, authType)
+      .bankIins(token, providerCode, operation, authType)
       .then(setIins)
       .catch((e) => setError(messageOf(e)));
-  }, [authType, operation, token]);
+  }, [authType, operation, providerCode, token]);
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition((p) =>
       setForm((f) => ({ ...f, lat: String(p.coords.latitude), long: String(p.coords.longitude) })),
@@ -748,7 +791,7 @@ function TransactionForm({
     setBusy(true);
     setError("");
     try {
-      const a = await aepsApi.transactionOtp(token, operation as "CW" | "AP", {
+      const a = await aepsApi.transactionOtp(token, providerCode, operation as "CW" | "AP", {
         aadhaarNumber: form.aadhaarNumber,
         mobileNumber: form.mobileNumber,
         amount: form.amount,
@@ -782,7 +825,7 @@ function TransactionForm({
       };
       const key = service.financial ? intentKey || newIdempotencyKey() : undefined;
       if (key && !intentKey) setIntentKey(key);
-      done(await aepsApi.transact(token, operation, body, key));
+      done(await aepsApi.transact(token, providerCode, operation, body, key));
       setIntentKey("");
       setForm((f) => ({ ...f, aadhaarNumber: "", pidData: "" }));
       setOtp("");
@@ -975,7 +1018,12 @@ function Receipt({ result, again }: { result: TransactionResult; again: () => vo
         <CheckCircle2 className="mx-auto" size={42} />
         <p className="mt-3 text-sm font-bold">
           {String(
-            detail.statusDescription || detail.npciMessage || result.message || "Response received",
+            publicProviderText(
+              detail.statusDescription ||
+                detail.npciMessage ||
+                result.message ||
+                "Response received",
+            ),
           )}
         </p>
         {detail.availableBalance != null && (
@@ -1000,7 +1048,7 @@ function Receipt({ result, again }: { result: TransactionResult; again: () => vo
       </dl>
       {detail.transactionList != null && (
         <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-muted p-4 text-xs">
-          {String(detail.transactionList)}
+          {publicProviderText(detail.transactionList)}
         </pre>
       )}
       <button
@@ -1141,9 +1189,19 @@ function StateCard({
   );
 }
 function messageOf(error: unknown) {
-  return error instanceof ApiError || error instanceof Error
-    ? error.message
-    : "Something went wrong.";
+  const message =
+    error instanceof ApiError || error instanceof Error ? error.message : "Something went wrong.";
+  return publicProviderText(message);
+}
+function publicProviderText(value: unknown) {
+  return String(value || "");
+}
+function isSuperAdmin(role: string) {
+  const normalizedRole = role
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+  return normalizedRole === "SUPER_ADMIN" || normalizedRole === "SUPERADMIN";
 }
 function digits(value: string) {
   return value.replace(/\D/g, "");
@@ -1155,5 +1213,5 @@ function pan(name: keyof typeof emptyRegistration) {
   return name === "merchantPan" || name === "shopPan";
 }
 function masterOption(item: MasterItem) {
-  return { value: item.code || "", label: item.description };
+  return { value: item.code || "", label: publicProviderText(item.description) };
 }

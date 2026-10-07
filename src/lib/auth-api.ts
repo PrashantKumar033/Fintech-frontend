@@ -1,7 +1,7 @@
 const browserDefaultApiUrl =
   typeof window !== "undefined"
     ? `${window.location.protocol}//${window.location.hostname}:8000`
-    : "http://localhost:8000";
+    : "http://localhost:8081";
 
 const API_URL = (import.meta.env.VITE_API_URL || browserDefaultApiUrl).replace(/\/$/, "");
 
@@ -10,6 +10,7 @@ if (!/^https?:\/\//.test(API_URL)) {
 }
 
 export type LoginMethod = "PASSWORD" | "MPIN";
+export type WalletBalanceValue = number | string | null;
 export type Identity = {
   id: string;
   loginId: string;
@@ -22,6 +23,14 @@ export type Identity = {
   preferredLoginMethod: string;
   passwordChangedAt: Date | null;
   mpinChangedAt: Date | null;
+  mainWalletBalance?: WalletBalanceValue;
+  aepsWalletBalance?: WalletBalanceValue;
+  profitWalletBalance?: WalletBalanceValue;
+  walletBalances?: {
+    main?: WalletBalanceValue;
+    aeps?: WalletBalanceValue;
+    profit?: WalletBalanceValue;
+  };
 };
 export type RegistrationDetails = {
   draftId: string;

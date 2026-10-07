@@ -20,6 +20,7 @@ import type { LucideIcon } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { logout, type Identity } from "@/lib/auth-api";
 import { useServiceReadiness } from "@/lib/service-readiness";
+import { WalletBalanceHeader } from "@/components/wallet-balance-header";
 
 export function BusinessPage({
   identity,
@@ -37,7 +38,14 @@ export function BusinessPage({
   children: ReactNode;
 }) {
   const readiness = useServiceReadiness();
-  const nav: Array<{ key: string; label: string; to?: "/dashboard" | "/kyc" | "/bank-accounts" | "/aeps"; icon: LucideIcon; locked: boolean; status?: string }> = [
+  const nav: Array<{
+    key: string;
+    label: string;
+    to?: "/dashboard" | "/kyc" | "/bank-accounts" | "/aeps";
+    icon: LucideIcon;
+    locked: boolean;
+    status?: string;
+  }> = [
     {
       key: "dashboard",
       label: "Dashboard",
@@ -74,7 +82,7 @@ export function BusinessPage({
     { key: "reports", label: "Reports", icon: FileBarChart, locked: true },
     { key: "commission", label: "Commission", icon: CircleDollarSign, locked: true },
     { key: "settings", label: "Settings", to: "/dashboard", icon: Settings, locked: false },
-  ];
+  ].filter(({ key }) => key !== "reports" || identity.role.trim().toUpperCase() !== "RETAILER");
   async function signOut() {
     await logout();
     window.location.assign("/login");
@@ -86,7 +94,8 @@ export function BusinessPage({
           <Link to="/dashboard">
             <img src={logo} className="h-9" alt="UMOBIPAY" />
           </Link>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto hidden items-center gap-2 lg:flex">
+            <WalletBalanceHeader identity={identity} />
             <button
               className="relative grid h-10 w-10 place-items-center rounded-xl border border-border bg-background text-secondary"
               aria-label="Notifications"
@@ -104,6 +113,9 @@ export function BusinessPage({
               </div>
             </div>
           </div>
+        </div>
+        <div className="border-t border-border/60 px-5 py-2 lg:hidden">
+          <WalletBalanceHeader identity={identity} />
         </div>
       </header>
       <div className="flex">
@@ -123,7 +135,7 @@ export function BusinessPage({
             </div>
           </div>
           <nav className="space-y-1 overflow-y-auto">
-          {nav.map(({ key, label, icon: Icon, locked, status, to }) =>
+            {nav.map(({ key, label, icon: Icon, locked, status, to }) =>
               locked ? (
                 <div
                   key={key}
@@ -141,7 +153,7 @@ export function BusinessPage({
               ) : (
                 <Link
                   key={key}
-                to={to!}
+                  to={to!}
                   className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active === key ? "bg-primary text-white shadow-sm" : "text-secondary hover:bg-mint"}`}
                 >
                   <Icon size={17} />

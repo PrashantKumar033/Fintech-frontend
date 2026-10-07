@@ -55,6 +55,7 @@ import {
   type Identity,
 } from "@/lib/auth-api";
 import { useServiceReadiness } from "@/lib/service-readiness";
+import { WalletBalanceHeader } from "@/components/wallet-balance-header";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Business Dashboard — UMOBIPAY" }] }),
@@ -175,7 +176,8 @@ function DashboardPage() {
             <Menu size={19} />
           </button>
           <img src={logo} alt="UMOBIPAY" className="h-9 w-auto" />
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto hidden items-center gap-2 lg:flex">
+            <WalletBalanceHeader identity={session.identity} />
             <button
               className="relative grid h-10 w-10 place-items-center rounded-xl border border-border bg-background text-secondary"
               aria-label="Notifications"
@@ -197,6 +199,9 @@ function DashboardPage() {
               </div>
             </div>
           </div>
+        </div>
+        <div className="border-t border-border/60 px-4 py-2 lg:hidden">
+          <WalletBalanceHeader identity={session.identity} />
         </div>
       </header>
       <div className="flex">
@@ -231,31 +236,36 @@ function DashboardPage() {
             </div>
           </div>
           <nav className="space-y-1">
-            {navItems.map(([label, Icon, target]) => {
-              const disabled =
-                !target || locked || (target === "/aeps" && !readiness.data?.aepsUnlocked);
-              return (
-                <button
-                  key={label}
-                  disabled={disabled}
-                  title={
-                    target === "/aeps" && disabled && !locked
-                      ? "Complete approved KYC and verify a bank account first"
-                      : undefined
-                  }
-                  onClick={() => {
-                    if (target?.startsWith("/")) window.location.assign(target);
-                    else if (target) setView(target as View);
-                    setMobileMenu(false);
-                  }}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${target === view ? "bg-primary text-primary-foreground shadow-sm" : disabled ? "text-muted-foreground/55" : "text-secondary hover:bg-mint"}`}
-                >
-                  <Icon size={17} />
-                  <span>{label}</span>
-                  {disabled && <Lock size={12} className="ml-auto" />}
-                </button>
-              );
-            })}
+            {navItems
+              .filter(
+                ([label]) =>
+                  label !== "Reports" || session.identity.role.trim().toUpperCase() !== "RETAILER",
+              )
+              .map(([label, Icon, target]) => {
+                const disabled =
+                  !target || locked || (target === "/aeps" && !readiness.data?.aepsUnlocked);
+                return (
+                  <button
+                    key={label}
+                    disabled={disabled}
+                    title={
+                      target === "/aeps" && disabled && !locked
+                        ? "Complete approved KYC and verify a bank account first"
+                        : undefined
+                    }
+                    onClick={() => {
+                      if (target?.startsWith("/")) window.location.assign(target);
+                      else if (target) setView(target as View);
+                      setMobileMenu(false);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${target === view ? "bg-primary text-primary-foreground shadow-sm" : disabled ? "text-muted-foreground/55" : "text-secondary hover:bg-mint"}`}
+                  >
+                    <Icon size={17} />
+                    <span>{label}</span>
+                    {disabled && <Lock size={12} className="ml-auto" />}
+                  </button>
+                );
+              })}
           </nav>
           <button
             onClick={signOut}
@@ -307,11 +317,6 @@ function DashboardHome({ identity }: { identity: Identity }) {
               workspace.
             </p>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <HeroMetric label="Main wallet" value="₹0.00" />
-            <HeroMetric label="AEPS wallet" value="₹0.00" />
-            <HeroMetric label="Profit" value="₹0.00" />
-          </div>
         </div>
       </section>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -344,14 +349,6 @@ function DashboardHome({ identity }: { identity: Identity }) {
           Contact service desk
         </button>
       </section>
-    </div>
-  );
-}
-function HeroMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-24 rounded-2xl border border-white/10 bg-white/10 p-3 backdrop-blur">
-      <p className="text-[10px] uppercase tracking-wider text-white/55">{label}</p>
-      <p className="mt-1 text-lg font-extrabold">{value}</p>
     </div>
   );
 }
