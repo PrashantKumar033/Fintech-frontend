@@ -111,7 +111,6 @@ const retailerSectionTabs: Partial<
       href: "/retailer/reports",
       permission: UI_PERMISSION.WALLET_TRANSACTION_VIEW,
     },
-    { label: "Account Activity", href: "/activity" },
   ],
   commission: [
     { label: "Commission summary", href: "/retailer/commission", area: "earnings" },

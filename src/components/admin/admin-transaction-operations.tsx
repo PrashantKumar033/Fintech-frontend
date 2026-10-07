@@ -65,7 +65,7 @@ export function AdminTransactionOperations() {
   const [reverseTarget, setReverseTarget] = useState<AdminProviderTransaction | null>(null);
   const [reason, setReason] = useState("");
   const [incomeTarget, setIncomeTarget] = useState<AdminProviderTransaction | null>(null);
-  const [income, setIncome] = useState<ProviderIncomeInput>({ incomeSource: "VIMOPAY_WALLET" });
+  const [income, setIncome] = useState<ProviderIncomeInput>({ incomeSource: "PROVIDER_WALLET" });
 
   const [reversalDetail, setReversalDetail] = useState<ProviderReversalDetail | null>(null);
   const [reversalDetailLoading, setReversalDetailLoading] = useState(false);
@@ -456,8 +456,8 @@ export function AdminTransactionOperations() {
               }
               className={inputClass}
             >
-              <option value="VIMOPAY_WALLET">VIMOPAY WALLET</option>
-              <option value="VIMOPAY_MS">VIMOPAY MS</option>
+              <option value="PROVIDER_WALLET">PROVIDER WALLET</option>
+              <option value="PROVIDER_MS">PROVIDER MS</option>
             </select>
             <input
               value={income.externalReference ?? ""}

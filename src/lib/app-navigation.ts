@@ -261,15 +261,6 @@ export const APP_NAVIGATION: readonly AppNavigationItem[] = [
     },
   },
   {
-    key: "activity",
-    active: "activity",
-    label: "Account activity",
-    destinations: { RETAILER: "/activity" },
-    area: "activity",
-    icon: FileBarChart,
-    order: { RETAILER: 80 },
-  },
-  {
     key: "access",
     active: "access",
     label: "Roles & access",

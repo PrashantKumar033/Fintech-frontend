@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { Bell, Menu, Search, WalletCards } from "lucide-react";
+import { Bell, Menu } from "lucide-react";
 import logo from "@/assets/logo.png";
-import { adminApi, getAdminActor, getAdminSession } from "@/lib/admin-api";
+import { getAdminActor, getAdminSession } from "@/lib/admin-api";
 import { getSession } from "@/lib/auth-api";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { PermissionBoundary } from "@/components/permission-boundary";
@@ -19,6 +19,7 @@ import { AdminSidebar, type AdminArea } from "./admin-sidebar";
 import { SectionTabs } from "@/components/section-tabs";
 import { managementSectionTabs } from "@/lib/management-section-tabs";
 import { useServiceReadiness } from "@/lib/service-readiness";
+import { WalletBalanceHeader } from "@/components/wallet-balance-header";
 
 // Child admin routes currently own their page metadata and therefore mount the
 // shell component independently. Remember a successful client-side guard pass
@@ -42,7 +43,6 @@ export function AdminLayout({
 }) {
   const [ready, setReady] = useState(adminWorkspaceReady);
   const [menu, setMenu] = useState(false);
-  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const pathname = useLocation({ select: (location) => location.pathname });
   const actor = getAdminActor();
   const identity = actor?.kind === "IDENTITY_ADMIN" ? getSession()?.identity : undefined;
@@ -109,24 +109,6 @@ export function AdminLayout({
     };
   }, [menu]);
 
-  useEffect(() => {
-    if (actor?.kind !== "SUPER_ADMIN") return;
-    let activeRequest = true;
-    adminApi.operations
-      .walletBalances()
-      .then((result) => {
-        if (activeRequest) {
-          setWalletBalance(Number(result.wallets.mainAvailable ?? result.wallets.main ?? 0));
-        }
-      })
-      .catch(() => {
-        if (activeRequest) setWalletBalance(null);
-      });
-    return () => {
-      activeRequest = false;
-    };
-  }, [actor?.kind]);
-
   if (!ready)
     return (
       <div className="grid min-h-screen place-items-center bg-[#f3f8f6] text-sm font-bold text-secondary">
@@ -170,50 +152,32 @@ export function AdminLayout({
 
   return (
     <div className="min-h-screen bg-[#f3f8f6] text-secondary">
-      <header className="sticky top-0 z-40 flex h-[74px] items-center border-b border-border bg-white px-4 sm:px-7">
-        <button
-          onClick={() => setMenu(true)}
-          aria-label="Open admin menu"
-          className="mr-3 grid h-10 w-10 place-items-center rounded-xl border border-border lg:hidden"
-        >
-          <Menu size={20} />
-        </button>
-        <img src={logo} alt="UMOBIPAY" className="h-9 w-auto" />
-        {actor?.kind === "SUPER_ADMIN" ? (
-          <div className="ml-auto hidden min-w-44 items-center gap-3 rounded-xl border border-border bg-[#edf8f4] px-4 py-2 md:flex">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-white text-primary shadow-sm">
-              <WalletCards size={17} />
-            </span>
-            <span>
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                Wallet balance
-              </span>
-              <span className="block text-sm font-black text-secondary">
-                {walletBalance === null
-                  ? "Unavailable"
-                  : new Intl.NumberFormat("en-IN", {
-                      style: "currency",
-                      currency: "INR",
-                      minimumFractionDigits: 2,
-                    }).format(walletBalance)}
-              </span>
-            </span>
+      <header className="sticky top-0 z-40 border-b border-border bg-white">
+        <div className="flex h-[74px] items-center px-4 sm:px-7">
+          <button
+            onClick={() => setMenu(true)}
+            aria-label="Open admin menu"
+            className="mr-3 grid h-10 w-10 place-items-center rounded-xl border border-border lg:hidden"
+          >
+            <Menu size={20} />
+          </button>
+          <img src={logo} alt="UMOBIPAY" className="h-9 w-auto" />
+          <div className="ml-auto hidden lg:block">
+            <WalletBalanceHeader identity={identity} role={actor?.role} />
           </div>
-        ) : (
-          <div className="ml-auto hidden w-72 items-center gap-2 rounded-xl bg-muted px-3 py-2.5 text-muted-foreground md:flex">
-            <Search size={17} />
-            <span className="text-xs">Search operations</span>
+          <button
+            aria-label="Notifications"
+            className="ml-3 grid h-10 w-10 place-items-center rounded-xl border border-border"
+          >
+            <Bell size={18} />
+          </button>
+          <div className="ml-3 hidden rounded-xl border border-border px-4 py-2 sm:block">
+            <p className="text-xs font-extrabold">{actor?.name || "Administrator"}</p>
+            <p className="text-[10px] text-muted-foreground">{actor?.role || "ADMIN"}</p>
           </div>
-        )}
-        <button
-          aria-label="Notifications"
-          className="ml-3 grid h-10 w-10 place-items-center rounded-xl border border-border"
-        >
-          <Bell size={18} />
-        </button>
-        <div className="ml-3 hidden rounded-xl border border-border px-4 py-2 sm:block">
-          <p className="text-xs font-extrabold">{actor?.name || "Administrator"}</p>
-          <p className="text-[10px] text-muted-foreground">{actor?.role || "ADMIN"}</p>
+        </div>
+        <div className="border-t border-border/60 px-4 py-2 lg:hidden">
+          <WalletBalanceHeader identity={identity} role={actor?.role} />
         </div>
       </header>
       <div className="flex min-h-[calc(100vh-74px)]">

@@ -5,7 +5,7 @@ export const Route = createFileRoute("/retailer/aeps/")({
   validateSearch: (search: Record<string, unknown>) => ({
     service: typeof search.service === "string" ? search.service : undefined,
   }),
-  head: () => ({ meta: [{ title: "VimoPay AEPS — UMOBIPAY" }] }),
+  head: () => ({ meta: [{ title: "AEPS — UMOBIPAY" }] }),
   component: RetailerAepsPage,
 });
 

@@ -25,7 +25,7 @@ function SuperAdminAepsPage() {
       active="aeps"
       eyebrow="Assisted banking"
       title="AEPS management"
-      description="Monitor merchants and transactions, reconcile provider activity and manage VimoPay service availability."
+      description="Monitor merchants and transactions, reconcile provider activity and manage AEPS service availability."
     >
       <div className="mb-5 flex w-fit gap-1 rounded-2xl border border-border bg-white p-1">
         <button
@@ -128,7 +128,7 @@ function AepsOverviewPanel() {
             <input
               value={provider}
               onChange={(e) => setProvider(e.target.value)}
-              placeholder="e.g. VIMOPAY"
+              placeholder="e.g. PROVIDER_1"
               className="mt-1 block w-40 rounded-xl border border-border px-3 py-2 text-sm font-normal normal-case outline-none focus:border-primary"
             />
           </label>
@@ -318,7 +318,7 @@ function AepsManagePanel() {
     },
     {
       title: "Provider controls",
-      description: "Check VimoPay availability and control individual AEPS operations.",
+      description: "Check provider availability and control individual AEPS operations.",
       to: "/admin/api-settings",
       icon: Settings2,
     },

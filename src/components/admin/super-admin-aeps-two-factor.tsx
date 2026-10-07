@@ -17,8 +17,10 @@ const actions: ReconciliationAction[] = [
 ];
 const messageOf = (error: unknown) =>
   error instanceof Error ? error.message : "The AEPS 2FA request could not be completed.";
+const DEFAULT_PROVIDER = "PROVIDER_1";
 
 export function SuperAdminAepsTwoFactor() {
+  const [provider, setProvider] = useState(DEFAULT_PROVIDER);
   const [fee, setFee] = useState("");
   const [feeReason, setFeeReason] = useState("");
   const [items, setItems] = useState<AepsTwoFactorReconciliationItem[]>([]);
@@ -42,14 +44,24 @@ export function SuperAdminAepsTwoFactor() {
       setLoading(true);
       setError("");
       try {
+        const providerCode = await adminApi.operations
+          .aepsProviderStatus()
+          .then((providerStatus) => {
+            const activeProvider =
+              providerStatus.providers.find((item) => item.status !== "DISABLED") ||
+              providerStatus.providers[0];
+            return activeProvider?.provider || DEFAULT_PROVIDER;
+          })
+          .catch(() => DEFAULT_PROVIDER);
+        setProvider(providerCode);
         const query = new URLSearchParams({
-          provider: "VIMOPAY",
+          provider: providerCode,
           page: String(targetPage),
           limit: "20",
         });
         if (identityId.trim()) query.set("identityId", identityId.trim());
         const [configuration, queue] = await Promise.all([
-          adminApi.superAdminAeps.twoFactorFee("VIMOPAY"),
+          adminApi.superAdminAeps.twoFactorFee(providerCode),
           adminApi.superAdminAeps.twoFactorReconciliation(query.toString()),
         ]);
         setFee(String(configuration.feeAmount ?? ""));
@@ -77,9 +89,9 @@ export function SuperAdminAepsTwoFactor() {
     setBusy(true);
     setError("");
     try {
-      await adminApi.superAdminAeps.updateTwoFactorFee("VIMOPAY", amount, feeReason.trim());
+      await adminApi.superAdminAeps.updateTwoFactorFee(provider, amount, feeReason.trim());
       setFeeReason("");
-      setNotice("VimoPay 2FA fee configuration updated.");
+      setNotice(`${provider} 2FA fee configuration updated.`);
       await load(page);
     } catch (value) {
       setError(messageOf(value));
@@ -134,7 +146,7 @@ export function SuperAdminAepsTwoFactor() {
             <Settings2 size={20} />
           </span>
           <div>
-            <h2 className="text-xl font-black">VimoPay daily 2FA fee</h2>
+            <h2 className="text-xl font-black">{provider} daily 2FA fee</h2>
             <p className="text-sm text-muted-foreground">
               Audited fee configuration used by the backend 2FA flow.
             </p>

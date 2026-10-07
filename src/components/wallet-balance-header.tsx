@@ -2,6 +2,7 @@ import { CircleDollarSign, Fingerprint, Wallet } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import type { Identity, WalletBalanceValue } from "@/lib/auth-api";
 import { walletApi } from "@/lib/wallet-api";
+import { adminApi } from "@/lib/admin-api";
 
 const currency = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -19,29 +20,42 @@ function formatBalance(value: WalletBalanceValue | undefined) {
   return "—";
 }
 
-export function WalletBalanceHeader({ identity }: { identity: Identity }) {
+function isSuperAdmin(role: string) {
+  return (
+    role
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]+/g, "_") === "SUPER_ADMIN"
+  );
+}
+
+export function WalletBalanceHeader({ identity, role }: { identity?: Identity; role?: string }) {
+  const walletRole = role || identity?.role || "";
+  const superAdmin = isSuperAdmin(walletRole);
   const balanceQuery = useQuery({
-    queryKey: ["wallet-balances", identity.id, identity.role],
-    queryFn: () => walletApi.getBalances(identity.role),
+    queryKey: ["wallet-balances", identity?.id || "super-admin", walletRole],
+    queryFn: () =>
+      superAdmin ? adminApi.operations.walletBalances() : walletApi.getBalances(walletRole),
+    enabled: Boolean(walletRole),
     staleTime: 15_000,
     refetchInterval: 30_000,
     retry: 1,
   });
-  const balances = balanceQuery.data?.wallets ?? identity.walletBalances;
+  const balances = balanceQuery.data?.wallets ?? identity?.walletBalances;
   const items = [
     {
       label: "Main wallet",
-      value: balances?.main ?? identity.mainWalletBalance,
+      value: balances?.mainAvailable ?? balances?.main ?? identity?.mainWalletBalance,
       icon: Wallet,
     },
     {
       label: "AEPS wallet",
-      value: balances?.aeps ?? identity.aepsWalletBalance,
+      value: balances?.aeps ?? identity?.aepsWalletBalance,
       icon: Fingerprint,
     },
     {
       label: "Profit wallet",
-      value: balances?.profit ?? identity.profitWalletBalance,
+      value: balances?.profit ?? identity?.profitWalletBalance,
       icon: CircleDollarSign,
     },
   ] as const;

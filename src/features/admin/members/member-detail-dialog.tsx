@@ -166,7 +166,10 @@ export function MemberDetailDialog({
           <Section icon={ShieldCheck} title="AEPS merchant">
             <Details
               rows={[
-                ["Provider", text(aeps?.provider, "VIMOPAY")],
+                [
+                  privileged ? "Provider" : "Service",
+                  privileged ? text(aeps?.provider, "PROVIDER_1") : "AEPS",
+                ],
                 ["Merchant ID", text(aeps?.providerMerchantId)],
                 ["Status", <Status key="aeps-status" value={text(aeps?.status, "NOT STARTED")} />],
                 ["Onboarding step", formatLabel(aeps?.onboardingStep)],
@@ -213,8 +216,8 @@ export function MemberDetailDialog({
                 </div>
                 {!canActivateAeps ? (
                   <p className="mt-2 text-xs font-semibold text-amber-700">
-                    Activation is unavailable until VimoPay returns a Merchant ID and the member
-                    completes OTP and e-KYC onboarding.
+                    Activation is unavailable until the provider returns a Merchant ID and the
+                    member completes OTP and e-KYC onboarding.
                   </p>
                 ) : null}
               </div>

@@ -391,7 +391,7 @@ export function AepsWorkspace({ requestedService }: { requestedService?: AepsTxn
     return (
       <AdminLayout
         active="aeps"
-        eyebrow="VimoPay"
+        eyebrow="AEPS"
         title="Aadhaar Enabled Payment System"
         description={pageDescription}
       >
@@ -403,7 +403,7 @@ export function AepsWorkspace({ requestedService }: { requestedService?: AepsTxn
     <BusinessPage
       identity={session.identity}
       active="aeps"
-      eyebrow="VimoPay"
+      eyebrow="AEPS"
       title="Aadhaar Enabled Payment System"
       description={pageDescription}
     >
@@ -439,7 +439,7 @@ function AepsFlow({
       <ActionPermissionNotice
         permission={access.missingOnboardingPermissions.join(", ")}
         title="AEPS onboarding is not enabled"
-        text="Ask the Super Admin to assign the AEPS onboarding and VimoPay master-data permissions to your active package."
+        text="Ask the Super Admin to assign the AEPS onboarding and provider master-data permissions to your active package."
       />
     );
   }
@@ -473,7 +473,7 @@ function AepsFlow({
           <StateCard
             icon={<Loader2 className="animate-spin" />}
             title="Waiting for AEPS activation"
-            text="VimoPay onboarding is complete, but transaction activation has not been confirmed yet. Refresh the status before starting a transaction."
+            text="Provider onboarding is complete, but transaction activation has not been confirmed yet. Refresh the status before starting a transaction."
             action={refresh}
           />
         );
@@ -507,7 +507,7 @@ function AepsFlow({
 const emptyRegistration = {
   bankAccountId: "",
   kycProfileId: "",
-  vimopayBankCode: "",
+  providerBankCode: "",
   lat: "",
   long: "",
   firstName: "",
@@ -544,7 +544,7 @@ function validateRegistration(form: typeof emptyRegistration): RegistrationError
   const errors: RegistrationErrors = {};
   const requiredFields: RegistrationField[] = [
     "bankAccountId",
-    "vimopayBankCode",
+    "providerBankCode",
     "lat",
     "long",
     "firstName",
@@ -641,7 +641,7 @@ function Registration({
       const [bankResult, stateResult, savedResult, kycResult] = results;
       const issues: string[] = [];
       if (bankResult.status === "fulfilled") setBanks(bankResult.value);
-      else issues.push(`VimoPay bank list: ${messageOf(bankResult.reason)}`);
+      else issues.push(`Provider bank list: ${messageOf(bankResult.reason)}`);
       if (stateResult.status === "fulfilled") setStates(stateResult.value);
       else issues.push(`State list: ${messageOf(stateResult.reason)}`);
       if (savedResult.status === "fulfilled") {
@@ -770,7 +770,7 @@ function Registration({
     } catch (x) {
       const message = messageOf(x);
       setError(message);
-      if (isVimopayMerchantOwnershipConflict(message)) {
+      if (isProviderMerchantOwnershipConflict(message)) {
         try {
           await done();
         } catch {
@@ -800,14 +800,14 @@ function Registration({
   ];
   return (
     <Panel
-      title={retry ? "Retry VimoPay registration" : "Merchant registration"}
+      title={retry ? "Retry provider registration" : "Merchant registration"}
       description="Use a verified bank account and approved KYC profile. Sensitive identity details stay only in this form until submission."
     >
       <form onSubmit={submit} noValidate className="space-y-6">
         {error && <Notice tone="error">{error}</Notice>}
         {loadingPrerequisites && (
           <Notice tone="info">
-            Checking approved KYC, verified bank accounts, and VimoPay master data…
+            Checking approved KYC, verified bank accounts, and provider master data…
           </Notice>
         )}
         {!loadingPrerequisites && prerequisiteErrors.length > 0 && (
@@ -856,11 +856,11 @@ function Registration({
             }))}
           />
           <SelectField
-            label="VimoPay registration bank"
-            value={form.vimopayBankCode}
-            onChange={(v) => set("vimopayBankCode", v)}
-            fieldId="aeps-vimopayBankCode"
-            error={fieldErrors.vimopayBankCode}
+            label="Provider registration bank"
+            value={form.providerBankCode}
+            onChange={(v) => set("providerBankCode", v)}
+            fieldId="aeps-providerBankCode"
+            error={fieldErrors.providerBankCode}
             options={banks.map((b) => ({ value: b.code || "", label: b.description }))}
           />
           {fields.map(([name, label, placeholder]) => (
@@ -1017,7 +1017,7 @@ function OnboardingOtp({
         >
           <p className="text-xs font-black uppercase text-muted-foreground">1. Send OTP</p>
           <p className="mt-1 text-sm font-bold text-secondary">
-            {sent ? "OTP request sent successfully" : "Request an OTP from VimoPay"}
+            {sent ? "OTP request sent successfully" : "Request an OTP from provider"}
           </p>
         </div>
         <div
@@ -1166,7 +1166,7 @@ function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<vo
   return (
     <Panel
       title="Daily merchant verification"
-      description="VimoPay requires one fresh biometric 2FA per India calendar day."
+      description="The AEPS provider requires one fresh biometric 2FA per India calendar day."
     >
       <form onSubmit={submit} className="space-y-4">
         {error && <Notice tone="error">{error}</Notice>}
@@ -1396,7 +1396,7 @@ function TransactionForm({
         const message = messageOf(e);
         setError(
           /no template found/i.test(message)
-            ? `${service.title} is not configured for this VimoPay account. Ask the administrator or provider to enable its transaction template.`
+            ? `${service.title} is not configured for this provider account. Ask the administrator or provider to enable its transaction template.`
             : message,
         );
       });
@@ -1951,14 +1951,14 @@ function messageOf(error: unknown) {
     message.includes("aepsMerchantProfile.update") ||
     message.includes("AEPS_PROVIDER_MERCHANT_ALREADY_LINKED")
   ) {
-    return "This VimoPay merchant ID is already linked to another account. Please contact support with your registered mobile number; repeated submission will not fix it.";
+    return "This provider merchant ID is already linked to another account. Please contact support with your registered mobile number; repeated submission will not fix it.";
   }
   if (message === "Internal server error") {
     return "AEPS registration could not be completed right now. Please try once more; if it continues, contact support.";
   }
   return message;
 }
-function isVimopayMerchantOwnershipConflict(message: string) {
+function isProviderMerchantOwnershipConflict(message: string) {
   const normalized = message.toLowerCase();
   return (
     normalized.includes("merchant id") &&

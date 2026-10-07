@@ -206,7 +206,7 @@ export type ReversalRequestResult = Record<string, unknown> & {
 };
 export type ProviderIncomeInput = {
   providerIncomeAmount?: number;
-  incomeSource?: "VIMOPAY_WALLET" | "VIMOPAY_MS";
+  incomeSource?: "PROVIDER_WALLET" | "PROVIDER_MS";
   externalReference?: string;
 };
 export type ProviderReversal = {
