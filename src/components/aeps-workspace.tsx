@@ -1158,7 +1158,7 @@ function DailyTwoFactor({
       return;
     }
     if (!/^-?\d+(\.\d+)?$/.test(lat) || !/^-?\d+(\.\d+)?$/.test(long)) {
-      setError("Allow location access or enter valid coordinates.");
+        setError("Allow location access in your browser to continue.");
       return;
     }
     setBusy(true);
@@ -1213,25 +1213,15 @@ function DailyTwoFactor({
             }}
             required
           />
-          <Field
-            label="Latitude"
-            value={lat}
-            onChange={(value) => {
-              setLat(value);
-              setPid("");
+          <LocationStatus
+            lat={lat}
+            long={long}
+            onCapture={(la, lo) => {
+              setLat(la);
+              setLong(lo);
+              setError("");
               setRequestKey("");
             }}
-            required
-          />
-          <Field
-            label="Longitude"
-            value={long}
-            onChange={(value) => {
-              setLong(value);
-              setPid("");
-              setRequestKey("");
-            }}
-            required
           />
         </div>
         <Capture
@@ -1559,8 +1549,11 @@ function TransactionForm({
             options={iins.map((i) => ({ value: i.iin || "", label: i.description }))}
           />
           <RdDeviceField value={form.deviceType} onChange={(v) => set("deviceType", v)} />
-          <Field label="Latitude" value={form.lat} onChange={(v) => set("lat", v)} required />
-          <Field label="Longitude" value={form.long} onChange={(v) => set("long", v)} required />
+          <LocationStatus
+            lat={form.lat}
+            long={form.long}
+            onCapture={(la, lo) => setForm((f) => ({ ...f, lat: la, long: lo }))}
+          />
         </div>
         {highValue && !auth && (
           <Notice tone="info">
@@ -1829,6 +1822,72 @@ function Panel({
     </section>
   );
 }
+
+function LocationStatus({
+  lat,
+  long,
+  onCapture,
+}: {
+  lat: string;
+  long: string;
+  onCapture: (lat: string, long: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [denied, setDenied] = useState(false);
+  const captured = !!lat && !!long;
+  const capture = () => {
+    if (!navigator.geolocation) {
+      setDenied(true);
+      return;
+    }
+    setBusy(true);
+    setDenied(false);
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        onCapture(String(p.coords.latitude), String(p.coords.longitude));
+        setBusy(false);
+      },
+      () => {
+        setDenied(true);
+        setBusy(false);
+      },
+      { enableHighAccuracy: true },
+    );
+  };
+  return (
+    <div className="sm:col-span-2">
+      <span className="text-xs font-bold text-muted-foreground">Location</span>
+      <div
+        className={`mt-1.5 flex items-center justify-between gap-3 rounded-xl border px-3 py-3 text-sm font-semibold ${
+          captured
+            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+            : "border-amber-200 bg-amber-50 text-amber-800"
+        }`}
+      >
+        <span className="flex items-center gap-2">
+          {captured ? <CheckCircle2 size={16} /> : <MapPin size={16} />}
+          {captured
+            ? "Location captured"
+            : denied
+              ? "Location access is blocked. Allow it in browser site settings."
+              : "Waiting for location permission…"}
+        </span>
+        {!captured && (
+          <button
+            type="button"
+            onClick={capture}
+            disabled={busy}
+            className="rounded-lg border border-amber-300 bg-white px-3 py-1 text-xs font-bold disabled:opacity-50"
+          >
+            {busy ? "Checking…" : "Try again"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 function Field({
   label,
   value,
