@@ -19,6 +19,14 @@ import {
 } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
 import { CommissionCalculator } from "@/components/admin/commission-calculator";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Select as UiSelect,
+  SelectContent as UiSelectContent,
+  SelectItem as UiSelectItem,
+  SelectTrigger as UiSelectTrigger,
+  SelectValue as UiSelectValue,
+} from "@/components/ui/select";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import {
@@ -1008,14 +1016,15 @@ function Commissions() {
                       setRuleDraft((current) => ({ ...current, serviceType: event.target.value }))
                     }
                     placeholder="AEPS"
-                    list="commission-services"
                     className={inputClass}
                   />
-                  <datalist id="commission-services">
-                    <option value="AEPS" />
-                    <option value="ADD_MONEY" />
-                    <option value="AEPS_CASH_DEPOSIT_COMPENSATION" />
-                  </datalist>
+                  <SuggestionChips
+                    value={ruleDraft.serviceType}
+                    onChange={(value) =>
+                      setRuleDraft((current) => ({ ...current, serviceType: value }))
+                    }
+                    options={["AEPS", "ADD_MONEY", "AEPS_CASH_DEPOSIT_COMPENSATION"]}
+                  />
                 </Field>
                 <Field label="Operator / provider" hint="Optional. Leave blank for any operator.">
                   <input
@@ -1023,26 +1032,24 @@ function Commissions() {
                     onChange={(event) =>
                       setRuleDraft((current) => ({ ...current, operator: event.target.value }))
                     }
-                    placeholder="VIMOPAY"
-                    list="commission-operators"
+                    placeholder="PROVIDER_1"
                     className={inputClass}
                   />
-                  <datalist id="commission-operators">
-                    <option value="VIMOPAY" />
-                  </datalist>
+                  <SuggestionChips
+                    value={ruleDraft.operator}
+                    onChange={(value) =>
+                      setRuleDraft((current) => ({ ...current, operator: value }))
+                    }
+                    options={["PROVIDER_1"]}
+                  />
                 </Field>
                 <Field label="Source role *" hint="Role whose transaction matches this rule.">
-                  <select
+                  <Select
                     value={ruleDraft.role}
-                    onChange={(event) =>
-                      setRuleDraft((current) => ({ ...current, role: event.target.value }))
-                    }
+                    onChange={(value) => setRuleDraft((current) => ({ ...current, role: value }))}
                     className={inputClass}
-                  >
-                    <option value="RETAILER">RETAILER</option>
-                    <option value="DISTRIBUTOR">DISTRIBUTOR</option>
-                    <option value="MASTER_DISTRIBUTOR">MASTER_DISTRIBUTOR</option>
-                  </select>
+                    options={["RETAILER", "DISTRIBUTOR", "MASTER_DISTRIBUTOR"]}
+                  />
                 </Field>
                 <Field
                   label="Priority"
@@ -1062,19 +1069,17 @@ function Commissions() {
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <Field label="Commission type *">
-                  <select
+                  <Select
                     value={ruleDraft.commissionType}
-                    onChange={(event) =>
+                    onChange={(value) =>
                       setRuleDraft((current) => ({
                         ...current,
-                        commissionType: event.target.value as CommissionRuleType,
+                        commissionType: value as CommissionRuleType,
                       }))
                     }
                     className={inputClass}
-                  >
-                    <option value="FIXED">FIXED</option>
-                    <option value="PERCENTAGE">PERCENTAGE</option>
-                  </select>
+                    options={["FIXED", "PERCENTAGE"]}
+                  />
                 </Field>
                 <Field
                   label={
@@ -1369,27 +1374,18 @@ function Commissions() {
                     label="Commission rule *"
                     hint="Distributions run only when this rule wins the commission match."
                   >
-                    <select
+                    <CommissionRuleSelect
+                      rules={rules}
                       value={selectedRuleId}
-                      onChange={(event) => {
-                        setSelectedRuleId(event.target.value);
+                      onChange={(value) => {
+                        setSelectedRuleId(value);
                         setDistributionEditorOpen(false);
                         setPendingDistributionStatus(null);
                         setError("");
                         setNotice("");
                       }}
-                      className={inputClass}
                       disabled={!rules.length}
-                    >
-                      {!rules.length && <option value="">No commission rules found</option>}
-                      {rules.map((rule) => (
-                        <option key={rule.id} value={rule.id}>
-                          {rule.isActive ? "ACTIVE" : "INACTIVE"} · {rule.serviceType} ·{" "}
-                          {rule.operator || "ANY"} · {rule.role} · {ruleRate(rule)} ·{" "}
-                          {money(rule.minAmount)} to {money(rule.maxAmount)}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </Field>
                 </div>
               </div>
@@ -1513,24 +1509,17 @@ function Commissions() {
                             : "Choose the commission pool that this share belongs to."
                         }
                       >
-                        <select
+                        <CommissionRuleSelect
+                          rules={rules}
                           value={distributionDraft.commissionRuleId}
-                          onChange={(event) =>
+                          onChange={(value) =>
                             setDistributionDraft((current) => ({
                               ...current,
-                              commissionRuleId: event.target.value,
+                              commissionRuleId: value,
                             }))
                           }
-                          className={inputClass}
                           disabled={Boolean(editingDistributionId)}
-                        >
-                          {rules.map((rule) => (
-                            <option key={rule.id} value={rule.id}>
-                              {rule.serviceType} · {rule.operator || "ANY"} · {rule.role} ·{" "}
-                              {ruleRate(rule)}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </Field>
                     </div>
                     <Field
@@ -1546,32 +1535,34 @@ function Commissions() {
                           }))
                         }
                         placeholder="DISTRIBUTOR"
-                        list="commission-recipient-roles"
                         className={inputClass}
                       />
-                      <datalist id="commission-recipient-roles">
-                        <option value="RETAILER" />
-                        <option value="DISTRIBUTOR" />
-                        <option value="MASTER_DISTRIBUTOR" />
-                      </datalist>
+                      <SuggestionChips
+                        value={distributionDraft.recipientRole}
+                        onChange={(value) =>
+                          setDistributionDraft((current) => ({
+                            ...current,
+                            recipientRole: value,
+                          }))
+                        }
+                        options={["RETAILER", "DISTRIBUTOR", "MASTER_DISTRIBUTOR"]}
+                      />
                     </Field>
                     <Field
                       label="Distribution type *"
                       hint="PERCENTAGE means percentage of commission pool."
                     >
-                      <select
+                      <Select
                         value={distributionDraft.distributionType}
-                        onChange={(event) =>
+                        onChange={(value) =>
                           setDistributionDraft((current) => ({
                             ...current,
-                            distributionType: event.target.value as CommissionDistributionType,
+                            distributionType: value as CommissionDistributionType,
                           }))
                         }
                         className={inputClass}
-                      >
-                        <option value="FIXED">FIXED</option>
-                        <option value="PERCENTAGE">PERCENTAGE</option>
-                      </select>
+                        options={["FIXED", "PERCENTAGE"]}
+                      />
                     </Field>
                     <Field label="Priority" hint="Higher priority is processed first.">
                       <input
@@ -1879,19 +1870,162 @@ function MetricSummary({
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+function CommissionRuleSelect({
+  rules,
+  value,
+  onChange,
+  disabled,
+}: {
+  rules: CommissionRule[];
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const selected = rules.find((rule) => rule.id === value);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredRules = normalizedQuery
+    ? rules.filter((rule) =>
+        [
+          rule.serviceType,
+          rule.operator || "any operator",
+          rule.role,
+          rule.commissionType,
+          ruleRate(rule),
+          rule.id,
+        ].some((item) => String(item).toLowerCase().includes(normalizedQuery)),
+      )
+    : rules;
+
   return (
-    <label className="block">
-      <span className="text-xs font-extrabold text-secondary">{label}</span>
-      <div className="mt-2">{children}</div>
-      {hint && (
-        <span className="mt-1.5 block text-[10px] leading-4 text-muted-foreground">{hint}</span>
-      )}
-    </label>
+    <Popover
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setQuery("");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label="Choose commission rule"
+          className="group flex min-h-16 w-full items-center gap-3 rounded-2xl border border-border bg-white px-4 py-3 text-left shadow-sm outline-none transition hover:border-primary/40 hover:shadow-md focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60"
+        >
+          <span
+            className={`h-9 w-1 shrink-0 rounded-full ${selected?.isActive ? "bg-emerald-500" : "bg-muted-foreground/35"}`}
+          />
+          {selected ? (
+            <span className="min-w-0 flex-1">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="truncate text-sm font-black text-secondary">
+                  {selected.serviceType}
+                </span>
+                <span className="text-xs text-muted-foreground">•</span>
+                <span className="truncate text-xs font-bold text-secondary/75">
+                  {selected.operator || "Any operator"}
+                </span>
+                <StatusPill active={selected.isActive} />
+              </span>
+              <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                <span>{selected.role}</span>
+                <span className="font-extrabold text-primary">{ruleRate(selected)}</span>
+                <span>
+                  {money(selected.minAmount)} → {money(selected.maxAmount)}
+                </span>
+              </span>
+            </span>
+          ) : (
+            <span className="min-w-0 flex-1 text-sm font-semibold text-muted-foreground">
+              {rules.length ? "Choose a commission rule" : "No commission rules found"}
+            </span>
+          )}
+          <ChevronDown
+            size={17}
+            className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={8}
+        className="w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-2xl border-border p-0 shadow-xl"
+      >
+        <div className="border-b border-border bg-muted/35 p-3">
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2.5">
+            <Search size={15} className="shrink-0 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search service, operator, role or rule ID…"
+              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <p className="mt-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            {filteredRules.length} matching rule{filteredRules.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        <div className="max-h-80 space-y-1 overflow-y-auto p-2">
+          {filteredRules.map((rule) => {
+            const isSelected = rule.id === value;
+            return (
+              <button
+                key={rule.id}
+                type="button"
+                onClick={() => {
+                  onChange(rule.id);
+                  setOpen(false);
+                }}
+                className={`w-full rounded-xl border p-3 text-left transition ${
+                  isSelected
+                    ? "border-primary/35 bg-primary/5 shadow-sm"
+                    : "border-transparent hover:border-border hover:bg-muted/45"
+                }`}
+              >
+                <span className="flex items-start gap-3">
+                  <span
+                    className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${rule.isActive ? "bg-emerald-500" : "bg-muted-foreground/35"}`}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-black text-secondary">
+                        {rule.serviceType}
+                        <span className="font-semibold text-muted-foreground">
+                          {" "}
+                          · {rule.operator || "Any operator"}
+                        </span>
+                      </span>
+                      <span className="font-black text-primary">{ruleRate(rule)}</span>
+                    </span>
+                    <span className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold text-muted-foreground">
+                      <span className="rounded-full bg-muted px-2 py-1">{rule.role}</span>
+                      <span className="rounded-full bg-muted px-2 py-1">
+                        {money(rule.minAmount)} → {money(rule.maxAmount)}
+                      </span>
+                      <span className="rounded-full bg-muted px-2 py-1">
+                        Priority {rule.priority}
+                      </span>
+                    </span>
+                  </span>
+                  {isSelected && <CheckCircle2 size={17} className="shrink-0 text-primary" />}
+                </span>
+              </button>
+            );
+          })}
+          {!filteredRules.length && (
+            <div className="px-4 py-8 text-center">
+              <p className="text-sm font-bold text-secondary">No matching rules</p>
+              <p className="mt-1 text-xs text-muted-foreground">Try a different search term.</p>
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
-function Select({
+function SuggestionChips({
   value,
   onChange,
   options,
@@ -1901,23 +2035,76 @@ function Select({
   options: string[];
 }) {
   return (
-    <label className="relative">
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="appearance-none rounded-xl border border-border bg-white py-2.5 pl-3 pr-8 text-xs font-extrabold text-secondary outline-none"
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
+    <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Suggested values">
+      {options.map((option) => {
+        const selected = value.trim().toUpperCase() === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange(option)}
+            className={`rounded-full border px-2.5 py-1 text-[9px] font-extrabold transition ${
+              selected
+                ? "border-primary bg-primary text-white"
+                : "border-border bg-white text-muted-foreground hover:border-primary/35 hover:text-secondary"
+            }`}
+          >
             {option}
-          </option>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <div className="block">
+      <span className="text-xs font-extrabold text-secondary">{label}</span>
+      <div className="mt-2">{children}</div>
+      {hint && (
+        <span className="mt-1.5 block text-[10px] leading-4 text-muted-foreground">{hint}</span>
+      )}
+    </div>
+  );
+}
+
+function Select({
+  value,
+  onChange,
+  options,
+  className,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  className?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <UiSelect value={value} onValueChange={onChange} disabled={disabled}>
+      <UiSelectTrigger
+        className={
+          className
+            ? `${className} h-auto min-h-11 cursor-pointer shadow-none`
+            : "h-10 w-auto min-w-26 rounded-xl border-border bg-white px-3 text-xs font-extrabold text-secondary shadow-none"
+        }
+      >
+        <UiSelectValue />
+      </UiSelectTrigger>
+      <UiSelectContent position="item-aligned" className="rounded-xl border-border shadow-xl">
+        {options.map((option) => (
+          <UiSelectItem
+            key={option}
+            value={option}
+            className="cursor-pointer rounded-lg py-2.5 pl-3 pr-9 text-xs font-bold"
+          >
+            {option}
+          </UiSelectItem>
         ))}
-      </select>
-      <ChevronDown
-        size={13}
-        className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-      />
-    </label>
+      </UiSelectContent>
+    </UiSelect>
   );
 }
 

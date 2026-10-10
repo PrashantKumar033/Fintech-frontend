@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   BadgeIndianRupee,
   Banknote,
@@ -27,6 +27,7 @@ import {
   aepsApi,
   capturePid,
   newIdempotencyKey,
+  resolveAepsWadh,
   USE_MOCK_FINGERPRINT,
   type AepsNextAction,
   type AepsStatus,
@@ -38,6 +39,11 @@ import {
   type SavedBank,
   type TransactionResult,
 } from "@/lib/aeps-api";
+import {
+  buildAepsTransactionRequest,
+  pidDataAfterBindingChange,
+  transactionAuthorizationFromResponse,
+} from "@/lib/aeps-pid";
 import { BusinessPage } from "@/components/business-page";
 import { AdminLayout } from "@/components/admin/admin-layout";
 import { ActionPermissionNotice } from "@/components/action-permission-notice";
@@ -461,12 +467,13 @@ function AepsFlow({
         <BiometricStep
           title="Merchant e-KYC"
           description="Capture a fresh fingerprint using your registered RD device."
+          pipe={status.pipe}
           submit={(pidData) => aepsApi.ekyc(token, pidData)}
           done={refresh}
         />
       );
     case "TWO_FACTOR_AUTH":
-      return <DailyTwoFactor token={token} done={refresh} />;
+      return <DailyTwoFactor token={token} pipe={status.pipe} done={refresh} />;
     case "AEPS_TRANSACTION":
       if (!status.serviceActivated) {
         return (
@@ -479,7 +486,12 @@ function AepsFlow({
         );
       }
       return (
-        <TransactionWorkspace token={token} access={access} requestedService={requestedService} />
+        <TransactionWorkspace
+          token={token}
+          pipe={status.pipe}
+          access={access}
+          requestedService={requestedService}
+        />
       );
     case "WAIT":
       return (
@@ -1065,11 +1077,13 @@ function OnboardingOtp({
 function BiometricStep({
   title,
   description,
+  pipe,
   submit,
   done,
 }: {
   title: string;
   description: string;
+  pipe: string;
   submit: (pid: string) => Promise<unknown>;
   done: () => Promise<void>;
 }) {
@@ -1092,7 +1106,7 @@ function BiometricStep({
   return (
     <Panel title={title} description={description}>
       {error && <Notice tone="error">{error}</Notice>}
-      <Capture value={pid} onChange={setPid} />
+      <Capture value={pid} onChange={setPid} pipe={pipe} />
       <button
         disabled={!pid || busy}
         onClick={run}
@@ -1104,7 +1118,15 @@ function BiometricStep({
   );
 }
 
-function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<void> }) {
+function DailyTwoFactor({
+  token,
+  pipe,
+  done,
+}: {
+  token: string;
+  pipe: string;
+  done: () => Promise<void>;
+}) {
   const [aadhaar, setAadhaar] = useState(""),
     [lat, setLat] = useState(""),
     [long, setLong] = useState(""),
@@ -1118,6 +1140,7 @@ function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<vo
       (p) => {
         setLat(String(p.coords.latitude));
         setLong(String(p.coords.longitude));
+        setPid("");
       },
       () => setError("Location access is required for daily AEPS verification."),
       { enableHighAccuracy: true },
@@ -1176,6 +1199,7 @@ function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<vo
             value={aadhaar}
             onChange={(v) => {
               setAadhaar(digits(v).slice(0, 12));
+              setPid("");
               setRequestKey("");
             }}
             required
@@ -1184,6 +1208,7 @@ function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<vo
             value={deviceType}
             onChange={(value) => {
               setDeviceType(value);
+              setPid("");
               setRequestKey("");
             }}
             required
@@ -1193,6 +1218,7 @@ function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<vo
             value={lat}
             onChange={(value) => {
               setLat(value);
+              setPid("");
               setRequestKey("");
             }}
             required
@@ -1202,6 +1228,7 @@ function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<vo
             value={long}
             onChange={(value) => {
               setLong(value);
+              setPid("");
               setRequestKey("");
             }}
             required
@@ -1209,6 +1236,7 @@ function DailyTwoFactor({ token, done }: { token: string; done: () => Promise<vo
         </div>
         <Capture
           value={pid}
+          pipe={pipe}
           onChange={(value) => {
             setPid(value);
             setRequestKey("");
@@ -1279,10 +1307,12 @@ function normalizeBankIins(items: MasterItem[]): MasterItem[] {
 
 function TransactionWorkspace({
   token,
+  pipe,
   access,
   requestedService,
 }: {
   token: string;
+  pipe: string;
   access: AepsActionAccess;
   requestedService?: AepsTxnCode;
 }) {
@@ -1310,6 +1340,7 @@ function TransactionWorkspace({
     return (
       <TransactionForm
         token={token}
+        pipe={pipe}
         operation={operation}
         done={setResult}
         cancel={() => setOperation(null)}
@@ -1353,12 +1384,14 @@ function TransactionWorkspace({
 
 function TransactionForm({
   token,
+  pipe,
   operation,
   done,
   cancel,
   allowed,
 }: {
   token: string;
+  pipe: string;
   operation: AepsTxnCode;
   done: (r: TransactionResult) => void;
   cancel: () => void;
@@ -1383,7 +1416,7 @@ function TransactionForm({
     [intentKey, setIntentKey] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const highValue = (operation === "CW" || operation === "AP") && Number(form.amount) > 5000;
+  const highValue = (operation === "CW" || operation === "AP") && Number(form.amount) > 5_000;
   useEffect(() => {
     aepsApi
       .bankIins(token, operation, authType)
@@ -1403,11 +1436,16 @@ function TransactionForm({
   }, [authType, operation, service.title, token]);
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition((p) =>
-      setForm((f) => ({ ...f, lat: String(p.coords.latitude), long: String(p.coords.longitude) })),
+      setForm((f) => ({
+        ...f,
+        lat: String(p.coords.latitude),
+        long: String(p.coords.longitude),
+        pidData: "",
+      })),
     );
   }, []);
   const set = (key: keyof typeof form, value: string) => {
-    setForm((f) => ({ ...f, [key]: value }));
+    setForm((f) => ({ ...f, [key]: value, ...(key === "pidData" ? {} : { pidData: "" }) }));
     setIntentKey("");
     if (key !== "pidData" && key !== "deviceType") {
       setAuth(null);
@@ -1429,7 +1467,8 @@ function TransactionForm({
         appPlatform: "web",
         appVersion: "1.0.0",
       });
-      setAuth(a);
+      setAuth(transactionAuthorizationFromResponse(a));
+      setOtp("");
       setForm((f) => ({ ...f, pidData: "" }));
     } catch (e) {
       setError(messageOf(e));
@@ -1466,11 +1505,7 @@ function TransactionForm({
     setBusy(true);
     setError("");
     try {
-      const body = {
-        ...form,
-        ...(needsAmount ? {} : { amount: undefined }),
-        ...(auth ? { authRequestId: auth.authRequestId } : {}),
-      };
+      const body = buildAepsTransactionRequest(form, needsAmount, auth || undefined);
       const key = service.financial ? intentKey || newIdempotencyKey() : undefined;
       if (key && !intentKey) setIntentKey(key);
       done(await aepsApi.transact(token, operation, body, key));
@@ -1529,22 +1564,31 @@ function TransactionForm({
         </div>
         {highValue && !auth && (
           <Notice tone="info">
-            Amounts above ₹5,000 require a provider OTP before biometric capture. Submit the details
-            below to request it.
+            Amounts above ₹5,000 require an OTP sent to the mobile number registered with the
+            customer&apos;s Aadhaar. Submit the details below to request it before biometric PID
+            capture.
           </Notice>
         )}
         {auth && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-sm font-bold text-emerald-800">Transaction OTP sent</p>
             <p className="mt-1 text-xs text-emerald-700">
-              Authorization expires {new Date(auth.expiresAt).toLocaleString()}. Enter the customer
-              OTP below; it is sent only to the RD device capture request.
+              The OTP was sent to the mobile number registered with the customer&apos;s Aadhaar.
+              Authorization expires {new Date(auth.expiresAt).toLocaleString()}. Enter it below; it
+              is passed only in the RD device PID capture request.
             </p>
             <div className="mt-3">
               <Field
                 label="Provider OTP for RD capture"
                 value={otp}
-                onChange={(v) => setOtp(digits(v))}
+                onChange={(v) => {
+                  const nextOtp = digits(v).slice(0, 8);
+                  setForm((f) => ({
+                    ...f,
+                    pidData: pidDataAfterBindingChange(f.pidData, otp, nextOtp),
+                  }));
+                  setOtp(nextOtp);
+                }}
                 required
               />
             </div>
@@ -1553,6 +1597,7 @@ function TransactionForm({
         {(!highValue || auth) && (
           <Capture
             value={form.pidData}
+            pipe={pipe}
             onChange={(v) => set("pidData", v)}
             otp={auth ? otp : undefined}
           />
@@ -1584,20 +1629,42 @@ function TransactionForm({
 function Capture({
   value,
   onChange,
+  pipe,
   otp,
 }: {
   value: string;
   onChange: (v: string) => void;
+  pipe: string;
   otp?: string;
 }) {
   const [url, setUrl] = useState("http://127.0.0.1:11100/rd/capture"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const onChangeRef = useRef(onChange);
+  const valueRef = useRef(value);
+  const previousPipeRef = useRef(pipe);
+  onChangeRef.current = onChange;
+  valueRef.current = value;
+  let configurationError = "";
+  try {
+    resolveAepsWadh(pipe);
+  } catch (e) {
+    configurationError = messageOf(e);
+  }
+  useEffect(() => {
+    if (previousPipeRef.current !== pipe) {
+      onChangeRef.current(
+        pidDataAfterBindingChange(valueRef.current, previousPipeRef.current, pipe),
+      );
+      setError("");
+      previousPipeRef.current = pipe;
+    }
+  }, [pipe]);
   const run = async () => {
     setBusy(true);
     setError("");
     try {
-      onChange(await capturePid(url, otp));
+      onChange(await capturePid(url, pipe, otp));
     } catch (e) {
       setError(messageOf(e));
     } finally {
@@ -1633,7 +1700,7 @@ function Capture({
         ) : null}
         <button
           type="button"
-          disabled={busy || (!!otp === false && otp !== undefined)}
+          disabled={busy || Boolean(configurationError) || (!!otp === false && otp !== undefined)}
           onClick={run}
           className="rounded-xl bg-secondary px-5 py-2 text-xs font-bold text-white disabled:opacity-50"
         >
@@ -1653,7 +1720,9 @@ function Capture({
           Enter the provider OTP before biometric capture.
         </p>
       )}
-      {error && <p className="mt-2 text-xs font-semibold text-red-700">{error}</p>}
+      {(configurationError || error) && (
+        <p className="mt-2 text-xs font-semibold text-red-700">{configurationError || error}</p>
+      )}
     </div>
   );
 }

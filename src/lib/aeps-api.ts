@@ -1,4 +1,7 @@
 import { authenticatedRequest } from "./auth-api";
+import { buildFingerprintPidOptions, isMockPidEnabled, resolveAepsWadh } from "./aeps-pid";
+
+export { resolveAepsWadh } from "./aeps-pid";
 
 export type AepsNextAction =
   | "REGISTER"
@@ -19,6 +22,7 @@ export type AepsProvider = {
 export type MasterItem = { code?: string; iin?: string; description: string };
 export type AepsStatus = {
   provider: string;
+  pipe: string;
   profileId?: string;
   providerMerchantId?: string;
   status?: string;
@@ -210,10 +214,13 @@ export function newIdempotencyKey(): string {
 }
 
 // Mock PID is opt-in and development-only. Production always calls the configured RD service.
-export const USE_MOCK_FINGERPRINT =
-  import.meta.env.DEV && import.meta.env.VITE_AEPS_USE_MOCK_PID === "true";
+export const USE_MOCK_FINGERPRINT = isMockPidEnabled(
+  import.meta.env.DEV,
+  import.meta.env.VITE_AEPS_USE_MOCK_PID,
+);
 
-export async function capturePid(rdUrl: string, otp?: string): Promise<string> {
+export async function capturePid(rdUrl: string, pipe: string, otp?: string): Promise<string> {
+  const wadh = resolveAepsWadh(pipe);
   if (USE_MOCK_FINGERPRINT) {
     console.warn("Using development-only mock fingerprint data.");
     return '<PidData><Resp errCode="0" errInfo="Success" fCount="1" fType="2" nmPoints="40" qScore="80"/><DeviceInfo dpId="TEST" rdsId="TEST" rdsVer="1.0" dc="TEST" mi="TEST" mc="TEST"/><Skey ci="20260901">TEST</Skey><Hmac>TEST</Hmac><Data type="X">TEST</Data></PidData>';
@@ -227,8 +234,7 @@ export async function capturePid(rdUrl: string, otp?: string): Promise<string> {
   }
   if (!["http:", "https:"].includes(endpoint.protocol))
     throw new Error("RD service URL must use HTTP or HTTPS.");
-  if (otp && !/^\d{4,8}$/.test(otp)) throw new Error("RD provider OTP must contain 4 to 8 digits.");
-  const options = `<?xml version="1.0"?><PidOptions ver="1.0"><Opts fCount="1" fType="2" iCount="0" pCount="0" format="0" pidVer="2.0" timeout="10000" otp="${otp || ""}" env="P" wadh="" posh="UNKNOWN"/></PidOptions>`;
+  const options = buildFingerprintPidOptions(wadh, otp);
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12_000);
   let response: Response;
