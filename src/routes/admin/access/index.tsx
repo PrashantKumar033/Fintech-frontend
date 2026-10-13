@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "re
 import {
   BadgeCheck,
   Box,
+  CircleAlert,
   KeyRound,
   Loader2,
   PackageCheck,
@@ -14,6 +15,16 @@ import {
   UsersRound,
 } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   adminApi,
   asArray,
@@ -27,12 +38,23 @@ import {
 
 export const Route = createFileRoute("/admin/access/")({ component: Access });
 type View = "roles" | "permissions" | "packages" | "role-packages" | "registration";
-type MutationOptions = { refresh?: boolean; onSuccess?: () => void };
+type ConfirmationOptions = {
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  destructive?: boolean;
+};
+type ConfirmationRequest = ConfirmationOptions & { resolve: (confirmed: boolean) => void };
+type MutationOptions = {
+  refresh?: boolean;
+  onSuccess?: () => void;
+  confirmation?: ConfirmationOptions;
+};
 type Mutate = (
   work: () => Promise<unknown>,
   message: string,
   options?: MutationOptions,
-) => Promise<void>;
+) => Promise<boolean>;
 const inputClass =
   "w-full rounded-xl border border-border bg-white px-3.5 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15";
 const errText = (error: unknown) =>
@@ -47,7 +69,8 @@ export function Access() {
   const [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(""),
+    [confirmation, setConfirmation] = useState<ConfirmationRequest | null>(null);
   async function load(showLoader = true) {
     if (!canManageAccess) {
       setLoading(false);
@@ -78,7 +101,22 @@ export function Access() {
     message: string,
     options: MutationOptions = {},
   ) {
+    if (busy) return false;
     setBusy(true);
+    const approved = await new Promise<boolean>((resolve) =>
+      setConfirmation({
+        title: "Confirm this action?",
+        description:
+          "Please review your selection. The API request will be sent only after you confirm.",
+        confirmLabel: "Yes, continue",
+        ...options.confirmation,
+        resolve,
+      }),
+    );
+    if (!approved) {
+      setBusy(false);
+      return false;
+    }
     setError("");
     setNotice("");
     try {
@@ -86,11 +124,17 @@ export function Access() {
       options.onSuccess?.();
       setNotice(message);
       if (options.refresh !== false) await load(false);
+      return true;
     } catch (e) {
       setError(errText(e));
+      return false;
     } finally {
       setBusy(false);
     }
+  }
+  function finishConfirmation(confirmed: boolean) {
+    confirmation?.resolve(confirmed);
+    setConfirmation(null);
   }
   const tabs: Array<[View, string, typeof ShieldCheck]> = [
     ["roles", "Roles", UsersRound],
@@ -218,6 +262,42 @@ export function Access() {
           )}
         </>
       )}
+      <AlertDialog
+        open={Boolean(confirmation)}
+        onOpenChange={(open) => {
+          if (!open && confirmation) finishConfirmation(false);
+        }}
+      >
+        <AlertDialogContent className="max-w-md rounded-3xl border-0 p-7 text-center shadow-2xl">
+          <span
+            className={`mx-auto grid h-16 w-16 place-items-center rounded-full ${confirmation?.destructive ? "bg-red-50 text-red-600" : "bg-orange-50 text-primary"}`}
+          >
+            <CircleAlert size={32} strokeWidth={2.2} />
+          </span>
+          <AlertDialogHeader className="mt-1 text-center sm:text-center">
+            <AlertDialogTitle className="text-xl font-black">
+              {confirmation?.title}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="mx-auto max-w-sm leading-6">
+              {confirmation?.description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-2 grid grid-cols-2 gap-3 sm:grid sm:space-x-0">
+            <AlertDialogCancel
+              onClick={() => finishConfirmation(false)}
+              className="mt-0 h-11 rounded-xl font-extrabold"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => finishConfirmation(true)}
+              className={`h-11 rounded-xl font-extrabold text-white ${confirmation?.destructive ? "bg-red-600 hover:bg-red-700" : "bg-primary hover:bg-primary/90"}`}
+            >
+              {confirmation?.confirmLabel || "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }
@@ -262,6 +342,7 @@ function EntityManager({
   async function submit(e: FormEvent) {
     e.preventDefault();
     const api = kind === "role" ? adminApi.roles : adminApi.permissions;
+    let changed = false;
     if (kind === "role") {
       const body = {
         name: name.trim().toUpperCase().replace(/\s+/g, "_"),
@@ -270,9 +351,16 @@ function EntityManager({
         description: description.trim() || undefined,
         ...(!editing ? { startingLoginIdNumber: 1001, isActive: true } : {}),
       };
-      await mutate(
+      changed = await mutate(
         () => (editing ? api.update(editing.id, body) : api.create(body)),
         `Role ${editing ? "updated" : "created"}.`,
+        {
+          confirmation: {
+            title: editing ? "Save role changes?" : "Create this role?",
+            description: `${editing ? "Update" : "Create"} the ${body.name} role with the entered access settings?`,
+            confirmLabel: editing ? "Save changes" : "Create role",
+          },
+        },
       );
     } else {
       const body = {
@@ -281,12 +369,19 @@ function EntityManager({
         description: description.trim() || undefined,
         ...(!editing ? { isActive: true } : {}),
       };
-      await mutate(
+      changed = await mutate(
         () => (editing ? api.update(editing.id, body) : api.create(body)),
         `Permission ${editing ? "updated" : "created"}.`,
+        {
+          confirmation: {
+            title: editing ? "Save permission changes?" : "Create this permission?",
+            description: `${editing ? "Update" : "Create"} ${body.code} with the entered details?`,
+            confirmLabel: editing ? "Save changes" : "Create permission",
+          },
+        },
       );
     }
-    reset();
+    if (changed) reset();
   }
   return (
     <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
@@ -413,6 +508,14 @@ function EntityManager({
                     {
                       refresh: false,
                       onSuccess: () => onStatusChange(item.id, !item.isActive),
+                      confirmation: {
+                        title: `${item.isActive ? "Deactivate" : "Activate"} ${item.name}?`,
+                        description: item.isActive
+                          ? `This will stop ${item.name} from being used for new access decisions.`
+                          : `This will make ${item.name} available for access decisions again.`,
+                        confirmLabel: item.isActive ? "Deactivate" : "Activate",
+                        destructive: item.isActive,
+                      },
                     },
                   )
                 }
@@ -468,7 +571,7 @@ function PackageManager({
   }
   async function create(e: FormEvent) {
     e.preventDefault();
-    await mutate(
+    const changed = await mutate(
       () =>
         adminApi.packages.create({
           code: code.trim().toUpperCase(),
@@ -478,7 +581,15 @@ function PackageManager({
           isActive: true,
         }),
       "Package created.",
+      {
+        confirmation: {
+          title: "Create this package?",
+          description: `Create ${code.trim().toUpperCase()} and make it available for role assignments?`,
+          confirmLabel: "Create package",
+        },
+      },
     );
+    if (!changed) return;
     setName("");
     setCode("");
     setDescription("");
@@ -499,6 +610,13 @@ function PackageManager({
           description: nextDescription.trim() || undefined,
         }),
       "Package updated.",
+      {
+        confirmation: {
+          title: "Save package changes?",
+          description: `Update ${selectedPackage.code || selectedPackage.name} with the new name and description?`,
+          confirmLabel: "Save changes",
+        },
+      },
     );
   }
   async function toggleStatus() {
@@ -509,6 +627,14 @@ function PackageManager({
       {
         refresh: false,
         onSuccess: () => onStatusChange(selectedPackage.id, !selectedPackage.isActive),
+        confirmation: {
+          title: `${selectedPackage.isActive ? "Deactivate" : "Activate"} package?`,
+          description: selectedPackage.isActive
+            ? `${selectedPackage.code || selectedPackage.name} will no longer be available for active access assignments.`
+            : `${selectedPackage.code || selectedPackage.name} will become available for access assignments.`,
+          confirmLabel: selectedPackage.isActive ? "Deactivate" : "Activate",
+          destructive: selectedPackage.isActive,
+        },
       },
     );
   }
@@ -532,6 +658,12 @@ function PackageManager({
                   { packageId: selected, permissionId: permission.id, permission },
                 ],
           ),
+        confirmation: {
+          title: `${isAssigned ? "Remove" : "Add"} permission?`,
+          description: `${isAssigned ? "Remove" : "Add"} ${permission.code || permission.name} ${isAssigned ? "from" : "to"} ${selectedPackage?.code || selectedPackage?.name || "this package"}?`,
+          confirmLabel: isAssigned ? "Remove permission" : "Add permission",
+          destructive: isAssigned,
+        },
       },
     );
   }
@@ -686,7 +818,7 @@ function RolePackageManager({
   const assignedIds = new Set(assigned.map((v) => v.packageId));
   async function toggle(item: AdminEntity) {
     const isAssigned = assignedIds.has(item.id);
-    await mutate(
+    const changed = await mutate(
       () =>
         isAssigned
           ? adminApi.roles.removePackage(roleId, item.id)
@@ -700,8 +832,15 @@ function RolePackageManager({
               ? current.filter((entry) => entry.packageId !== item.id)
               : [...current, { roleId, packageId: item.id, package: item }],
           ),
+        confirmation: {
+          title: `${isAssigned ? "Remove" : "Assign"} package?`,
+          description: `${isAssigned ? "Remove" : "Assign"} ${item.code || item.name} ${isAssigned ? "from" : "to"} this role? Effective permissions may change immediately.`,
+          confirmLabel: isAssigned ? "Remove package" : "Assign package",
+          destructive: isAssigned,
+        },
       },
     );
+    if (!changed) return;
     try {
       setEffective(await adminApi.roles.effectivePermissions(roleId));
     } catch {
@@ -836,6 +975,12 @@ function RegistrationMatrix({
                   },
                 ],
           ),
+        confirmation: {
+          title: `${nextActive ? "Allow" : "Disable"} registration?`,
+          description: `${nextActive ? "Allow" : "Stop"} the selected registrar role ${nextActive ? "to create" : "from creating"} ${target.name} accounts?`,
+          confirmLabel: nextActive ? "Allow registration" : "Disable registration",
+          destructive: !nextActive,
+        },
       },
     );
   }
@@ -847,6 +992,12 @@ function RegistrationMatrix({
         refresh: false,
         onSuccess: () =>
           setRows((current) => current.filter((entry) => entry.targetRoleId !== target.id)),
+        confirmation: {
+          title: "Remove registration rule?",
+          description: `Permanently remove the registration rule for ${target.name}? You can create it again later.`,
+          confirmLabel: "Remove rule",
+          destructive: true,
+        },
       },
     );
   }
