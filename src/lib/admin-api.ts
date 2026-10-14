@@ -535,6 +535,7 @@ export type ServiceControlStatus = {
 };
 
 export type PayoutSurchargeConfiguration = {
+  sourceWallet: PayoutSourceWallet;
   type: "PERCENTAGE" | "FIXED";
   surchargeValue: string;
   version: number;
@@ -784,6 +785,7 @@ export type CommissionRule = {
   role: string;
   commissionType: CommissionRuleType;
   commissionValue: string | number;
+  tdsRate?: string | number | null;
   minAmount?: string | number | null;
   maxAmount?: string | number | null;
   priority: number;
@@ -797,6 +799,7 @@ export type CreateCommissionRuleInput = {
   role: string;
   commissionType: CommissionRuleType;
   commissionValue: number;
+  tdsRate: number;
   minAmount?: number;
   maxAmount?: number;
   priority?: number;
@@ -1159,14 +1162,17 @@ export const adminApi = {
         ),
     },
     surcharge: {
-      get: () =>
-        call<PayoutSurchargeConfiguration>("/super-admin/payout/surcharge", {
-          cache: "no-store",
-        }),
-      update: (type: "PERCENTAGE" | "FIXED", value: number) =>
+      get: (sourceWallet: PayoutSourceWallet) =>
+        call<PayoutSurchargeConfiguration>(
+          `/super-admin/payout/surcharge${queryString({ sourceWallet })}`,
+          {
+            cache: "no-store",
+          },
+        ),
+      update: (sourceWallet: PayoutSourceWallet, type: "PERCENTAGE" | "FIXED", value: number) =>
         call<PayoutSurchargeConfiguration>(
           "/super-admin/payout/surcharge",
-          json("PATCH", { type, value }),
+          json("PATCH", { sourceWallet, type, value }),
         ),
     },
   },

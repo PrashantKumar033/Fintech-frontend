@@ -18,16 +18,30 @@ import {
   type ProviderRegistryEntry,
   type ServiceControlStatus,
 } from "@/lib/admin-api";
+import type { PayoutSourceWallet } from "@/lib/payout-api";
 
 type Confirmation =
   { kind: "service"; nextEnabled: boolean } | { kind: "provider"; provider: ProviderRegistryEntry };
 
+type SurchargeDraft = {
+  type: "PERCENTAGE" | "FIXED";
+  value: string;
+};
+
+const payoutWallets: PayoutSourceWallet[] = ["MAIN", "AEPS"];
+
 export function SuperAdminPayoutControls() {
   const [service, setService] = useState<ServiceControlStatus | null>(null);
   const [providers, setProviders] = useState<ProviderRegistryEntry[]>([]);
-  const [surcharge, setSurcharge] = useState<PayoutSurchargeConfiguration | null>(null);
-  const [surchargeType, setSurchargeType] = useState<"PERCENTAGE" | "FIXED">("PERCENTAGE");
-  const [surchargeValue, setSurchargeValue] = useState("");
+  const [surcharges, setSurcharges] = useState<
+    Partial<Record<PayoutSourceWallet, PayoutSurchargeConfiguration>>
+  >({});
+  const [surchargeDrafts, setSurchargeDrafts] = useState<
+    Record<PayoutSourceWallet, SurchargeDraft>
+  >({
+    MAIN: { type: "PERCENTAGE", value: "" },
+    AEPS: { type: "PERCENTAGE", value: "" },
+  });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -40,11 +54,13 @@ export function SuperAdminPayoutControls() {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
-    const [serviceResult, providerResult, surchargeResult] = await Promise.allSettled([
-      adminApi.superAdminPayout.serviceControl.get(),
-      adminApi.superAdminPayout.providers.list(),
-      adminApi.superAdminPayout.surcharge.get(),
-    ]);
+    const [serviceResult, providerResult, mainSurchargeResult, aepsSurchargeResult] =
+      await Promise.allSettled([
+        adminApi.superAdminPayout.serviceControl.get(),
+        adminApi.superAdminPayout.providers.list(),
+        adminApi.superAdminPayout.surcharge.get("MAIN"),
+        adminApi.superAdminPayout.surcharge.get("AEPS"),
+      ]);
     const errors: string[] = [];
 
     if (serviceResult.status === "fulfilled") setService(serviceResult.value);
@@ -53,13 +69,26 @@ export function SuperAdminPayoutControls() {
     if (providerResult.status === "fulfilled") setProviders(providerResult.value);
     else errors.push(`Providers: ${messageOf(providerResult.reason)}`);
 
-    if (surchargeResult.status === "fulfilled") {
-      setSurcharge(surchargeResult.value);
-      setSurchargeType(surchargeResult.value.type);
-      setSurchargeValue(String(Number(surchargeResult.value.surchargeValue)));
-    } else {
-      errors.push(`Surcharge: ${messageOf(surchargeResult.reason)}`);
-    }
+    const surchargeResults = {
+      MAIN: mainSurchargeResult,
+      AEPS: aepsSurchargeResult,
+    } as const;
+    payoutWallets.forEach((sourceWallet) => {
+      const result = surchargeResults[sourceWallet];
+      if (result.status === "fulfilled") {
+        const configuration = result.value;
+        setSurcharges((current) => ({ ...current, [sourceWallet]: configuration }));
+        setSurchargeDrafts((current) => ({
+          ...current,
+          [sourceWallet]: {
+            type: configuration.type,
+            value: String(Number(configuration.surchargeValue)),
+          },
+        }));
+      } else {
+        errors.push(`${sourceWallet} surcharge: ${messageOf(result.reason)}`);
+      }
+    });
 
     if (errors.length) setError(errors.join(" "));
     setLoading(false);
@@ -108,27 +137,42 @@ export function SuperAdminPayoutControls() {
     }
   }
 
-  async function updateSurcharge(event: FormEvent<HTMLFormElement>) {
+  async function updateSurcharge(
+    event: FormEvent<HTMLFormElement>,
+    sourceWallet: PayoutSourceWallet,
+  ) {
     event.preventDefault();
-    const value = Number(surchargeValue);
+    const draft = surchargeDrafts[sourceWallet];
+    const value = Number(draft.value);
     if (!Number.isFinite(value) || value < 0) {
-      setError("Surcharge value must be 0 or greater.");
+      setError(`${sourceWallet} wallet surcharge must be 0 or greater.`);
       return;
     }
-    if (surchargeType === "PERCENTAGE" && value > 100) {
-      setError("Percentage surcharge cannot exceed 100.");
+    if (draft.type === "PERCENTAGE" && value > 100) {
+      setError(`${sourceWallet} wallet percentage surcharge cannot exceed 100.`);
       return;
     }
 
-    setBusy("surcharge");
+    setBusy(`surcharge-${sourceWallet}`);
     setError("");
     setNotice("");
     try {
-      const next = await adminApi.superAdminPayout.surcharge.update(surchargeType, value);
-      setSurcharge(next);
-      setSurchargeType(next.type);
-      setSurchargeValue(String(Number(next.surchargeValue)));
-      setNotice("Payout surcharge updated. New settlements will use this configuration.");
+      const next = await adminApi.superAdminPayout.surcharge.update(
+        sourceWallet,
+        draft.type,
+        value,
+      );
+      setSurcharges((current) => ({ ...current, [sourceWallet]: next }));
+      setSurchargeDrafts((current) => ({
+        ...current,
+        [sourceWallet]: {
+          type: next.type,
+          value: String(Number(next.surchargeValue)),
+        },
+      }));
+      setNotice(
+        `${sourceWallet} wallet surcharge updated. New ${sourceWallet} settlements will use this configuration.`,
+      );
     } catch (requestError) {
       setError(messageOf(requestError));
     } finally {
@@ -172,7 +216,7 @@ export function SuperAdminPayoutControls() {
         </button>
       </div>
 
-      {loading && !service && !surcharge ? (
+      {loading && !service && Object.keys(surcharges).length === 0 ? (
         <AdminPanel className="grid min-h-64 place-items-center">
           <Loader2 className="animate-spin text-primary" />
         </AdminPanel>
@@ -305,51 +349,91 @@ export function SuperAdminPayoutControls() {
                   <h2 className="text-xl font-black text-secondary">Surcharge</h2>
                 </div>
               </div>
-              <form onSubmit={updateSurcharge} className="mt-5 space-y-4">
-                <label className="block text-xs font-black uppercase text-secondary">
-                  Calculation type
-                  <select
-                    value={surchargeType}
-                    onChange={(event) =>
-                      setSurchargeType(event.target.value as "PERCENTAGE" | "FIXED")
-                    }
-                    className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 text-sm font-semibold normal-case outline-none focus:border-primary"
-                  >
-                    <option value="PERCENTAGE">Percentage</option>
-                    <option value="FIXED">Fixed amount</option>
-                  </select>
-                </label>
-                <label className="block text-xs font-black uppercase text-secondary">
-                  {surchargeType === "PERCENTAGE" ? "Percentage value" : "Amount in INR"}
-                  <input
-                    required
-                    inputMode="decimal"
-                    value={surchargeValue}
-                    onChange={(event) =>
-                      setSurchargeValue(event.target.value.replace(/[^0-9.]/g, ""))
-                    }
-                    placeholder="0.00"
-                    className="mt-2 w-full rounded-xl border border-border px-4 py-3 text-sm font-semibold normal-case outline-none focus:border-primary"
-                  />
-                </label>
-                {surcharge ? (
-                  <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-                    Active version {surcharge.version}. Existing settlements keep their original
-                    surcharge snapshot.
-                  </p>
-                ) : null}
-                <button
-                  disabled={busy === "surcharge"}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-black text-white disabled:opacity-50"
-                >
-                  {busy === "surcharge" ? (
-                    <Loader2 className="animate-spin" size={17} />
-                  ) : (
-                    <Save size={17} />
-                  )}
-                  Save surcharge
-                </button>
-              </form>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Main and AEPS wallets use independent payout charges.
+              </p>
+              <div className="mt-5 space-y-4">
+                {payoutWallets.map((sourceWallet) => {
+                  const draft = surchargeDrafts[sourceWallet];
+                  const configuration = surcharges[sourceWallet];
+                  const busyKey = `surcharge-${sourceWallet}`;
+                  return (
+                    <form
+                      key={sourceWallet}
+                      onSubmit={(event) => void updateSurcharge(event, sourceWallet)}
+                      className="space-y-4 rounded-2xl border border-border p-4"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="font-black text-secondary">{sourceWallet} wallet</h3>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-black ${configuration?.isActive ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
+                        >
+                          {configuration
+                            ? configuration.isActive
+                              ? "ACTIVE"
+                              : "INACTIVE"
+                            : "NOT LOADED"}
+                        </span>
+                      </div>
+                      <label className="block text-xs font-black uppercase text-secondary">
+                        Calculation type
+                        <select
+                          value={draft.type}
+                          onChange={(event) =>
+                            setSurchargeDrafts((current) => ({
+                              ...current,
+                              [sourceWallet]: {
+                                ...current[sourceWallet],
+                                type: event.target.value as "PERCENTAGE" | "FIXED",
+                              },
+                            }))
+                          }
+                          className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 text-sm font-semibold normal-case outline-none focus:border-primary"
+                        >
+                          <option value="PERCENTAGE">Percentage</option>
+                          <option value="FIXED">Fixed amount</option>
+                        </select>
+                      </label>
+                      <label className="block text-xs font-black uppercase text-secondary">
+                        {draft.type === "PERCENTAGE" ? "Percentage value" : "Amount in INR"}
+                        <input
+                          required
+                          inputMode="decimal"
+                          value={draft.value}
+                          onChange={(event) =>
+                            setSurchargeDrafts((current) => ({
+                              ...current,
+                              [sourceWallet]: {
+                                ...current[sourceWallet],
+                                value: event.target.value.replace(/[^0-9.]/g, ""),
+                              },
+                            }))
+                          }
+                          placeholder="0.00"
+                          className="mt-2 w-full rounded-xl border border-border px-4 py-3 text-sm font-semibold normal-case outline-none focus:border-primary"
+                        />
+                      </label>
+                      {configuration ? (
+                        <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
+                          Active version {configuration.version}. Existing settlements keep their
+                          original surcharge snapshot.
+                        </p>
+                      ) : null}
+                      <button
+                        disabled={Boolean(busy)}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-black text-white disabled:opacity-50"
+                      >
+                        {busy === busyKey ? (
+                          <Loader2 className="animate-spin" size={17} />
+                        ) : (
+                          <Save size={17} />
+                        )}
+                        Save {sourceWallet} surcharge
+                      </button>
+                    </form>
+                  );
+                })}
+              </div>
             </AdminPanel>
           </div>
         </div>

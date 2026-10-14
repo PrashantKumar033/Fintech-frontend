@@ -30,6 +30,8 @@ export type Identity = {
   profitWalletBalance?: WalletBalanceValue;
   walletBalances?: {
     main?: WalletBalanceValue;
+    mainHeld?: WalletBalanceValue;
+    mainAvailable?: WalletBalanceValue;
     aeps?: WalletBalanceValue;
     profit?: WalletBalanceValue;
   };

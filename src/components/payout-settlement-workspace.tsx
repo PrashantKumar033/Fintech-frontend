@@ -19,13 +19,16 @@ import { getSession } from "@/lib/auth-api";
 import { complianceApi, type BankAccount } from "@/lib/compliance-api";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { operationsApi, operationsMessage, type WalletBalances } from "@/lib/operations-api";
+import { isPayoutBankEligible, payoutBankPurpose } from "@/lib/payout-bank-eligibility";
 import {
   payoutApi,
   payoutMessage,
   type PayoutPaymentMode,
   type PayoutProvider,
   type PayoutSettlement,
+  type PayoutSourceWallet,
 } from "@/lib/payout-api";
+import { isManagementRole, managementBasePath } from "@/lib/role-hierarchy";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 
 const inr = new Intl.NumberFormat("en-IN", {
@@ -35,16 +38,6 @@ const inr = new Intl.NumberFormat("en-IN", {
 });
 
 type Coordinates = { latitude: number; longitude: number };
-
-function isPayoutEligible(account: BankAccount): boolean {
-  return (
-    account.status === "ACTIVE" &&
-    account.adminReviewStatus === "APPROVED" &&
-    account.verificationStatus === "VERIFIED" &&
-    account.ownershipStatus === "VERIFIED" &&
-    account.purposes.includes("PAYOUT")
-  );
-}
 
 function captureLocation(): Promise<Coordinates> {
   if (!navigator.geolocation) {
@@ -115,6 +108,7 @@ function CreatePayoutSettlementPanel() {
   const [balances, setBalances] = useState<WalletBalances | null>(null);
   const [providerCode, setProviderCode] = useState("");
   const [bankAccountId, setBankAccountId] = useState("");
+  const [sourceWallet, setSourceWallet] = useState<PayoutSourceWallet>("AEPS");
   const [paymentMode, setPaymentMode] = useState<PayoutPaymentMode>("IMPS");
   const [amount, setAmount] = useState("");
   const [tpin, setTpin] = useState("");
@@ -128,10 +122,19 @@ function CreatePayoutSettlementPanel() {
   const [result, setResult] = useState<PayoutSettlement | null>(null);
   const idempotencyKey = useRef<string | null>(null);
 
-  const eligibleAccounts = useMemo(() => accounts.filter(isPayoutEligible), [accounts]);
+  const eligibleAccounts = useMemo(
+    () => accounts.filter((account) => isPayoutBankEligible(account, sourceWallet)),
+    [accounts, sourceWallet],
+  );
   const selectedAccount = eligibleAccounts.find((account) => account.id === bankAccountId);
   const selectedProvider = providers.find((provider) => provider.providerCode === providerCode);
   const aepsBalance = Number(balances?.wallets.aeps ?? 0);
+  const mainBalance = Number(balances?.wallets.mainAvailable ?? balances?.wallets.main ?? 0);
+  const selectedWalletBalance = sourceWallet === "AEPS" ? aepsBalance : mainBalance;
+  const selectedWalletLabel = sourceWallet === "AEPS" ? "AEPS" : "Main";
+  const bankAccountsPath = isManagementRole(session?.identity.role)
+    ? `${managementBasePath(session?.identity.role)}/profile/bank`
+    : "/retailer/bank";
   const payoutServiceDisabled = error
     .toLowerCase()
     .includes("payout service is temporarily unavailable");
@@ -161,12 +164,6 @@ function CreatePayoutSettlementPanel() {
 
     if (bankResult.status === "fulfilled") {
       setAccounts(bankResult.value);
-      const firstEligible = bankResult.value.find(isPayoutEligible);
-      setBankAccountId((current) =>
-        bankResult.value.some((account) => account.id === current && isPayoutEligible(account))
-          ? current
-          : firstEligible?.id || "",
-      );
     } else {
       setAccounts([]);
       failures.push(payoutMessage(bankResult.reason));
@@ -185,6 +182,14 @@ function CreatePayoutSettlementPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setBankAccountId((current) =>
+      eligibleAccounts.some((account) => account.id === current)
+        ? current
+        : eligibleAccounts[0]?.id || "",
+    );
+  }, [eligibleAccounts]);
 
   function resetIntent() {
     idempotencyKey.current = null;
@@ -211,7 +216,9 @@ function CreatePayoutSettlementPanel() {
       return false;
     }
     if (!selectedAccount) {
-      setError("Select an active, approved and verified payout bank account.");
+      setError(
+        `Select an active, approved and verified ${selectedWalletLabel} wallet payout bank account.`,
+      );
       return false;
     }
     if (!/^\d+(?:\.\d{1,2})?$/.test(amount) || !Number.isFinite(numericAmount)) {
@@ -226,8 +233,8 @@ function CreatePayoutSettlementPanel() {
       setError("Maximum payout amount is ₹49,000.00 per request.");
       return false;
     }
-    if (numericAmount > aepsBalance) {
-      setError("Payout amount cannot exceed your available AEPS wallet balance.");
+    if (numericAmount > selectedWalletBalance) {
+      setError(`Payout amount cannot exceed your available ${selectedWalletLabel} wallet balance.`);
       return false;
     }
     if (!coordinates) {
@@ -264,7 +271,7 @@ function CreatePayoutSettlementPanel() {
           bankAccountId,
           amount: Number(amount),
           paymentMode,
-          sourceWallet: "AEPS",
+          sourceWallet,
           tpin,
           ...coordinates,
         },
@@ -350,7 +357,10 @@ function CreatePayoutSettlementPanel() {
               ["Surcharge", inr.format(Number(result.surcharge.amount))],
               [`Total ${result.sourceWallet} debit`, inr.format(Number(result.totalWalletDebit))],
               ["Mode", result.paymentMode],
-              ["Bank account", `•••• ${result.bankAccount.last4}`],
+              [
+                "Bank account",
+                `•••• ${result.bankAccount?.last4 || selectedAccount?.accountNumberLast4 || "—"}`,
+              ],
               ["Wallet state", result.walletState.replaceAll("_", " ")],
               ["Provider", result.providerCode],
             ].map(([label, value]) => (
@@ -370,10 +380,10 @@ function CreatePayoutSettlementPanel() {
               <BanknoteArrowDown size={23} />
             </span>
             <div>
-              <h2 className="text-xl font-black text-secondary">AEPS payout to bank</h2>
+              <h2 className="text-xl font-black text-secondary">Wallet payout to bank</h2>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Settle AEPS wallet funds into your own approved payout bank account through an
-                available provider.
+                Settle AEPS or Main wallet funds into your own approved payout bank account through
+                an available provider.
               </p>
             </div>
           </div>
@@ -387,7 +397,7 @@ function CreatePayoutSettlementPanel() {
           </button>
         </div>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-3">
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl bg-muted p-4">
             <p className="text-xs font-black uppercase text-muted-foreground">AEPS available</p>
             <p className="mt-2 text-2xl font-black text-secondary">
@@ -395,7 +405,15 @@ function CreatePayoutSettlementPanel() {
             </p>
           </div>
           <div className="rounded-2xl bg-muted p-4">
-            <p className="text-xs font-black uppercase text-muted-foreground">Eligible banks</p>
+            <p className="text-xs font-black uppercase text-muted-foreground">Main available</p>
+            <p className="mt-2 text-2xl font-black text-secondary">
+              {loading ? "—" : inr.format(mainBalance)}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-muted p-4">
+            <p className="text-xs font-black uppercase text-muted-foreground">
+              {selectedWalletLabel} payout banks
+            </p>
             <p className="mt-2 text-2xl font-black text-secondary">
               {loading ? "—" : eligibleAccounts.length}
             </p>
@@ -409,12 +427,20 @@ function CreatePayoutSettlementPanel() {
         </div>
 
         {!loading && allowed && eligibleAccounts.length === 0 ? (
-          <div className="mt-5 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <Building2 className="shrink-0" size={19} />
-            <p>
-              No payout-ready bank account is available. The account must include the PAYOUT purpose
-              and have ACTIVE, admin-approved, bank-verified and ownership-verified status.
-            </p>
+          <div className="mt-5 flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-3">
+              <Building2 className="shrink-0" size={19} />
+              <p>
+                No {selectedWalletLabel} wallet payout bank is available. Select an active, verified
+                account enabled for this wallet ({payoutBankPurpose(sourceWallet)} purpose).
+              </p>
+            </div>
+            <a
+              href={`${bankAccountsPath}?add=${sourceWallet}`}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-900 px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-amber-950"
+            >
+              <Plus size={15} /> Add {selectedWalletLabel} bank account
+            </a>
           </div>
         ) : null}
 
@@ -434,14 +460,14 @@ function CreatePayoutSettlementPanel() {
               <option value="">Select provider</option>
               {providers.map((provider) => (
                 <option key={provider.providerCode} value={provider.providerCode}>
-                  {provider.providerName}
+                  {provider.providerCode}
                 </option>
               ))}
             </select>
           </label>
 
           <label className="text-sm font-bold text-secondary">
-            Payout bank account
+            {selectedWalletLabel} payout bank account
             <select
               required
               value={bankAccountId}
@@ -452,12 +478,29 @@ function CreatePayoutSettlementPanel() {
               disabled={!allowed || loading || eligibleAccounts.length === 0}
               className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
             >
-              <option value="">Select verified bank</option>
+              <option value="">Select {selectedWalletLabel} enabled bank</option>
               {eligibleAccounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.bankName} •••• {account.accountNumberLast4} ({account.accountType})
                 </option>
               ))}
+            </select>
+          </label>
+
+          <label className="text-sm font-bold text-secondary">
+            Debit from wallet
+            <select
+              value={sourceWallet}
+              onChange={(event) => {
+                const nextWallet = event.target.value as PayoutSourceWallet;
+                setSourceWallet(nextWallet);
+                resetIntent();
+              }}
+              disabled={!allowed || loading}
+              className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
+            >
+              <option value="AEPS">AEPS wallet — {inr.format(aepsBalance)}</option>
+              <option value="MAIN">Main wallet — {inr.format(mainBalance)}</option>
             </select>
           </label>
 
@@ -528,8 +571,8 @@ function CreatePayoutSettlementPanel() {
 
           <div className="rounded-xl bg-amber-50 p-4 text-xs leading-5 text-amber-900 md:col-span-2">
             The configured payout surcharge is added to the requested amount and the total is
-            debited from your AEPS wallet. The exact surcharge and total debit are returned with the
-            payout result.
+            debited from your {selectedWalletLabel} wallet. Each wallet has its own surcharge
+            configuration; the exact surcharge and total debit are returned with the payout result.
           </div>
 
           <button
@@ -575,10 +618,10 @@ function CreatePayoutSettlementPanel() {
             <div className="mt-5 space-y-3 rounded-2xl bg-muted/60 p-4 text-sm">
               {[
                 ["Amount", inr.format(Number(amount))],
-                ["From", "AEPS wallet"],
+                ["From", `${selectedWalletLabel} wallet`],
                 ["To", `${selectedAccount.bankName} •••• ${selectedAccount.accountNumberLast4}`],
                 ["Mode", paymentMode],
-                ["Provider", selectedProvider.providerName],
+                ["Provider", selectedProvider.providerCode],
               ].map(([label, value]) => (
                 <div
                   key={label}
@@ -620,7 +663,8 @@ function CreatePayoutSettlementPanel() {
 
             <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
               The backend will verify your TPIN, calculate the active surcharge, reserve the total
-              AEPS debit and submit this payout immediately. Verify the bank and amount carefully.
+              {` ${selectedWalletLabel} debit`} and submit this payout immediately. Verify the bank
+              and amount carefully.
             </p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
