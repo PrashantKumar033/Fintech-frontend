@@ -47,7 +47,7 @@ export type PayoutSettlement = {
   totalWalletDebit: string;
   sourceWallet: PayoutSourceWallet;
   paymentMode: PayoutPaymentMode;
-  bankAccount: {
+  bankAccount?: {
     id: string;
     last4: string;
   };
@@ -126,7 +126,7 @@ export type CreatePayoutSettlementInput = {
   bankAccountId: string;
   amount: number;
   paymentMode: PayoutPaymentMode;
-  sourceWallet?: "AEPS";
+  sourceWallet: PayoutSourceWallet;
   tpin: string;
   latitude: number;
   longitude: number;

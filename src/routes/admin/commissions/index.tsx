@@ -61,6 +61,7 @@ type RuleDraft = {
   role: string;
   commissionType: CommissionRuleType;
   commissionValue: string;
+  tdsRate: string;
   minAmount: string;
   maxAmount: string;
   priority: string;
@@ -88,6 +89,7 @@ const emptyRuleDraft: RuleDraft = {
   role: "RETAILER",
   commissionType: "FIXED",
   commissionValue: "",
+  tdsRate: "2",
   minAmount: "",
   maxAmount: "",
   priority: "0",
@@ -156,6 +158,7 @@ function draftFromRule(rule: CommissionRule): RuleDraft {
     role: rule.role || "RETAILER",
     commissionType: rule.commissionType,
     commissionValue: String(rule.commissionValue ?? ""),
+    tdsRate: rule.tdsRate === null || rule.tdsRate === undefined ? "0" : String(rule.tdsRate),
     minAmount:
       rule.minAmount === null || rule.minAmount === undefined ? "" : String(rule.minAmount),
     maxAmount:
@@ -483,6 +486,15 @@ function Commissions() {
       return "Percentage commission cannot be more than 100%.";
     }
 
+    if (!ruleDraft.tdsRate.trim()) return "TDS rate is required.";
+    const tdsRate = Number(ruleDraft.tdsRate);
+    if (!Number.isFinite(tdsRate) || tdsRate < 0 || tdsRate > 100) {
+      return "TDS rate must be between 0 and 100%.";
+    }
+    if (!/^(?:\d+|\d*\.\d{1,2})$/.test(ruleDraft.tdsRate.trim())) {
+      return "TDS rate can have at most 2 decimal places.";
+    }
+
     const minAmount = numberOrUndefined(ruleDraft.minAmount);
     const maxAmount = numberOrUndefined(ruleDraft.maxAmount);
     if (minAmount !== undefined && (!Number.isFinite(minAmount) || minAmount < 0)) {
@@ -520,6 +532,7 @@ function Commissions() {
       role: normalizeCode(ruleDraft.role),
       commissionType: ruleDraft.commissionType,
       commissionValue: Number(ruleDraft.commissionValue),
+      tdsRate: Number(ruleDraft.tdsRate),
       priority: Number(ruleDraft.priority || 0),
       isActive: ruleDraft.isActive,
     };
@@ -1067,7 +1080,7 @@ function Commissions() {
                 </Field>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <Field label="Commission type *">
                   <Select
                     value={ruleDraft.commissionType}
@@ -1107,6 +1120,32 @@ function Commissions() {
                         setRuleDraft((current) => ({
                           ...current,
                           commissionValue: event.target.value,
+                        }))
+                      }
+                      className={`${inputClass} pl-9`}
+                    />
+                  </div>
+                </Field>
+                <Field
+                  label="TDS rate (%) *"
+                  hint="Percentage deducted from earned commission: 0 to 100."
+                >
+                  <div className="relative">
+                    <Percent
+                      size={14}
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <input
+                      required
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={ruleDraft.tdsRate}
+                      onChange={(event) =>
+                        setRuleDraft((current) => ({
+                          ...current,
+                          tdsRate: event.target.value,
                         }))
                       }
                       className={`${inputClass} pl-9`}
@@ -1293,6 +1332,9 @@ function Commissions() {
                           <p className="font-black text-secondary">{ruleRate(rule)}</p>
                           <p className="mt-1 text-[10px] text-muted-foreground">
                             {rule.commissionType}
+                          </p>
+                          <p className="mt-1 text-[10px] font-bold text-muted-foreground">
+                            TDS {Number(rule.tdsRate ?? 0)}%
                           </p>
                         </td>
                         <td className="px-4 py-4">

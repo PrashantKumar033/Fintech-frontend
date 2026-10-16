@@ -362,7 +362,9 @@ export function PayoutHistoryPanel() {
                     </td>
                     <td className="p-3 font-mono text-xs">{item.providerReference || "—"}</td>
                     <td className="p-3">{item.providerCode}</td>
-                    <td className="p-3">•••• {item.bankAccount.last4}</td>
+                    <td className="p-3">
+                      {item.bankAccount?.last4 ? `•••• ${item.bankAccount.last4}` : "—"}
+                    </td>
                     <td className="p-3">
                       <span className="font-bold">{item.paymentMode}</span>
                       <span className="mt-0.5 block text-[10px] text-muted-foreground">
@@ -492,7 +494,10 @@ export function PayoutHistoryPanel() {
                 ["RRN", detail.rrn || "—"],
                 ["Payment mode", detail.paymentMode],
                 ["Source wallet", detail.sourceWallet],
-                ["Bank account", `•••• ${detail.bankAccount.last4}`],
+                [
+                  "Bank account",
+                  detail.bankAccount?.last4 ? `•••• ${detail.bankAccount.last4}` : "—",
+                ],
                 ["Payout amount", money.format(Number(detail.amount))],
                 ["Surcharge", money.format(Number(detail.surcharge.amount))],
                 ["Total wallet debit", money.format(Number(detail.totalWalletDebit))],
