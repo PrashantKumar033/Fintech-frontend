@@ -519,7 +519,7 @@ function AepsFlow({
 const emptyRegistration = {
   bankAccountId: "",
   kycProfileId: "",
-  providerBankCode: "",
+  bankCode: "",
   lat: "",
   long: "",
   firstName: "",
@@ -556,11 +556,10 @@ function validateRegistration(form: typeof emptyRegistration): RegistrationError
   const errors: RegistrationErrors = {};
   const requiredFields: RegistrationField[] = [
     "bankAccountId",
-    "providerBankCode",
+    "bankCode",
     "lat",
     "long",
     "firstName",
-    "lastName",
     "dob",
     "emailId",
     "merchantPhoneNumber",
@@ -797,7 +796,7 @@ function Registration({
   const fields: Array<[keyof typeof form, string, string?]> = [
     ["firstName", "First name"],
     ["middleName", "Middle name (optional)"],
-    ["lastName", "Last name"],
+    ["lastName", "Last name (optional)"],
     ["dob", "Date of birth", "DD-MM-YYYY"],
     ["emailId", "Email", "name@example.com"],
     ["merchantPhoneNumber", "Merchant mobile", "10 digits"],
@@ -868,12 +867,14 @@ function Registration({
             }))}
           />
           <SelectField
-            label="Provider registration bank"
-            value={form.providerBankCode}
-            onChange={(v) => set("providerBankCode", v)}
-            fieldId="aeps-providerBankCode"
-            error={fieldErrors.providerBankCode}
-            options={banks.map((b) => ({ value: b.code || "", label: b.description }))}
+            label="AEPS registration bank"
+            value={form.bankCode}
+            onChange={(v) => set("bankCode", v)}
+            fieldId="aeps-bankCode"
+            error={fieldErrors.bankCode}
+            options={banks
+              .filter((bank) => bank.code !== undefined && bank.code !== null)
+              .map((bank) => ({ value: String(bank.code), label: bank.description }))}
           />
           {fields.map(([name, label, placeholder]) => (
             <Field
@@ -1158,7 +1159,7 @@ function DailyTwoFactor({
       return;
     }
     if (!/^-?\d+(\.\d+)?$/.test(lat) || !/^-?\d+(\.\d+)?$/.test(long)) {
-        setError("Allow location access in your browser to continue.");
+      setError("Allow location access in your browser to continue.");
       return;
     }
     setBusy(true);
@@ -1886,7 +1887,6 @@ function LocationStatus({
     </div>
   );
 }
-
 
 function Field({
   label,
