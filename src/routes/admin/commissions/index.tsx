@@ -89,7 +89,7 @@ const emptyRuleDraft: RuleDraft = {
   role: "RETAILER",
   commissionType: "FIXED",
   commissionValue: "",
-  tdsRate: "0",
+  tdsRate: "2",
   minAmount: "",
   maxAmount: "",
   priority: "0",
@@ -490,6 +490,9 @@ function Commissions() {
     const tdsRate = Number(ruleDraft.tdsRate);
     if (!Number.isFinite(tdsRate) || tdsRate < 0 || tdsRate > 100) {
       return "TDS rate must be between 0 and 100%.";
+    }
+    if (!/^(?:\d+|\d*\.\d{1,2})$/.test(ruleDraft.tdsRate.trim())) {
+      return "TDS rate can have at most 2 decimal places.";
     }
 
     const minAmount = numberOrUndefined(ruleDraft.minAmount);
@@ -1137,7 +1140,7 @@ function Commissions() {
                       type="number"
                       min="0"
                       max="100"
-                      step="0.0001"
+                      step="0.01"
                       value={ruleDraft.tdsRate}
                       onChange={(event) =>
                         setRuleDraft((current) => ({
