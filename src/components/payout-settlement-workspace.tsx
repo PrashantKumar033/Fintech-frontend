@@ -30,6 +30,7 @@ import {
 } from "@/lib/payout-api";
 import { isManagementRole, managementBasePath } from "@/lib/role-hierarchy";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
+import { formatWalletBalance, isNegativeWalletBalance } from "@/lib/wallet-balance";
 
 const inr = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -129,8 +130,9 @@ function CreatePayoutSettlementPanel() {
   const selectedAccount = eligibleAccounts.find((account) => account.id === bankAccountId);
   const selectedProvider = providers.find((provider) => provider.providerCode === providerCode);
   const aepsBalance = Number(balances?.wallets.aeps ?? 0);
-  const mainBalance = Number(balances?.wallets.mainAvailable ?? balances?.wallets.main ?? 0);
-  const selectedWalletBalance = sourceWallet === "AEPS" ? aepsBalance : mainBalance;
+  const mainBalance = Number(balances?.wallets.main ?? 0);
+  const mainAvailableBalance = Number(balances?.wallets.mainAvailable ?? mainBalance);
+  const selectedWalletBalance = sourceWallet === "AEPS" ? aepsBalance : mainAvailableBalance;
   const selectedWalletLabel = sourceWallet === "AEPS" ? "AEPS" : "Main";
   const bankAccountsPath = isManagementRole(session?.identity.role)
     ? `${managementBasePath(session?.identity.role)}/profile/bank`
@@ -398,16 +400,24 @@ function CreatePayoutSettlementPanel() {
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl bg-muted p-4">
+          <div
+            className={`rounded-2xl border p-4 ${isNegativeWalletBalance(aepsBalance) ? "border-red-200 bg-red-50" : "border-transparent bg-muted"}`}
+          >
             <p className="text-xs font-black uppercase text-muted-foreground">AEPS available</p>
-            <p className="mt-2 text-2xl font-black text-secondary">
-              {loading ? "—" : inr.format(aepsBalance)}
+            <p
+              className={`mt-2 text-2xl font-black tabular-nums ${isNegativeWalletBalance(aepsBalance) ? "text-red-700" : "text-secondary"}`}
+            >
+              {loading ? "—" : formatWalletBalance(aepsBalance)}
             </p>
           </div>
-          <div className="rounded-2xl bg-muted p-4">
-            <p className="text-xs font-black uppercase text-muted-foreground">Main available</p>
-            <p className="mt-2 text-2xl font-black text-secondary">
-              {loading ? "—" : inr.format(mainBalance)}
+          <div
+            className={`rounded-2xl border p-4 ${isNegativeWalletBalance(mainBalance) ? "border-red-200 bg-red-50" : "border-transparent bg-muted"}`}
+          >
+            <p className="text-xs font-black uppercase text-muted-foreground">Main wallet</p>
+            <p
+              className={`mt-2 text-2xl font-black tabular-nums ${isNegativeWalletBalance(mainBalance) ? "text-red-700" : "text-secondary"}`}
+            >
+              {loading ? "—" : formatWalletBalance(mainBalance)}
             </p>
           </div>
           <div className="rounded-2xl bg-muted p-4">
@@ -499,8 +509,8 @@ function CreatePayoutSettlementPanel() {
               disabled={!allowed || loading}
               className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
             >
-              <option value="AEPS">AEPS wallet — {inr.format(aepsBalance)}</option>
-              <option value="MAIN">Main wallet — {inr.format(mainBalance)}</option>
+              <option value="AEPS">AEPS wallet — {formatWalletBalance(aepsBalance)}</option>
+              <option value="MAIN">Main wallet — {formatWalletBalance(mainBalance)}</option>
             </select>
           </label>
 

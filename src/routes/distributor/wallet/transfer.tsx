@@ -76,15 +76,19 @@ function DistributorWalletTransferPage() {
   const [otp, setOtp] = useState("");
   const idempotencyKeyRef = useRef<string | null>(null);
 
-  const mainBalance = Number(balances?.wallets.mainAvailable ?? balances?.wallets.main ?? 0);
+  const mainBalance = Number(balances?.wallets.main ?? 0);
+  const mainAvailableBalance = Number(balances?.wallets.mainAvailable ?? mainBalance);
   const numericAmount = Number(amount);
   const receiver = receiverLoginId.trim().toUpperCase();
   const selfLoginId = session?.identity.loginId?.trim().toUpperCase() ?? "";
 
-  const amountAfterTransfer = useMemo(() => {
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return mainBalance;
-    return Math.max(0, mainBalance - numericAmount);
-  }, [mainBalance, numericAmount]);
+  const balancesAfterTransfer = useMemo(() => {
+    const debit = Number.isFinite(numericAmount) && numericAmount > 0 ? numericAmount : 0;
+    return {
+      main: mainBalance - debit,
+      available: mainAvailableBalance - debit,
+    };
+  }, [mainAvailableBalance, mainBalance, numericAmount]);
 
   async function loadBalance() {
     if (!session) return;
@@ -157,10 +161,10 @@ function DistributorWalletTransferPage() {
       return null;
     }
 
-    if (numericAmount > mainBalance) {
+    if (numericAmount > mainAvailableBalance) {
       setNotice({
         ok: false,
-        text: `Insufficient MAIN wallet balance. Available balance is ${inr.format(mainBalance)}.`,
+        text: `Insufficient MAIN wallet balance. Available balance is ${inr.format(mainAvailableBalance)}.`,
       });
       return null;
     }
@@ -294,21 +298,27 @@ function DistributorWalletTransferPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
           <AdminPanel>
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-4">
-                <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
-                  <WalletCards size={22} />
-                </span>
-                <div>
-                  <p className="text-xs font-extrabold uppercase tracking-[.12em] text-muted-foreground">
-                    Available MAIN wallet
-                  </p>
-                  <p className="mt-1 text-3xl font-black text-secondary">
-                    {loadingBalance ? "—" : inr.format(mainBalance)}
-                  </p>
-                </div>
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="grid flex-1 gap-3 sm:grid-cols-2">
+                {[
+                  ["Main wallet", mainBalance],
+                  ["Main available", mainAvailableBalance],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex items-center gap-3 rounded-2xl bg-muted/70 p-4">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                      <WalletCards size={20} />
+                    </span>
+                    <div>
+                      <p className="text-xs font-extrabold uppercase tracking-[.1em] text-muted-foreground">
+                        {label}
+                      </p>
+                      <p className="mt-1 text-2xl font-black text-secondary">
+                        {loadingBalance ? "—" : inr.format(Number(value))}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
-
               <button
                 type="button"
                 onClick={() => void loadBalance()}
@@ -392,13 +402,19 @@ function DistributorWalletTransferPage() {
                 </label>
               </div>
 
-              <div className="mt-5 rounded-2xl bg-muted/70 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <div className="mt-5 grid gap-3 rounded-2xl bg-muted/70 p-4 sm:grid-cols-2">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-semibold text-muted-foreground">Main after transfer</span>
+                  <span className="font-black text-secondary">
+                    {loadingBalance ? "—" : inr.format(balancesAfterTransfer.main)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-sm">
                   <span className="font-semibold text-muted-foreground">
-                    Balance after transfer
+                    Available after transfer
                   </span>
                   <span className="font-black text-secondary">
-                    {loadingBalance ? "—" : inr.format(amountAfterTransfer)}
+                    {loadingBalance ? "—" : inr.format(balancesAfterTransfer.available)}
                   </span>
                 </div>
               </div>

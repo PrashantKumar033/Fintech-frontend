@@ -14,16 +14,11 @@ import { getSession } from "@/lib/auth-api";
 import { distributorApi } from "@/lib/distributor-api";
 import { operationsMessage, type WalletBalances } from "@/lib/operations-api";
 import { credentialsPending, resolveWorkspaceRole, signedInHome } from "@/lib/role-hierarchy";
+import { formatWalletBalance, isNegativeWalletBalance } from "@/lib/wallet-balance";
 
 export const Route = createFileRoute("/distributor/wallet/")({
   head: () => ({ meta: [{ title: "Wallet — Distributor | UMOBIPAY" }] }),
   component: DistributorWalletPage,
-});
-
-const inr = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  minimumFractionDigits: 2,
 });
 
 function DistributorWalletPage() {
@@ -76,6 +71,7 @@ function DistributorWalletPage() {
 
   const cards = [
     ["Main wallet", data?.wallets.main, WalletCards],
+    ["Main available", data?.wallets.mainAvailable ?? data?.wallets.main, WalletCards],
     ["AEPS wallet", data?.wallets.aeps, Fingerprint],
     ["Profit wallet", data?.wallets.profit, Gift],
   ] as const;
@@ -94,31 +90,42 @@ function DistributorWalletPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {cards.map(([label, value, Icon]) => (
-          <AdminPanel key={label}>
-            <div className="flex items-start justify-between gap-4">
-              <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary">
-                <Icon size={20} />
-              </span>
-              <button
-                type="button"
-                onClick={() => void loadBalances()}
-                disabled={loading}
-                aria-label={`Refresh ${label}`}
-                className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-white text-muted-foreground transition hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map(([label, value, Icon]) => {
+          const negative = isNegativeWalletBalance(value);
+          return (
+            <AdminPanel
+              key={label}
+              className={negative ? "border-red-200 bg-red-50/60" : undefined}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <span
+                  className={`grid h-11 w-11 place-items-center rounded-xl ${negative ? "bg-red-100 text-red-700" : "bg-primary/10 text-primary"}`}
+                >
+                  <Icon size={20} />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void loadBalances()}
+                  disabled={loading}
+                  aria-label={`Refresh ${label}`}
+                  className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-white text-muted-foreground transition hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <RefreshCw className={loading ? "animate-spin" : ""} size={15} />
+                </button>
+              </div>
+              <p className="mt-5 text-xs font-bold uppercase tracking-[.08em] text-muted-foreground">
+                {label}
+              </p>
+              <p
+                className={`mt-1 text-3xl font-black tabular-nums ${negative ? "text-red-700" : "text-secondary"}`}
               >
-                <RefreshCw className={loading ? "animate-spin" : ""} size={15} />
-              </button>
-            </div>
-            <p className="mt-5 text-xs font-bold uppercase tracking-[.08em] text-muted-foreground">
-              {label}
-            </p>
-            <p className="mt-1 text-3xl font-black text-secondary">
-              {loading ? "—" : inr.format(Number(value ?? 0))}
-            </p>
-          </AdminPanel>
-        ))}
+                {loading ? "—" : formatWalletBalance(value ?? 0)}
+              </p>
+              {negative && <p className="mt-1 text-xs font-bold text-red-700">Negative balance</p>}
+            </AdminPanel>
+          );
+        })}
       </div>
 
       <AdminPanel className="mt-6">
@@ -130,7 +137,8 @@ function DistributorWalletPage() {
             <div>
               <h2 className="text-xl font-black text-secondary">Distributor peer transfer</h2>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Send MAIN-wallet funds to another active Distributor. Distributor → Retailer funding is not part of the current peer-transfer API.
+                Send MAIN-wallet funds to another active Distributor. Distributor → Retailer funding
+                is not part of the current peer-transfer API.
               </p>
             </div>
           </div>

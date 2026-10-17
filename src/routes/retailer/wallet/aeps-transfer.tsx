@@ -14,6 +14,7 @@ import {
 } from "@/lib/operations-api";
 import { credentialsPending, resolveWorkspaceRole, signedInHome } from "@/lib/role-hierarchy";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
+import { formatWalletBalance, isNegativeWalletBalance } from "@/lib/wallet-balance";
 
 export const Route = createFileRoute("/retailer/wallet/aeps-transfer")({
   head: () => ({ meta: [{ title: "AEPS to MAIN — Retailer | UMOBIPAY" }] }),
@@ -140,17 +141,35 @@ function RetailerAepsToMainPage() {
       ) : null}
 
       <section className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-2xl bg-muted p-5">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div
+            className={`rounded-2xl border p-5 ${isNegativeWalletBalance(balances?.wallets.aeps) ? "border-red-200 bg-red-50" : "border-transparent bg-muted"}`}
+          >
             <p className="text-xs font-extrabold uppercase text-muted-foreground">AEPS balance</p>
-            <p className="mt-2 text-2xl font-black text-secondary">
-              {inr.format(Number(balances?.wallets.aeps ?? 0))}
+            <p
+              className={`mt-2 text-2xl font-black tabular-nums ${isNegativeWalletBalance(balances?.wallets.aeps) ? "text-red-700" : "text-secondary"}`}
+            >
+              {formatWalletBalance(balances?.wallets.aeps ?? 0)}
             </p>
           </div>
-          <div className="rounded-2xl bg-muted p-5">
-            <p className="text-xs font-extrabold uppercase text-muted-foreground">MAIN available</p>
-            <p className="mt-2 text-2xl font-black text-secondary">
-              {inr.format(Number(balances?.wallets.mainAvailable ?? balances?.wallets.main ?? 0))}
+          <div
+            className={`rounded-2xl border p-5 ${isNegativeWalletBalance(balances?.wallets.main) ? "border-red-200 bg-red-50" : "border-transparent bg-muted"}`}
+          >
+            <p className="text-xs font-extrabold uppercase text-muted-foreground">Main wallet</p>
+            <p
+              className={`mt-2 text-2xl font-black tabular-nums ${isNegativeWalletBalance(balances?.wallets.main) ? "text-red-700" : "text-secondary"}`}
+            >
+              {formatWalletBalance(balances?.wallets.main ?? 0)}
+            </p>
+          </div>
+          <div
+            className={`rounded-2xl border p-5 ${isNegativeWalletBalance(balances?.wallets.mainAvailable ?? balances?.wallets.main) ? "border-red-200 bg-red-50" : "border-transparent bg-muted"}`}
+          >
+            <p className="text-xs font-extrabold uppercase text-muted-foreground">Main available</p>
+            <p
+              className={`mt-2 text-2xl font-black tabular-nums ${isNegativeWalletBalance(balances?.wallets.mainAvailable ?? balances?.wallets.main) ? "text-red-700" : "text-secondary"}`}
+            >
+              {formatWalletBalance(balances?.wallets.mainAvailable ?? balances?.wallets.main ?? 0)}
             </p>
           </div>
         </div>

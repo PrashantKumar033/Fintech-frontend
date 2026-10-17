@@ -78,6 +78,7 @@ const RD_DEVICE_OPTIONS = [
   { value: "evolute", label: "Evolute" },
 ] as const;
 const CUSTOM_RD_DEVICE = "__custom_rd_device__";
+const RD_CAPTURE_URL = "http://127.0.0.1:11100/rd/capture";
 
 const onboardingSteps = [
   { key: "REGISTER", label: "Register" },
@@ -954,7 +955,11 @@ function Registration({
             {locationError}
           </p>
         )}
-        <Submit busy={busy || loadingPrerequisites || prerequisiteErrors.length > 0}>
+        <Submit
+          busy={busy}
+          disabled={loadingPrerequisites || prerequisiteErrors.length > 0}
+          busyLabel="Submitting registration"
+        >
           Submit registration
         </Submit>
       </form>
@@ -1233,7 +1238,9 @@ function DailyTwoFactor({
             setRequestKey("");
           }}
         />
-        <Submit busy={busy || !pid}>Complete daily 2FA</Submit>
+        <Submit busy={busy} disabled={!pid} busyLabel="Processing your transaction">
+          Complete daily 2FA
+        </Submit>
       </form>
     </Panel>
   );
@@ -1606,13 +1613,23 @@ function TransactionForm({
           </button>
           <button
             disabled={!allowed || busy || ((!highValue || !!auth) && !form.pidData)}
-            className="flex-[2] rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground disabled:opacity-50"
+            aria-busy={busy}
+            className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy
-              ? "Processing…"
-              : highValue && !auth
-                ? "Send transaction OTP"
-                : `Confirm ${service.title}`}
+            {busy ? (
+              <>
+                <Loader2 size={17} className="animate-spin" aria-hidden="true" />
+                <span>
+                  {highValue && !auth
+                    ? "Requesting transaction OTP"
+                    : "Processing your transaction"}
+                </span>
+              </>
+            ) : highValue && !auth ? (
+              "Send transaction OTP"
+            ) : (
+              `Confirm ${service.title}`
+            )}
           </button>
         </div>
       </form>
@@ -1631,8 +1648,7 @@ function Capture({
   pipe: string;
   otp?: string;
 }) {
-  const [url, setUrl] = useState("http://127.0.0.1:11100/rd/capture"),
-    [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const onChangeRef = useRef(onChange);
   const valueRef = useRef(value);
@@ -1658,7 +1674,7 @@ function Capture({
     setBusy(true);
     setError("");
     try {
-      onChange(await capturePid(url, pipe, otp));
+      onChange(await capturePid(RD_CAPTURE_URL, pipe, otp));
     } catch (e) {
       setError(messageOf(e));
     } finally {
@@ -1666,56 +1682,75 @@ function Capture({
     }
   };
   return (
-    <div className="rounded-2xl border border-border bg-background p-4">
-      <div className="flex items-center gap-3">
-        <span className="grid h-11 w-11 place-items-center rounded-xl bg-mint text-secondary">
-          <Fingerprint />
-        </span>
-        <div>
-          <p className="text-sm font-extrabold text-secondary">
-            {USE_MOCK_FINGERPRINT ? "Test biometric (development)" : "Registered biometric device"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {USE_MOCK_FINGERPRINT
-              ? "Fingerprint scanner is bypassed for local testing only."
-              : "Capture a new PID for this request only."}
-          </p>
+    <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-background to-mint/60 shadow-sm">
+      <div className="flex flex-col gap-5 p-5 sm:p-6">
+        <div className="flex items-start gap-4">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-secondary text-white shadow-sm">
+            <Fingerprint size={25} aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-base font-extrabold text-secondary">
+                {USE_MOCK_FINGERPRINT
+                  ? "Test biometric (development)"
+                  : "Registered biometric device"}
+              </p>
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide ${
+                  value
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-background/90 text-muted-foreground ring-1 ring-border"
+                }`}
+              >
+                {value ? <CheckCircle2 size={13} aria-hidden="true" /> : null}
+                {value ? "Fingerprint captured" : "Ready to capture"}
+              </span>
+            </div>
+            <p className="mt-1 text-sm leading-5 text-muted-foreground">
+              {USE_MOCK_FINGERPRINT
+                ? "Fingerprint scanner is bypassed for local testing only."
+                : "Place the finger on the registered scanner and capture a fresh biometric for this request."}
+            </p>
+          </div>
         </div>
-        {value && <CheckCircle2 className="ml-auto text-emerald-600" />}
-      </div>
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        {!USE_MOCK_FINGERPRINT ? (
-          <input
-            aria-label="RD service URL"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="min-w-0 flex-1 rounded-xl border border-border bg-card px-3 py-2 text-xs outline-none focus:border-primary"
-          />
-        ) : null}
-        <button
-          type="button"
-          disabled={busy || Boolean(configurationError) || (!!otp === false && otp !== undefined)}
-          onClick={run}
-          className="rounded-xl bg-secondary px-5 py-2 text-xs font-bold text-white disabled:opacity-50"
-        >
-          {busy
-            ? "Capturing…"
-            : USE_MOCK_FINGERPRINT
-              ? value
-                ? "Generate test fingerprint again"
-                : "Use test fingerprint"
-              : value
-                ? "Capture again"
-                : "Capture fingerprint"}
-        </button>
+
+        <div className="flex flex-col gap-3 rounded-2xl border border-white/80 bg-background/80 p-3 shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 px-1 text-xs font-semibold text-muted-foreground">
+            <CheckCircle2 size={16} className="shrink-0 text-emerald-600" aria-hidden="true" />
+            <span>Secure device connection is handled automatically.</span>
+          </div>
+          <button
+            type="button"
+            disabled={busy || Boolean(configurationError) || (!!otp === false && otp !== undefined)}
+            onClick={run}
+            aria-busy={busy}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-secondary px-6 py-2.5 text-sm font-extrabold text-white shadow-sm transition hover:bg-secondary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : null}
+            {busy
+              ? "Capturing fingerprint"
+              : USE_MOCK_FINGERPRINT
+                ? value
+                  ? "Generate test fingerprint again"
+                  : "Use test fingerprint"
+                : value
+                  ? "Capture again"
+                  : "Capture fingerprint"}
+          </button>
+        </div>
       </div>
       {otp !== undefined && !otp && (
-        <p className="mt-2 text-xs text-amber-700">
+        <p className="border-t border-amber-200 bg-amber-50 px-5 py-3 text-xs font-semibold text-amber-800 sm:px-6">
           Enter the provider OTP before biometric capture.
         </p>
       )}
       {(configurationError || error) && (
-        <p className="mt-2 text-xs font-semibold text-red-700">{configurationError || error}</p>
+        <p
+          role="alert"
+          className="border-t border-red-200 bg-red-50 px-5 py-3 text-xs font-semibold text-red-700 sm:px-6"
+        >
+          {configurationError || error}
+        </p>
       )}
     </div>
   );
@@ -2022,13 +2057,31 @@ function RdDeviceField({
     </div>
   );
 }
-function Submit({ busy, children }: { busy: boolean; children: ReactNode }) {
+function Submit({
+  busy,
+  disabled = false,
+  busyLabel = "Processing your transaction",
+  children,
+}: {
+  busy: boolean;
+  disabled?: boolean;
+  busyLabel?: string;
+  children: ReactNode;
+}) {
   return (
     <button
-      disabled={busy}
-      className="w-full rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground disabled:opacity-50"
+      disabled={busy || disabled}
+      aria-busy={busy}
+      className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
     >
-      {busy ? "Please wait…" : children}
+      {busy ? (
+        <>
+          <Loader2 size={17} className="animate-spin" aria-hidden="true" />
+          <span>{busyLabel}</span>
+        </>
+      ) : (
+        children
+      )}
     </button>
   );
 }
