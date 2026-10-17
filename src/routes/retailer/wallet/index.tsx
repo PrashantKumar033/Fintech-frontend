@@ -12,16 +12,11 @@ import { BusinessPage } from "@/components/business-page";
 import { getSession } from "@/lib/auth-api";
 import { operationsApi, operationsMessage, type WalletBalances } from "@/lib/operations-api";
 import { credentialsPending, resolveWorkspaceRole, signedInHome } from "@/lib/role-hierarchy";
+import { formatWalletBalance, isNegativeWalletBalance } from "@/lib/wallet-balance";
 
 export const Route = createFileRoute("/retailer/wallet/")({
   head: () => ({ meta: [{ title: "Wallet — Retailer | UMOBIPAY" }] }),
   component: RetailerWalletPage,
-});
-
-const inr = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  minimumFractionDigits: 2,
 });
 
 function RetailerWalletPage() {
@@ -73,7 +68,8 @@ function RetailerWalletPage() {
   }
 
   const cards = [
-    ["MAIN available", balances?.wallets.mainAvailable ?? balances?.wallets.main ?? 0, WalletCards],
+    ["Main wallet", balances?.wallets.main ?? 0, WalletCards],
+    ["Main available", balances?.wallets.mainAvailable ?? balances?.wallets.main ?? 0, WalletCards],
     ["AEPS wallet", balances?.wallets.aeps ?? 0, Fingerprint],
     ["Profit wallet", balances?.wallets.profit ?? 0, ShieldCheck],
   ] as const;
@@ -92,37 +88,48 @@ function RetailerWalletPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {cards.map(([label, value, Icon]) => (
-          <section key={label} className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-            <div className="flex items-start justify-between gap-4">
-              <span className="grid h-11 w-11 place-items-center rounded-xl bg-mint text-secondary">
-                <Icon size={20} />
-              </span>
-              <button
-                type="button"
-                onClick={() => void loadBalances()}
-                disabled={loading}
-                aria-label={`Refresh ${label}`}
-                className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-background text-muted-foreground transition hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map(([label, value, Icon]) => {
+          const negative = isNegativeWalletBalance(value);
+          return (
+            <section
+              key={label}
+              className={`rounded-2xl border p-6 shadow-soft ${negative ? "border-red-200 bg-red-50/60" : "border-border bg-card"}`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <span
+                  className={`grid h-11 w-11 place-items-center rounded-xl ${negative ? "bg-red-100 text-red-700" : "bg-mint text-secondary"}`}
+                >
+                  <Icon size={20} />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void loadBalances()}
+                  disabled={loading}
+                  aria-label={`Refresh ${label}`}
+                  className="grid h-9 w-9 place-items-center rounded-xl border border-border bg-background text-muted-foreground transition hover:text-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <RefreshCw className={loading ? "animate-spin" : ""} size={15} />
+                </button>
+              </div>
+              <p className="mt-5 text-xs font-bold uppercase tracking-[.08em] text-muted-foreground">
+                {label}
+              </p>
+              <p
+                className={`mt-1 text-3xl font-black tabular-nums ${negative ? "text-red-700" : "text-secondary"}`}
               >
-                <RefreshCw className={loading ? "animate-spin" : ""} size={15} />
-              </button>
-            </div>
-            <p className="mt-5 text-xs font-bold uppercase tracking-[.08em] text-muted-foreground">
-              {label}
-            </p>
-            <p className="mt-1 text-3xl font-black text-secondary">
-              {loading ? "—" : inr.format(Number(value))}
-            </p>
-          </section>
-        ))}
+                {loading ? "—" : formatWalletBalance(value)}
+              </p>
+              {negative && <p className="mt-1 text-xs font-bold text-red-700">Negative balance</p>}
+            </section>
+          );
+        })}
       </div>
 
       {Number(balances?.wallets.mainHeld || 0) > 0 ? (
         <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-          {inr.format(Number(balances?.wallets.mainHeld || 0))} is currently held. Ledger MAIN
-          balance is {inr.format(Number(balances?.wallets.main || 0))}.
+          {formatWalletBalance(balances?.wallets.mainHeld ?? 0)} is currently held. Ledger MAIN
+          balance is {formatWalletBalance(balances?.wallets.main ?? 0)}.
         </p>
       ) : null}
 

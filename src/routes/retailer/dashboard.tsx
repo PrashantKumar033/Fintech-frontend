@@ -32,6 +32,7 @@ import { operationsApi, operationsMessage, type WalletBalances } from "@/lib/ope
 import { BusinessPage } from "@/components/business-page";
 import { DashboardFeature, PermissionDashboardGrid } from "@/components/permission-dashboard";
 import { usePermissionDashboard, type DashboardFeatureKey } from "@/lib/permission-dashboard";
+import { formatWalletBalance } from "@/lib/wallet-balance";
 
 export const Route = createFileRoute("/retailer/dashboard")({
   head: () => ({ meta: [{ title: "Business Dashboard — UMOBIPAY" }] }),
@@ -185,10 +186,7 @@ function DashboardHome({ identity }: { identity: Identity }) {
             wallets: {
               main,
               mainHeld,
-              mainAvailable:
-                mainResult.status === "fulfilled"
-                  ? Math.max(0, main - mainHeld)
-                  : (aggregate?.wallets.mainAvailable ?? aggregate?.wallets.main ?? 0),
+              mainAvailable: aggregate?.wallets.mainAvailable ?? main - mainHeld,
               aeps:
                 aepsResult.status === "fulfilled"
                   ? Number(aepsResult.value)
@@ -245,8 +243,7 @@ function DashboardHome({ identity }: { identity: Identity }) {
       },
     );
   }, [commissionAllowed, identity.id, transactionsAllowed, walletAllowed]);
-  const money = (value = 0) =>
-    new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(value);
+  const money = (value = 0) => formatWalletBalance(value);
   return (
     <div className="mx-auto max-w-[1500px] space-y-6">
       <section className="relative overflow-hidden rounded-[1.25rem] bg-secondary p-6 text-secondary-foreground shadow-elegant sm:p-8">
@@ -264,11 +261,7 @@ function DashboardHome({ identity }: { identity: Identity }) {
             <div className="grid grid-cols-3 gap-3">
               <HeroMetric
                 label="Main wallet"
-                value={
-                  balanceError
-                    ? "Unavailable"
-                    : money(balances?.wallets.mainAvailable ?? balances?.wallets.main)
-                }
+                value={balanceError ? "Unavailable" : money(balances?.wallets.main)}
               />
               <HeroMetric
                 label="AEPS wallet"
@@ -291,13 +284,9 @@ function DashboardHome({ identity }: { identity: Identity }) {
             content: (
               <Summary
                 icon={Wallet}
-                label="Available balance"
-                value={
-                  balanceError
-                    ? "Unavailable"
-                    : money(balances?.wallets.mainAvailable ?? balances?.wallets.main)
-                }
-                note={balanceError || "Live available MAIN wallet balance"}
+                label="Main wallet"
+                value={balanceError ? "Unavailable" : money(balances?.wallets.main)}
+                note={balanceError || "Live MAIN wallet ledger balance"}
               />
             ),
           },

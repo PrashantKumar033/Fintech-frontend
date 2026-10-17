@@ -4,8 +4,8 @@ import {
   CircleAlert,
   Eye,
   Loader2,
+  PencilLine,
   Power,
-  RefreshCw,
   Save,
   ServerCog,
   ShieldCheck,
@@ -46,6 +46,9 @@ export function SuperAdminPayoutControls() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [surchargeEditorOpen, setSurchargeEditorOpen] = useState(false);
+  const [surchargeError, setSurchargeError] = useState("");
+  const [surchargeNotice, setSurchargeNotice] = useState("");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [providerDetail, setProviderDetail] = useState<ProviderRegistryEntry | null>(null);
   const [detailLoading, setDetailLoading] = useState("");
@@ -145,17 +148,17 @@ export function SuperAdminPayoutControls() {
     const draft = surchargeDrafts[sourceWallet];
     const value = Number(draft.value);
     if (!Number.isFinite(value) || value < 0) {
-      setError(`${sourceWallet} wallet surcharge must be 0 or greater.`);
+      setSurchargeError(`${sourceWallet} wallet surcharge must be 0 or greater.`);
       return;
     }
     if (draft.type === "PERCENTAGE" && value > 100) {
-      setError(`${sourceWallet} wallet percentage surcharge cannot exceed 100.`);
+      setSurchargeError(`${sourceWallet} wallet percentage surcharge cannot exceed 100.`);
       return;
     }
 
     setBusy(`surcharge-${sourceWallet}`);
-    setError("");
-    setNotice("");
+    setSurchargeError("");
+    setSurchargeNotice("");
     try {
       const next = await adminApi.superAdminPayout.surcharge.update(
         sourceWallet,
@@ -170,14 +173,32 @@ export function SuperAdminPayoutControls() {
           value: String(Number(next.surchargeValue)),
         },
       }));
-      setNotice(
-        `${sourceWallet} wallet surcharge updated. New ${sourceWallet} settlements will use this configuration.`,
-      );
+      const successMessage = `${sourceWallet} wallet surcharge updated. New ${sourceWallet} settlements will use this configuration.`;
+      setSurchargeNotice(successMessage);
+      setNotice(successMessage);
     } catch (requestError) {
-      setError(messageOf(requestError));
+      setSurchargeError(messageOf(requestError));
     } finally {
       setBusy("");
     }
+  }
+
+  function openSurchargeEditor() {
+    setSurchargeDrafts((current) => {
+      const next = { ...current };
+      payoutWallets.forEach((sourceWallet) => {
+        const configuration = surcharges[sourceWallet];
+        if (!configuration) return;
+        next[sourceWallet] = {
+          type: configuration.type,
+          value: String(Number(configuration.surchargeValue)),
+        };
+      });
+      return next;
+    });
+    setSurchargeError("");
+    setSurchargeNotice("");
+    setSurchargeEditorOpen(true);
   }
 
   async function viewProvider(publicCode: string) {
@@ -208,11 +229,11 @@ export function SuperAdminPayoutControls() {
       <div className="mb-4 flex justify-end">
         <button
           type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50"
+          onClick={openSurchargeEditor}
+          disabled={loading || Object.keys(surcharges).length === 0 || Boolean(busy)}
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <RefreshCw className={loading ? "animate-spin" : ""} size={16} /> Refresh payout
+          <PencilLine size={16} /> Edit payout surcharges
         </button>
       </div>
 
@@ -340,31 +361,40 @@ export function SuperAdminPayoutControls() {
             </AdminPanel>
 
             <AdminPanel>
-              <div className="flex items-center gap-3">
-                <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary">
-                  <BadgeIndianRupee size={20} />
-                </span>
-                <div>
-                  <p className="text-xs font-black uppercase text-primary">Financial config</p>
-                  <h2 className="text-xl font-black text-secondary">Surcharge</h2>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary/10 text-primary">
+                    <BadgeIndianRupee size={20} />
+                  </span>
+                  <div>
+                    <p className="text-xs font-black uppercase text-primary">Financial config</p>
+                    <h2 className="text-xl font-black text-secondary">Payout surcharges</h2>
+                  </div>
                 </div>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-black text-muted-foreground">
+                  2 WALLETS
+                </span>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Main and AEPS wallets use independent payout charges.
+                Current charges applied independently to Main and AEPS wallet settlements.
               </p>
-              <div className="mt-5 space-y-4">
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 {payoutWallets.map((sourceWallet) => {
-                  const draft = surchargeDrafts[sourceWallet];
                   const configuration = surcharges[sourceWallet];
-                  const busyKey = `surcharge-${sourceWallet}`;
                   return (
-                    <form
+                    <div
                       key={sourceWallet}
-                      onSubmit={(event) => void updateSurcharge(event, sourceWallet)}
-                      className="space-y-4 rounded-2xl border border-border p-4"
+                      className="rounded-2xl border border-border bg-gradient-to-br from-white to-muted/50 p-4"
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <h3 className="font-black text-secondary">{sourceWallet} wallet</h3>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">
+                            Source wallet
+                          </p>
+                          <h3 className="mt-0.5 font-black text-secondary">
+                            {sourceWallet === "MAIN" ? "Main wallet" : "AEPS wallet"}
+                          </h3>
+                        </div>
                         <span
                           className={`rounded-full px-2.5 py-1 text-[10px] font-black ${configuration?.isActive ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
                         >
@@ -375,69 +405,239 @@ export function SuperAdminPayoutControls() {
                             : "NOT LOADED"}
                         </span>
                       </div>
-                      <label className="block text-xs font-black uppercase text-secondary">
-                        Calculation type
-                        <select
-                          value={draft.type}
-                          onChange={(event) =>
-                            setSurchargeDrafts((current) => ({
-                              ...current,
-                              [sourceWallet]: {
-                                ...current[sourceWallet],
-                                type: event.target.value as "PERCENTAGE" | "FIXED",
-                              },
-                            }))
-                          }
-                          className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 text-sm font-semibold normal-case outline-none focus:border-primary"
-                        >
-                          <option value="PERCENTAGE">Percentage</option>
-                          <option value="FIXED">Fixed amount</option>
-                        </select>
-                      </label>
-                      <label className="block text-xs font-black uppercase text-secondary">
-                        {draft.type === "PERCENTAGE" ? "Percentage value" : "Amount in INR"}
-                        <input
-                          required
-                          inputMode="decimal"
-                          value={draft.value}
-                          onChange={(event) =>
-                            setSurchargeDrafts((current) => ({
-                              ...current,
-                              [sourceWallet]: {
-                                ...current[sourceWallet],
-                                value: event.target.value.replace(/[^0-9.]/g, ""),
-                              },
-                            }))
-                          }
-                          placeholder="0.00"
-                          className="mt-2 w-full rounded-xl border border-border px-4 py-3 text-sm font-semibold normal-case outline-none focus:border-primary"
-                        />
-                      </label>
                       {configuration ? (
-                        <p className="rounded-xl bg-muted p-3 text-xs text-muted-foreground">
-                          Active version {configuration.version}. Existing settlements keep their
-                          original surcharge snapshot.
-                        </p>
-                      ) : null}
+                        <>
+                          <div className="mt-4 flex items-end justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-wide text-muted-foreground">
+                                Current surcharge
+                              </p>
+                              <p className="mt-1 text-2xl font-black text-secondary">
+                                {configuration.type === "PERCENTAGE"
+                                  ? `${Number(configuration.surchargeValue)}%`
+                                  : new Intl.NumberFormat("en-IN", {
+                                      style: "currency",
+                                      currency: "INR",
+                                      minimumFractionDigits: 2,
+                                    }).format(Number(configuration.surchargeValue))}
+                              </p>
+                            </div>
+                            <p className="rounded-lg bg-primary/10 px-2.5 py-1.5 text-[10px] font-black text-primary">
+                              {configuration.type === "PERCENTAGE" ? "PERCENTAGE" : "FIXED AMOUNT"}
+                            </p>
+                          </div>
+                          <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-3 text-xs">
+                            <div>
+                              <p className="text-muted-foreground">Version</p>
+                              <p className="mt-0.5 font-extrabold text-secondary">
+                                v{configuration.version}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-muted-foreground">Last updated</p>
+                              <p className="mt-0.5 font-extrabold text-secondary">
+                                {new Date(configuration.updatedAt).toLocaleDateString("en-IN")}
+                              </p>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="mt-4 rounded-xl bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                          Surcharge configuration is currently unavailable.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                Existing settlements retain their original surcharge snapshot when rates change.
+              </p>
+            </AdminPanel>
+          </div>
+        </div>
+      )}
+
+      {surchargeEditorOpen ? (
+        <div className="fixed inset-0 z-[130] grid place-items-center bg-secondary/65 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="payout-surcharge-editor-title"
+            className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl"
+          >
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-border bg-white/95 px-5 py-5 backdrop-blur sm:px-6">
+              <div className="flex items-start gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                  <BadgeIndianRupee size={21} />
+                </span>
+                <div>
+                  <p className="text-xs font-black uppercase text-primary">Payout controls</p>
+                  <h2
+                    id="payout-surcharge-editor-title"
+                    className="mt-1 text-xl font-black text-secondary"
+                  >
+                    Edit payout surcharges
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Configure Main and AEPS wallet charges independently.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSurchargeEditorOpen(false)}
+                disabled={Boolean(busy)}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border text-muted-foreground transition hover:bg-muted hover:text-secondary disabled:opacity-50"
+                aria-label="Close surcharge editor"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-5 p-5 sm:p-6">
+              {surchargeError ? (
+                <p
+                  role="alert"
+                  className="flex gap-2 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700"
+                >
+                  <CircleAlert className="shrink-0" size={18} /> {surchargeError}
+                </p>
+              ) : null}
+              {surchargeNotice ? (
+                <p className="flex gap-2 rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">
+                  <ShieldCheck className="shrink-0" size={18} /> {surchargeNotice}
+                </p>
+              ) : null}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {payoutWallets.map((sourceWallet) => {
+                  const draft = surchargeDrafts[sourceWallet];
+                  const configuration = surcharges[sourceWallet];
+                  const busyKey = `surcharge-${sourceWallet}`;
+                  return (
+                    <form
+                      key={sourceWallet}
+                      onSubmit={(event) => void updateSurcharge(event, sourceWallet)}
+                      className="flex flex-col rounded-2xl border border-border bg-muted/30 p-4 sm:p-5"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-wide text-primary">
+                            {sourceWallet} source
+                          </p>
+                          <h3 className="mt-1 text-lg font-black text-secondary">
+                            {sourceWallet === "MAIN" ? "Main wallet" : "AEPS wallet"}
+                          </h3>
+                        </div>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-black ${configuration?.isActive ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
+                        >
+                          {configuration?.isActive ? "ACTIVE" : "INACTIVE"}
+                        </span>
+                      </div>
+
+                      <div className="mt-5 space-y-4">
+                        <label className="block text-xs font-black uppercase text-secondary">
+                          Calculation type
+                          <select
+                            value={draft.type}
+                            disabled={Boolean(busy)}
+                            onChange={(event) => {
+                              setSurchargeError("");
+                              setSurchargeNotice("");
+                              setSurchargeDrafts((current) => ({
+                                ...current,
+                                [sourceWallet]: {
+                                  ...current[sourceWallet],
+                                  type: event.target.value as "PERCENTAGE" | "FIXED",
+                                },
+                              }));
+                            }}
+                            className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 text-sm font-semibold normal-case outline-none focus:border-primary disabled:opacity-60"
+                          >
+                            <option value="PERCENTAGE">Percentage</option>
+                            <option value="FIXED">Fixed amount</option>
+                          </select>
+                        </label>
+                        <label className="block text-xs font-black uppercase text-secondary">
+                          {draft.type === "PERCENTAGE" ? "Percentage value" : "Amount in INR"}
+                          <div className="relative mt-2">
+                            <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-sm font-black text-muted-foreground">
+                              {draft.type === "PERCENTAGE" ? "%" : "₹"}
+                            </span>
+                            <input
+                              required
+                              min="0"
+                              max={draft.type === "PERCENTAGE" ? "100" : undefined}
+                              step="0.01"
+                              type="number"
+                              inputMode="decimal"
+                              value={draft.value}
+                              disabled={Boolean(busy)}
+                              onChange={(event) => {
+                                setSurchargeError("");
+                                setSurchargeNotice("");
+                                setSurchargeDrafts((current) => ({
+                                  ...current,
+                                  [sourceWallet]: {
+                                    ...current[sourceWallet],
+                                    value: event.target.value,
+                                  },
+                                }));
+                              }}
+                              placeholder="0.00"
+                              className="w-full rounded-xl border border-border bg-white py-3 pl-10 pr-4 text-sm font-semibold normal-case outline-none focus:border-primary disabled:opacity-60"
+                            />
+                          </div>
+                        </label>
+                      </div>
+
+                      <div className="mt-4 rounded-xl bg-white p-3 text-xs text-muted-foreground">
+                        {configuration ? (
+                          <>
+                            Active version <strong>v{configuration.version}</strong> · Updated{" "}
+                            {new Date(configuration.updatedAt).toLocaleString("en-IN")}
+                          </>
+                        ) : (
+                          "No active configuration was loaded for this wallet."
+                        )}
+                      </div>
+
                       <button
-                        disabled={Boolean(busy)}
-                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-black text-white disabled:opacity-50"
+                        disabled={Boolean(busy) || !configuration}
+                        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-black text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {busy === busyKey ? (
                           <Loader2 className="animate-spin" size={17} />
                         ) : (
                           <Save size={17} />
                         )}
-                        Save {sourceWallet} surcharge
+                        {busy === busyKey ? "Saving surcharge" : `Save ${sourceWallet} surcharge`}
                       </button>
                     </form>
                   );
                 })}
               </div>
-            </AdminPanel>
+
+              <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+                <p className="max-w-xl text-xs leading-5 text-muted-foreground">
+                  Updated rates apply only to new settlements. Existing settlements keep the
+                  surcharge captured when they were created.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSurchargeEditorOpen(false)}
+                  disabled={Boolean(busy)}
+                  className="shrink-0 rounded-xl border border-border px-5 py-2.5 text-sm font-bold text-secondary transition hover:bg-muted disabled:opacity-50"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       {confirmation ? (
         <div className="fixed inset-0 z-[120] grid place-items-center bg-secondary/65 p-4 backdrop-blur-sm">

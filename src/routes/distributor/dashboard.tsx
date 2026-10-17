@@ -22,6 +22,7 @@ import { usePermissionDashboard, type DashboardFeatureKey } from "@/lib/permissi
 import { getSession } from "@/lib/auth-api";
 import { distributorApi, type HierarchyChild } from "@/lib/distributor-api";
 import type { ProviderTransactionPage, WalletBalances } from "@/lib/operations-api";
+import { formatWalletBalance } from "@/lib/wallet-balance";
 
 export const Route = createFileRoute("/distributor/dashboard")({ component: DistributorDashboard });
 
@@ -120,8 +121,7 @@ export function DistributorDashboard() {
   const successful = rows.filter((row) => row.status === "SUCCESS");
   const volume = successful.reduce((sum, row) => sum + Number(row.amount || 0), 0);
   const activeRetailers = retailers.filter((r) => r.isActive).length;
-  const money = (value = 0) =>
-    new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(value);
+  const money = (value = 0) => formatWalletBalance(value);
 
   const cards = [
     [
