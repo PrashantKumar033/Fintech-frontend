@@ -1,5 +1,11 @@
 import { authenticatedRequest } from "./auth-api";
-import { buildFingerprintPidOptions, isMockPidEnabled, resolveAepsWadh } from "./aeps-pid";
+import {
+  assertAepsCaptureSupported,
+  buildFingerprintPidOptions,
+  isMockPidEnabled,
+  resolveAepsWadh,
+} from "./aeps-pid";
+import { createIdempotencyKey } from "./idempotency-key";
 
 export { resolveAepsWadh } from "./aeps-pid";
 
@@ -209,9 +215,7 @@ export const aepsApi = {
 };
 
 export function newIdempotencyKey(): string {
-  if (!globalThis.crypto?.randomUUID)
-    throw new Error("A secure browser context is required for financial transactions.");
-  return globalThis.crypto.randomUUID();
+  return createIdempotencyKey("aeps");
 }
 
 // Mock PID is opt-in and development-only. Production always calls the configured RD service.
@@ -221,6 +225,7 @@ export const USE_MOCK_FINGERPRINT = isMockPidEnabled(
 );
 
 export async function capturePid(rdUrl: string, pipe: string, otp?: string): Promise<string> {
+  assertAepsCaptureSupported("BA");
   const wadh = resolveAepsWadh(pipe);
   if (USE_MOCK_FINGERPRINT) {
     console.warn("Using development-only mock fingerprint data.");

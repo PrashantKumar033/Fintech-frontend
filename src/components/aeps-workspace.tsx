@@ -42,8 +42,17 @@ import {
 import {
   buildAepsTransactionRequest,
   pidDataAfterBindingChange,
+  transactionRequiresOtp,
   transactionAuthorizationFromResponse,
 } from "@/lib/aeps-pid";
+import {
+  AEPS_MCC_OPTIONS,
+  buildAepsRegistrationRequest,
+  EMPTY_AEPS_REGISTRATION,
+  validateAepsRegistration,
+  type AepsRegistrationErrors,
+  type AepsRegistrationField,
+} from "@/lib/aeps-registration";
 import { BusinessPage } from "@/components/business-page";
 import { AdminLayout } from "@/components/admin/admin-layout";
 import { ActionPermissionNotice } from "@/components/action-permission-notice";
@@ -517,92 +526,11 @@ function AepsFlow({
   }
 }
 
-const emptyRegistration = {
-  bankAccountId: "",
-  kycProfileId: "",
-  bankCode: "",
-  lat: "",
-  long: "",
-  firstName: "",
-  middleName: "",
-  lastName: "",
-  dob: "",
-  emailId: "",
-  merchantPhoneNumber: "",
-  merchantAddress1: "",
-  merchantAddress2: "",
-  merchantState: "",
-  merchantDistrict: "",
-  gender: "M",
-  merchantPinCode: "",
-  merchantPan: "",
-  aadhaarNumber: "",
-  shopPan: "",
-  shopAddress: "",
-  shopDistrict: "",
-  shopState: "",
-  shopPincode: "",
-  shopLat: "",
-  shopLong: "",
-};
+const emptyRegistration = EMPTY_AEPS_REGISTRATION;
 
 // Keep an unfinished form while the SPA route temporarily unmounts. This intentionally
 // stays in memory instead of local/session storage because the form contains Aadhaar data.
 const registrationDrafts = new Map<string, typeof emptyRegistration>();
-
-type RegistrationField = keyof typeof emptyRegistration;
-type RegistrationErrors = Partial<Record<RegistrationField, string>>;
-
-function validateRegistration(form: typeof emptyRegistration): RegistrationErrors {
-  const errors: RegistrationErrors = {};
-  const requiredFields: RegistrationField[] = [
-    "bankAccountId",
-    "bankCode",
-    "lat",
-    "long",
-    "firstName",
-    "dob",
-    "emailId",
-    "merchantPhoneNumber",
-    "merchantAddress1",
-    "merchantState",
-    "merchantDistrict",
-    "gender",
-    "merchantPinCode",
-    "merchantPan",
-    "aadhaarNumber",
-    "shopPan",
-    "shopAddress",
-    "shopDistrict",
-    "shopState",
-    "shopPincode",
-    "shopLat",
-    "shopLong",
-  ];
-  for (const field of requiredFields) {
-    if (!form[field].trim()) errors[field] = "This field is required.";
-  }
-  if (form.dob && !/^\d{2}-\d{2}-\d{4}$/.test(form.dob)) errors.dob = "Use DD-MM-YYYY format.";
-  if (form.emailId && !/^\S+@\S+\.\S+$/.test(form.emailId))
-    errors.emailId = "Enter a valid merchant email address.";
-  if (form.merchantPhoneNumber && !/^\d{10}$/.test(form.merchantPhoneNumber))
-    errors.merchantPhoneNumber = "Enter exactly 10 digits.";
-  if (form.merchantPinCode && !/^\d{6}$/.test(form.merchantPinCode))
-    errors.merchantPinCode = "Enter exactly 6 digits.";
-  if (form.shopPincode && !/^\d{6}$/.test(form.shopPincode))
-    errors.shopPincode = "Enter exactly 6 digits.";
-  if (form.merchantPan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(form.merchantPan))
-    errors.merchantPan = "Use PAN format ABCDE1234F.";
-  if (form.shopPan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(form.shopPan))
-    errors.shopPan = "Use PAN format ABCDE1234F.";
-  if (form.aadhaarNumber && !/^\d{12}$/.test(form.aadhaarNumber))
-    errors.aadhaarNumber = "Enter exactly 12 digits.";
-  for (const field of ["lat", "long", "shopLat", "shopLong"] as const) {
-    if (form[field] && !/^-?\d+(\.\d+)?$/.test(form[field]))
-      errors[field] = "Enter a valid coordinate.";
-  }
-  return errors;
-}
 
 function Registration({
   token,
@@ -630,7 +558,7 @@ function Registration({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [locationError, setLocationError] = useState(""),
-    [fieldErrors, setFieldErrors] = useState<RegistrationErrors>({});
+    [fieldErrors, setFieldErrors] = useState<AepsRegistrationErrors>({});
   const setForm = useCallback<typeof setFormState>(
     (value) => {
       setFormState((current) => {
@@ -698,7 +626,7 @@ function Registration({
       .then(setShopDistricts)
       .catch((e) => setError(messageOf(e)));
   }, [form.shopState, token]);
-  const set = (name: RegistrationField, value: string) => {
+  const set = (name: AepsRegistrationField, value: string) => {
     setForm((current) => ({ ...current, [name]: value }));
     setFieldErrors((current) => {
       if (!current[name]) return current;
@@ -754,7 +682,7 @@ function Registration({
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    const validationErrors = validateRegistration(form);
+    const validationErrors = validateAepsRegistration(form);
     if (Object.keys(validationErrors).length) {
       setFieldErrors(validationErrors);
       const coordinateFields = new Set(["lat", "long", "shopLat", "shopLong"]);
@@ -773,10 +701,7 @@ function Registration({
     setFieldErrors({});
     setBusy(true);
     try {
-      await aepsApi.register(
-        token,
-        Object.fromEntries(Object.entries(form).filter(([, v]) => v !== "")),
-      );
+      await aepsApi.register(token, buildAepsRegistrationRequest(form));
       registrationDrafts.delete(draftKey);
       await done();
     } catch (x) {
@@ -797,12 +722,15 @@ function Registration({
   const fields: Array<[keyof typeof form, string, string?]> = [
     ["firstName", "First name"],
     ["middleName", "Middle name (optional)"],
-    ["lastName", "Last name (optional)"],
+    ["lastName", "Last name"],
     ["dob", "Date of birth", "DD-MM-YYYY"],
     ["emailId", "Email", "name@example.com"],
     ["merchantPhoneNumber", "Merchant mobile", "10 digits"],
     ["merchantAddress1", "Residence address line 1"],
     ["merchantAddress2", "Residence address line 2 (optional)"],
+    ["shopName", "Shop name"],
+    ["motherName", "Mother's name"],
+    ["fatherName", "Father's name"],
     ["merchantPinCode", "Residence PIN", "6 digits"],
     ["merchantPan", "Merchant PAN", "ABCDE1234F"],
     ["aadhaarNumber", "Merchant Aadhaar", "12 digits"],
@@ -902,6 +830,25 @@ function Registration({
               { value: "F", label: "Female" },
               { value: "O", label: "Other" },
             ]}
+          />
+          <SelectField
+            label="Marital status"
+            value={form.maritalStatus}
+            onChange={(v) => set("maritalStatus", v)}
+            fieldId="aeps-maritalStatus"
+            error={fieldErrors.maritalStatus}
+            options={[
+              { value: "SINGLE", label: "Single" },
+              { value: "MARRIED", label: "Married" },
+            ]}
+          />
+          <SelectField
+            label="Merchant category (MCC)"
+            value={form.mcc}
+            onChange={(v) => set("mcc", v)}
+            fieldId="aeps-mcc"
+            error={fieldErrors.mcc}
+            options={AEPS_MCC_OPTIONS.map((mcc) => ({ value: mcc, label: mcc }))}
           />
           <SelectField
             label="Residence state"
@@ -1225,6 +1172,7 @@ function DailyTwoFactor({
             onCapture={(la, lo) => {
               setLat(la);
               setLong(lo);
+              setPid("");
               setError("");
               setRequestKey("");
             }}
@@ -1411,10 +1359,15 @@ function TransactionForm({
     [iins, setIins] = useState<MasterItem[]>([]),
     [otp, setOtp] = useState(""),
     [auth, setAuth] = useState<{ authRequestId: string; expiresAt: string } | null>(null),
+    [otpNotRequired, setOtpNotRequired] = useState(false),
     [intentKey, setIntentKey] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const highValue = (operation === "CW" || operation === "AP") && Number(form.amount) > 5_000;
+  const otpRequired =
+    transactionRequiresOtp(operation, form.amount, pipe, form.bankIIN) && !otpNotRequired;
+  const airtelPipe4Bypass = highValue && pipe === "4" && form.bankIIN === "607094" && !otpRequired;
+  const previousPipeRef = useRef(pipe);
   useEffect(() => {
     aepsApi
       .bankIins(token, operation, authType)
@@ -1442,16 +1395,27 @@ function TransactionForm({
       })),
     );
   }, []);
+  useEffect(() => {
+    if (previousPipeRef.current === pipe) return;
+    previousPipeRef.current = pipe;
+    setForm((current) => ({ ...current, pidData: "" }));
+    setAuth(null);
+    setOtp("");
+    setOtpNotRequired(false);
+    setIntentKey("");
+  }, [pipe]);
   const set = (key: keyof typeof form, value: string) => {
     setForm((f) => ({ ...f, [key]: value, ...(key === "pidData" ? {} : { pidData: "" }) }));
     setIntentKey("");
     if (key !== "pidData" && key !== "deviceType") {
       setAuth(null);
       setOtp("");
+      setOtpNotRequired(false);
     }
   };
   const requestOtp = async () => {
     if (!allowed) return setError(`Permission ${service.permission} is required.`);
+    if (!otpRequired) return;
     setBusy(true);
     setError("");
     try {
@@ -1469,7 +1433,16 @@ function TransactionForm({
       setOtp("");
       setForm((f) => ({ ...f, pidData: "" }));
     } catch (e) {
-      setError(messageOf(e));
+      const message = messageOf(e);
+      if (message.includes("VIMOPAY_TRANSACTION_OTP_NOT_REQUIRED")) {
+        setAuth(null);
+        setOtp("");
+        setOtpNotRequired(true);
+        setForm((current) => ({ ...current, pidData: "" }));
+        setError("This bank and pipe do not require transaction OTP. Capture a fresh biometric.");
+      } else {
+        setError(message);
+      }
     } finally {
       setBusy(false);
     }
@@ -1490,11 +1463,11 @@ function TransactionForm({
       setError("Select the customer bank and allow location access before continuing.");
       return;
     }
-    if (highValue && !auth) {
+    if (otpRequired && !auth) {
       await requestOtp();
       return;
     }
-    if (auth && new Date(auth.expiresAt).getTime() <= Date.now()) {
+    if (otpRequired && auth && new Date(auth.expiresAt).getTime() <= Date.now()) {
       setAuth(null);
       setOtp("");
       setError("The transaction authorization expired. Request a new OTP before continuing.");
@@ -1503,7 +1476,11 @@ function TransactionForm({
     setBusy(true);
     setError("");
     try {
-      const body = buildAepsTransactionRequest(form, needsAmount, auth || undefined);
+      const body = buildAepsTransactionRequest(
+        form,
+        needsAmount,
+        otpRequired ? auth || undefined : undefined,
+      );
       const key = service.financial ? intentKey || newIdempotencyKey() : undefined;
       if (key && !intentKey) setIntentKey(key);
       done(await aepsApi.transact(token, operation, body, key));
@@ -1547,7 +1524,14 @@ function TransactionForm({
           <SelectField
             label="Authentication"
             value={authType}
-            onChange={(v) => setAuthType(v as AuthType)}
+            onChange={(v) => {
+              setAuthType(v as AuthType);
+              setForm((current) => ({ ...current, bankIIN: "", pidData: "" }));
+              setAuth(null);
+              setOtp("");
+              setOtpNotRequired(false);
+              setIntentKey("");
+            }}
             options={[{ value: "BA", label: "Fingerprint / biometric" }]}
           />
           <SelectField
@@ -1560,17 +1544,29 @@ function TransactionForm({
           <LocationStatus
             lat={form.lat}
             long={form.long}
-            onCapture={(la, lo) => setForm((f) => ({ ...f, lat: la, long: lo }))}
+            onCapture={(la, lo) => {
+              setForm((current) => ({ ...current, lat: la, long: lo, pidData: "" }));
+              setAuth(null);
+              setOtp("");
+              setOtpNotRequired(false);
+              setIntentKey("");
+            }}
           />
         </div>
-        {highValue && !auth && (
+        {otpRequired && !auth && (
           <Notice tone="info">
             Amounts above ₹5,000 require an OTP sent to the mobile number registered with the
             customer&apos;s Aadhaar. Submit the details below to request it before biometric PID
             capture.
           </Notice>
         )}
-        {auth && (
+        {airtelPipe4Bypass && (
+          <Notice tone="info">
+            Airtel Payments Bank on Pipe 4 does not require transaction OTP. Capture a fresh
+            fingerprint to continue.
+          </Notice>
+        )}
+        {otpRequired && auth && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-sm font-bold text-emerald-800">Transaction OTP sent</p>
             <p className="mt-1 text-xs text-emerald-700">
@@ -1589,18 +1585,19 @@ function TransactionForm({
                     pidData: pidDataAfterBindingChange(f.pidData, otp, nextOtp),
                   }));
                   setOtp(nextOtp);
+                  setIntentKey("");
                 }}
                 required
               />
             </div>
           </div>
         )}
-        {(!highValue || auth) && (
+        {(!otpRequired || auth) && (
           <Capture
             value={form.pidData}
             pipe={pipe}
             onChange={(v) => set("pidData", v)}
-            otp={auth ? otp : undefined}
+            otp={otpRequired && auth ? otp : undefined}
           />
         )}
         <div className="flex gap-3">
@@ -1612,7 +1609,7 @@ function TransactionForm({
             Cancel
           </button>
           <button
-            disabled={!allowed || busy || ((!highValue || !!auth) && !form.pidData)}
+            disabled={!allowed || busy || ((!otpRequired || !!auth) && !form.pidData)}
             aria-busy={busy}
             className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -1620,12 +1617,12 @@ function TransactionForm({
               <>
                 <Loader2 size={17} className="animate-spin" aria-hidden="true" />
                 <span>
-                  {highValue && !auth
+                  {otpRequired && !auth
                     ? "Requesting transaction OTP"
                     : "Processing your transaction"}
                 </span>
               </>
-            ) : highValue && !auth ? (
+            ) : otpRequired && !auth ? (
               "Send transaction OTP"
             ) : (
               `Confirm ${service.title}`
@@ -2154,10 +2151,10 @@ function isProviderMerchantOwnershipConflict(message: string) {
 function digits(value: string) {
   return value.replace(/\D/g, "");
 }
-function sensitive(name: keyof typeof emptyRegistration) {
+function sensitive(name: AepsRegistrationField) {
   return ["merchantPhoneNumber", "merchantPinCode", "aadhaarNumber", "shopPincode"].includes(name);
 }
-function pan(name: keyof typeof emptyRegistration) {
+function pan(name: AepsRegistrationField) {
   return name === "merchantPan" || name === "shopPan";
 }
 function masterOption(item: MasterItem) {
