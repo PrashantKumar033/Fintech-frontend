@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assertAepsCaptureSupported,
   buildAepsTransactionRequest,
   buildFingerprintPidOptions,
   isMockPidEnabled,
   pidDataAfterBindingChange,
   resolveAepsWadh,
+  transactionRequiresOtp,
   transactionAuthorizationFromResponse,
 } from "../src/lib/aeps-pid.ts";
 
@@ -55,6 +57,16 @@ test("missing WADH and unsupported pipes fail closed", () => {
 
 test("normal PID uses empty OTP and the selected WADH", () => {
   const xml = buildFingerprintPidOptions(resolveAepsWadh("2", wadhValues, false));
+  assert.match(xml, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
+  assert.match(xml, /fCount="1"/);
+  assert.match(xml, /fType="2"/);
+  assert.match(xml, /iCount="0"/);
+  assert.match(xml, /pCount="0"/);
+  assert.match(xml, /format="0"/);
+  assert.match(xml, /pidVer="2\.0"/);
+  assert.match(xml, /timeout="10000"/);
+  assert.match(xml, /posh="UNKNOWN"/);
+  assert.match(xml, /env="P"/);
   assert.match(xml, /otp=""/);
   assert.match(xml, /wadh="PIPE_2_WADH"/);
 });
@@ -90,10 +102,77 @@ test("mock PID can only be enabled in development", () => {
   assert.equal(isMockPidEnabled(true, "false"), false);
 });
 
+test("face capture fails closed until verified Face RD transport and WADH exist", () => {
+  assert.doesNotThrow(() => assertAepsCaptureSupported("BA"));
+  assert.throws(() => assertAepsCaptureSupported("FA"), /Face RD capture is unavailable/);
+});
+
+test("CW and AP OTP rules include the Pipe 4 Airtel exception", () => {
+  assert.equal(transactionRequiresOtp("CW", "5000", "2", "607094"), false);
+  assert.equal(transactionRequiresOtp("AP", "5000", "4", "607094"), false);
+  assert.equal(transactionRequiresOtp("CW", "5001", "2", "607094"), true);
+  assert.equal(transactionRequiresOtp("AP", "5001", "4", "607094"), false);
+  assert.equal(transactionRequiresOtp("CW", "5001", "4", "999999"), true);
+  assert.equal(transactionRequiresOtp("BE", "5001", "4", "999999"), false);
+});
+
 test("pipe or OTP changes clear PID data", () => {
   assert.equal(pidDataAfterBindingChange("PID", "2", "4"), "");
   assert.equal(pidDataAfterBindingChange("PID", "123456", "654321"), "");
   assert.equal(pidDataAfterBindingChange("PID", "2", "2"), "PID");
+});
+
+test("every transaction binding input change invalidates captured PID", () => {
+  const original = {
+    pipe: "2",
+    aadhaarNumber: "123456789012",
+    mobileNumber: "9876543210",
+    amount: "5001",
+    bankIIN: "999999",
+    lat: "28.6139",
+    long: "77.2090",
+    authType: "BA",
+    otp: "123456",
+  };
+
+  for (const [field, value] of Object.entries({
+    pipe: "4",
+    aadhaarNumber: "123456789013",
+    mobileNumber: "9876543211",
+    amount: "5002",
+    bankIIN: "607094",
+    lat: "28.6140",
+    long: "77.2091",
+    authType: "FA",
+    otp: "654321",
+  })) {
+    assert.equal(
+      pidDataAfterBindingChange(
+        "PID",
+        JSON.stringify(original),
+        JSON.stringify({ ...original, [field]: value }),
+      ),
+      "",
+      `${field} must invalidate PID data`,
+    );
+  }
+});
+
+test("Pipe 4 Airtel high-value request omits authRequestId", () => {
+  const needsOtp = transactionRequiresOtp("CW", "5001", "4", "607094");
+  const body = buildAepsTransactionRequest(
+    {
+      aadhaarNumber: "123456789012",
+      bankIIN: "607094",
+      amount: "5001",
+      pidData: "FRESH_PID",
+    },
+    true,
+    needsOtp
+      ? { authRequestId: "must-not-be-sent", expiresAt: "2026-10-21T12:00:00.000Z" }
+      : undefined,
+  );
+  assert.equal("authRequestId" in body, false);
 });
 
 test("transaction request includes authorization metadata but excludes pipe and raw OTP", () => {
@@ -104,6 +183,12 @@ test("transaction request includes authorization metadata but excludes pipe and 
       pidData: "PID",
       pipe: "2",
       otp: "123456",
+      wadh: "must-not-leak",
+      WADH: "must-not-leak",
+      providerBankCode: "internal",
+      vimopayBankCode: "internal",
+      deviceIP: "127.0.0.1",
+      ipAddress: "127.0.0.1",
     },
     true,
     { authRequestId: "request-1", expiresAt: "2026-10-09T12:00:00.000Z" },

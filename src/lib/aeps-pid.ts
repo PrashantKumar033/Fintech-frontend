@@ -37,7 +37,15 @@ export function buildFingerprintPidOptions(wadh: string, otp?: string): string {
   if (otp && !/^\d{4,8}$/.test(otp)) {
     throw new Error("RD provider OTP must contain 4 to 8 digits.");
   }
-  return `<?xml version="1.0"?><PidOptions ver="1.0"><Opts fCount="1" fType="2" iCount="0" pCount="0" format="0" pidVer="2.0" timeout="10000" otp="${escapeXmlAttribute(otp || "")}" env="P" wadh="${escapeXmlAttribute(wadh)}" posh="UNKNOWN"/></PidOptions>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><PidOptions ver="1.0"><Opts fCount="1" fType="2" iCount="0" pCount="0" format="0" pidVer="2.0" timeout="10000" otp="${escapeXmlAttribute(otp || "")}" posh="UNKNOWN" env="P" wadh="${escapeXmlAttribute(wadh)}"/></PidOptions>`;
+}
+
+export function assertAepsCaptureSupported(authType: "BA" | "FA"): void {
+  if (authType === "FA") {
+    throw new Error(
+      "Aadhaar Face RD capture is unavailable until a verified Face RD transport and provider-confirmed Face WADH are configured.",
+    );
+  }
 }
 
 export function isMockPidEnabled(isDevelopment: boolean, configuredValue?: string): boolean {
@@ -72,9 +80,30 @@ export function buildAepsTransactionRequest<T extends { amount?: string }>(
   authorization?: TransactionAuthorization,
 ): Omit<T, "pipe" | "otp"> & { amount?: string; authRequestId?: string } {
   const body = { ...form } as Record<string, unknown>;
-  delete body.pipe;
-  delete body.otp;
+  for (const field of [
+    "pipe",
+    "otp",
+    "wadh",
+    "WADH",
+    "providerBankCode",
+    "vimopayBankCode",
+    "deviceIP",
+    "ipAddress",
+  ]) {
+    delete body[field];
+  }
   if (!needsAmount) delete body.amount;
   if (authorization) body.authRequestId = authorization.authRequestId;
   return body as Omit<T, "pipe" | "otp"> & { amount?: string; authRequestId?: string };
+}
+
+export function transactionRequiresOtp(
+  operation: "BE" | "MS" | "CW" | "AP" | "CD",
+  amount: string | number,
+  pipe: string,
+  bankIIN: string,
+): boolean {
+  if (operation !== "CW" && operation !== "AP") return false;
+  if (Number(amount) <= 5_000) return false;
+  return !(pipe === "4" && bankIIN === "607094");
 }
