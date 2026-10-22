@@ -977,23 +977,54 @@ function OnboardingOtp({
           </p>
         </div>
       ) : null}
-      <div className="mb-5 grid gap-3 sm:grid-cols-2">
-        <div
-          className={`rounded-xl border p-4 ${sent ? "border-emerald-200 bg-emerald-50" : "border-primary bg-primary/5"}`}
+      <div className="mb-6 rounded-xl bg-muted/35 px-4 py-4 sm:px-5">
+        <p className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground">
+          How it works
+        </p>
+        <ol
+          aria-label="OTP verification steps"
+          className="mt-3 grid gap-4 sm:grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] sm:items-center"
         >
-          <p className="text-xs font-black uppercase text-muted-foreground">1. Send OTP</p>
-          <p className="mt-1 text-sm font-bold text-secondary">
-            {sent ? "OTP request sent successfully" : "Request an OTP from provider"}
-          </p>
-        </div>
-        <div
-          className={`rounded-xl border p-4 ${sent ? "border-primary bg-primary/5" : "border-border bg-muted/40"}`}
-        >
-          <p className="text-xs font-black uppercase text-muted-foreground">2. Verify OTP</p>
-          <p className="mt-1 text-sm font-bold text-secondary">
-            Enter the OTP received by the merchant
-          </p>
-        </div>
+          <li className="flex items-start gap-3">
+            <span
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black ${
+                sent ? "bg-emerald-100 text-emerald-700" : "bg-secondary text-white"
+              }`}
+            >
+              {sent ? <CheckCircle2 size={17} aria-hidden="true" /> : "1"}
+            </span>
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">
+                Send OTP
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-secondary">
+                {sent ? "OTP request sent successfully" : "Request an OTP from provider"}
+              </p>
+            </div>
+          </li>
+          <li aria-hidden="true" className="hidden sm:block">
+            <span className="block h-px bg-border" />
+          </li>
+          <li className="flex items-start gap-3">
+            <span
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-black ${
+                sent
+                  ? "bg-secondary text-white"
+                  : "bg-background text-muted-foreground ring-1 ring-border"
+              }`}
+            >
+              2
+            </span>
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">
+                Verify OTP
+              </p>
+              <p className="mt-0.5 text-sm font-semibold text-secondary">
+                Enter the OTP received by the merchant
+              </p>
+            </div>
+          </li>
+        </ol>
       </div>
       <form onSubmit={verify} className="mt-5 max-w-md space-y-4">
         <Field
