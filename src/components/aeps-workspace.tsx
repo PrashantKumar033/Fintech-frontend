@@ -15,7 +15,8 @@ import {
   ShieldAlert,
   WalletCards,
 } from "lucide-react";
-import { ApiError, getSession } from "@/lib/auth-api";
+import { getSession } from "@/lib/auth-api";
+import { aepsErrorMessage } from "@/lib/aeps-errors";
 import {
   credentialsPending,
   managementBasePath,
@@ -722,7 +723,7 @@ function Registration({
   const fields: Array<[keyof typeof form, string, string?]> = [
     ["firstName", "First name"],
     ["middleName", "Middle name (optional)"],
-    ["lastName", "Last name"],
+    ["lastName", "Last name (optional)"],
     ["dob", "Date of birth", "DD-MM-YYYY"],
     ["emailId", "Email", "name@example.com"],
     ["merchantPhoneNumber", "Merchant mobile", "10 digits"],
@@ -2126,19 +2127,7 @@ function StateCard({
   );
 }
 function messageOf(error: unknown) {
-  const message =
-    error instanceof ApiError || error instanceof Error ? error.message : "Something went wrong.";
-  if (
-    message.includes("Unique constraint failed") ||
-    message.includes("aepsMerchantProfile.update") ||
-    message.includes("AEPS_PROVIDER_MERCHANT_ALREADY_LINKED")
-  ) {
-    return "This provider merchant ID is already linked to another account. Please contact support with your registered mobile number; repeated submission will not fix it.";
-  }
-  if (message === "Internal server error") {
-    return "AEPS registration could not be completed right now. Please try once more; if it continues, contact support.";
-  }
-  return message;
+  return aepsErrorMessage(error);
 }
 function isProviderMerchantOwnershipConflict(message: string) {
   const normalized = message.toLowerCase();
