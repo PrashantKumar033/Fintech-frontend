@@ -78,6 +78,18 @@ test("high-value PID contains only a valid customer-entered OTP", () => {
   assert.throws(() => buildFingerprintPidOptions("PIPE_4_WADH", "12x4"), /4 to 8 digits/);
 });
 
+test("2FA and transaction PID options pass no WADH value", () => {
+  const normalXml = buildFingerprintPidOptions("");
+  const highValueXml = buildFingerprintPidOptions("", "123456");
+
+  assert.match(normalXml, /otp=""/);
+  assert.match(normalXml, /wadh=""/);
+  assert.match(highValueXml, /otp="123456"/);
+  assert.match(highValueXml, /wadh=""/);
+  assert.doesNotMatch(normalXml, /PIPE_[124]_WADH/);
+  assert.doesNotMatch(highValueXml, /PIPE_[124]_WADH/);
+});
+
 test("PID XML attribute values are escaped", () => {
   const xml = buildFingerprintPidOptions('WADH&"<value>');
   assert.match(xml, /wadh="WADH&amp;&quot;&lt;value&gt;"/);

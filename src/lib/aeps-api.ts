@@ -224,9 +224,14 @@ export const USE_MOCK_FINGERPRINT = isMockPidEnabled(
   import.meta.env.VITE_AEPS_USE_MOCK_PID,
 );
 
-export async function capturePid(rdUrl: string, pipe: string, otp?: string): Promise<string> {
+export async function capturePid(
+  rdUrl: string,
+  pipe: string,
+  otp?: string,
+  includeWadh = true,
+): Promise<string> {
   assertAepsCaptureSupported("BA");
-  const wadh = resolveAepsWadh(pipe);
+  const wadh = includeWadh ? resolveAepsWadh(pipe) : "";
   if (USE_MOCK_FINGERPRINT) {
     console.warn("Using development-only mock fingerprint data.");
     return '<PidData><Resp errCode="0" errInfo="Success" fCount="1" fType="2" nmPoints="40" qScore="80"/><DeviceInfo dpId="TEST" rdsId="TEST" rdsVer="1.0" dc="TEST" mi="TEST" mc="TEST"/><Skey ci="20260901">TEST</Skey><Hmac>TEST</Hmac><Data type="X">TEST</Data></PidData>';
