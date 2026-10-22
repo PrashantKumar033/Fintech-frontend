@@ -1213,6 +1213,7 @@ function DailyTwoFactor({
         <Capture
           value={pid}
           pipe={pipe}
+          includeWadh={false}
           onChange={(value) => {
             setPid(value);
             setRequestKey("");
@@ -1628,6 +1629,7 @@ function TransactionForm({
           <Capture
             value={form.pidData}
             pipe={pipe}
+            includeWadh={false}
             onChange={(v) => set("pidData", v)}
             otp={otpRequired && auth ? otp : undefined}
           />
@@ -1671,11 +1673,13 @@ function Capture({
   onChange,
   pipe,
   otp,
+  includeWadh = true,
 }: {
   value: string;
   onChange: (v: string) => void;
   pipe: string;
   otp?: string;
+  includeWadh?: boolean;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -1685,10 +1689,12 @@ function Capture({
   onChangeRef.current = onChange;
   valueRef.current = value;
   let configurationError = "";
-  try {
-    resolveAepsWadh(pipe);
-  } catch (e) {
-    configurationError = messageOf(e);
+  if (includeWadh) {
+    try {
+      resolveAepsWadh(pipe);
+    } catch (e) {
+      configurationError = messageOf(e);
+    }
   }
   useEffect(() => {
     if (previousPipeRef.current !== pipe) {
@@ -1703,7 +1709,7 @@ function Capture({
     setBusy(true);
     setError("");
     try {
-      onChange(await capturePid(RD_CAPTURE_URL, pipe, otp));
+      onChange(await capturePid(RD_CAPTURE_URL, pipe, otp, includeWadh));
     } catch (e) {
       setError(messageOf(e));
     } finally {
