@@ -6,6 +6,7 @@ import {
   EMPTY_AEPS_REGISTRATION,
   validateAepsRegistration,
 } from "../src/lib/aeps-registration.ts";
+import { aepsErrorMessage } from "../src/lib/aeps-errors.ts";
 
 function validRegistration(overrides = {}) {
   return {
@@ -48,18 +49,68 @@ test("v1.0.14 registration accepts all required fields and the MCC allow-list", 
   assert.deepEqual(validateAepsRegistration(validRegistration()), {});
 });
 
-test("new registration fields and lastName are required", () => {
+test("registration without lastName succeeds validation", () => {
+  assert.deepEqual(validateAepsRegistration(validRegistration({ lastName: "" })), {});
+});
+
+test("empty lastName is omitted without duplicating firstName", () => {
+  const request = buildAepsRegistrationRequest(
+    validRegistration({ firstName: "FRANCY", middleName: "", lastName: "   " }),
+  );
+
+  assert.equal(request.firstName, "FRANCY");
+  assert.equal("lastName" in request, false);
+  assert.notEqual(request.lastName, request.firstName);
+});
+
+test("explicit lastName is trimmed and otherwise preserved exactly", () => {
+  const request = buildAepsRegistrationRequest(
+    validRegistration({ firstName: "FRANCY", lastName: "  D'Souza  " }),
+  );
+
+  assert.equal(request.firstName, "FRANCY");
+  assert.equal(request.lastName, "D'Souza");
+});
+
+test("existing mandatory registration fields remain required", () => {
   for (const field of [
-    "lastName",
+    "bankAccountId",
+    "kycProfileId",
+    "bankCode",
+    "lat",
+    "long",
+    "firstName",
+    "dob",
+    "emailId",
+    "merchantPhoneNumber",
+    "merchantAddress1",
+    "merchantState",
+    "merchantDistrict",
+    "gender",
     "shopName",
     "motherName",
     "fatherName",
     "maritalStatus",
     "mcc",
+    "merchantPinCode",
+    "merchantPan",
+    "aadhaarNumber",
+    "shopPan",
+    "shopAddress",
+    "shopDistrict",
+    "shopState",
+    "shopPincode",
+    "shopLat",
+    "shopLong",
   ]) {
     const errors = validateAepsRegistration(validRegistration({ [field]: "" }));
     assert.equal(errors[field], "This field is required.");
   }
+});
+
+test("backend provider-specific registration error is preserved for the UI", () => {
+  const providerMessage = "Agent name does not match with PAN Name.";
+  assert.equal(aepsErrorMessage(new Error(providerMessage)), providerMessage);
 });
 
 test("registration validates numeric bankCode, MCC and coordinate ranges", () => {

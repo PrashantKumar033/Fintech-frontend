@@ -83,7 +83,11 @@ export const EMPTY_AEPS_REGISTRATION: AepsRegistrationForm = {
   shopLong: "",
 };
 
-const OPTIONAL_FIELDS = new Set<AepsRegistrationField>(["middleName", "merchantAddress2"]);
+const OPTIONAL_FIELDS = new Set<AepsRegistrationField>([
+  "middleName",
+  "lastName",
+  "merchantAddress2",
+]);
 const REGISTRATION_FIELDS = Object.keys(EMPTY_AEPS_REGISTRATION) as AepsRegistrationField[];
 const FORBIDDEN_BANK_CODE_ALIASES = ["providerBankCode", "vimopayBankCode"];
 
@@ -162,7 +166,7 @@ export function buildAepsRegistrationRequest(
 
   return Object.fromEntries(
     REGISTRATION_FIELDS.flatMap((field) => {
-      const value = candidate[field];
+      const value = field === "lastName" ? candidate[field].trim() : candidate[field];
       return value === "" ? [] : [[field, value]];
     }),
   ) as Partial<AepsRegistrationForm>;
