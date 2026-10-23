@@ -18,6 +18,11 @@ import {
 import { getSession } from "@/lib/auth-api";
 import { aepsErrorMessage } from "@/lib/aeps-errors";
 import {
+  filterAepsBankIins,
+  normalizeAepsBankIins,
+  toAepsBankIinOptions,
+} from "@/lib/aeps-bank-iins";
+import {
   credentialsPending,
   managementBasePath,
   resolveWorkspaceRole,
@@ -499,6 +504,7 @@ function AepsFlow({
       return (
         <TransactionWorkspace
           token={token}
+          providerCode={status.provider}
           pipe={status.pipe}
           access={access}
           requestedService={requestedService}
@@ -1271,26 +1277,15 @@ const services: Array<{
   },
 ];
 
-function normalizeBankIins(items: MasterItem[]): MasterItem[] {
-  const unique = new Map<string, MasterItem>();
-
-  for (const item of items) {
-    const iin = item.iin?.trim();
-    const description = item.description?.trim();
-    if (!iin || !description || unique.has(iin)) continue;
-    unique.set(iin, { ...item, iin, description });
-  }
-
-  return Array.from(unique.values());
-}
-
 function TransactionWorkspace({
   token,
+  providerCode,
   pipe,
   access,
   requestedService,
 }: {
   token: string;
+  providerCode: string;
   pipe: string;
   access: AepsActionAccess;
   requestedService?: AepsTxnCode;
@@ -1318,7 +1313,9 @@ function TransactionWorkspace({
   if (operation)
     return (
       <TransactionForm
+        key={`${providerCode}:${operation}`}
         token={token}
+        providerCode={providerCode}
         pipe={pipe}
         operation={operation}
         done={setResult}
@@ -1363,6 +1360,7 @@ function TransactionWorkspace({
 
 function TransactionForm({
   token,
+  providerCode,
   pipe,
   operation,
   done,
@@ -1370,6 +1368,7 @@ function TransactionForm({
   allowed,
 }: {
   token: string;
+  providerCode: string;
   pipe: string;
   operation: AepsTxnCode;
   done: (r: TransactionResult) => void;
@@ -1390,6 +1389,7 @@ function TransactionForm({
   });
   const [authType, setAuthType] = useState<AuthType>("BA"),
     [iins, setIins] = useState<MasterItem[]>([]),
+    [bankSearch, setBankSearch] = useState(""),
     [otp, setOtp] = useState(""),
     [auth, setAuth] = useState<{ authRequestId: string; expiresAt: string } | null>(null),
     [otpNotRequired, setOtpNotRequired] = useState(false),
@@ -1400,15 +1400,19 @@ function TransactionForm({
   const otpRequired =
     transactionRequiresOtp(operation, form.amount, pipe, form.bankIIN) && !otpNotRequired;
   const airtelPipe4Bypass = highValue && pipe === "4" && form.bankIIN === "607094" && !otpRequired;
+  const visibleIins = filterAepsBankIins(iins, bankSearch);
   const previousPipeRef = useRef(pipe);
   useEffect(() => {
+    let cancelled = false;
     aepsApi
-      .bankIins(token, operation, authType)
+      .bankIins(token, providerCode, operation, authType)
       .then((items) => {
-        setIins(normalizeBankIins(items));
+        if (cancelled) return;
+        setIins(normalizeAepsBankIins(items));
         setError("");
       })
       .catch((e) => {
+        if (cancelled) return;
         setIins([]);
         const message = messageOf(e);
         setError(
@@ -1417,7 +1421,10 @@ function TransactionForm({
             : message,
         );
       });
-  }, [authType, operation, service.title, token]);
+    return () => {
+      cancelled = true;
+    };
+  }, [authType, operation, providerCode, service.title, token]);
   useEffect(() => {
     navigator.geolocation?.getCurrentPosition((p) =>
       setForm((f) => ({
@@ -1560,6 +1567,7 @@ function TransactionForm({
             onChange={(v) => {
               setAuthType(v as AuthType);
               setForm((current) => ({ ...current, bankIIN: "", pidData: "" }));
+              setBankSearch("");
               setAuth(null);
               setOtp("");
               setOtpNotRequired(false);
@@ -1567,11 +1575,20 @@ function TransactionForm({
             }}
             options={[{ value: "BA", label: "Fingerprint / biometric" }]}
           />
+          <Field
+            label="Search customer bank"
+            value={bankSearch}
+            onChange={(value) => {
+              setBankSearch(value);
+              if (form.bankIIN) set("bankIIN", "");
+            }}
+            placeholder="Bank name or IIN"
+          />
           <SelectField
             label="Customer bank"
             value={form.bankIIN}
             onChange={(v) => set("bankIIN", v)}
-            options={iins.map((i) => ({ value: i.iin || "", label: i.description }))}
+            options={toAepsBankIinOptions(visibleIins)}
           />
           <RdDeviceField value={form.deviceType} onChange={(v) => set("deviceType", v)} />
           <LocationStatus
@@ -2014,7 +2031,7 @@ function SelectField({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ key?: string; value: string; label: string }>;
   fieldId?: string;
   error?: string;
   required?: boolean;
@@ -2036,7 +2053,7 @@ function SelectField({
       >
         <option value="">Select…</option>
         {options.map((o, index) => (
-          <option key={`${o.value}:${o.label}:${index}`} value={o.value}>
+          <option key={o.key ?? `${o.value}:${o.label}:${index}`} value={o.value}>
             {o.label}
           </option>
         ))}

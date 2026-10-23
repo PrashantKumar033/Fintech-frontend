@@ -8,6 +8,7 @@ import {
   RotateCcw,
   Search,
   ShieldAlert,
+  WalletCards,
   XCircle,
 } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
@@ -22,13 +23,19 @@ import {
   getAdminActor,
   type ReconciliationItem,
   type ReconciliationResolution,
+  type RecoverFinancialEffectsResult,
   type TransactionDetail,
 } from "@/lib/admin-api";
+import {
+  canRecoverProviderFinancialEffects,
+  canResolveProviderTransaction,
+  providerTransactionDescription,
+} from "@/lib/provider-transaction-ui";
 
 export const Route = createFileRoute("/admin/transactions/")({ component: Transactions });
 const inputClass =
   "w-full rounded-xl border border-border bg-white px-3.5 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15";
-type Action = { kind: "resolve" | "reverse"; item: ReconciliationItem } | null;
+type Action = { kind: "resolve" | "recover" | "reverse"; item: ReconciliationItem } | null;
 const messageOf = (error: unknown) =>
   error instanceof AdminApiError || error instanceof Error
     ? error.message
@@ -62,6 +69,9 @@ function Transactions() {
   const canReverse =
     dedicatedSuperAdmin ||
     can(UI_PERMISSION.TRANSACTION_REVERSAL_REQUEST, ["SUPER_ADMIN", "ADMIN"]);
+  const canRecover =
+    dedicatedSuperAdmin ||
+    can(UI_PERMISSION.TRANSACTION_FINANCIAL_RECOVERY, ["SUPER_ADMIN", "ADMIN"]);
   const [items, setItems] = useState<ReconciliationItem[]>([]),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false);
@@ -80,6 +90,8 @@ function Transactions() {
     [note, setNote] = useState(""),
     [providerTxnRefId, setProviderTxnRefId] = useState(""),
     [rrn, setRrn] = useState("");
+  const [recoveryResult, setRecoveryResult] = useState<RecoverFinancialEffectsResult | null>(null);
+  const [recoveryCandidate, setRecoveryCandidate] = useState<ReconciliationItem | null>(null);
 
   const load = useCallback(
     async (targetPage: number) => {
@@ -133,13 +145,15 @@ function Transactions() {
       setDetailBusy(false);
     }
   }
-  function openAction(kind: "resolve" | "reverse", item: ReconciliationItem) {
+  function openAction(kind: "resolve" | "recover" | "reverse", item: ReconciliationItem) {
     if (kind === "resolve" && !canResolve)
       return setError(
         `Permission ${UI_PERMISSION.TRANSACTION_RECONCILIATION_RESOLVE} is required.`,
       );
     if (kind === "reverse" && !canReverse)
       return setError(`Permission ${UI_PERMISSION.TRANSACTION_REVERSAL_REQUEST} is required.`);
+    if (kind === "recover" && !canRecover)
+      return setError(`Permission ${UI_PERMISSION.TRANSACTION_FINANCIAL_RECOVERY} is required.`);
     setAction({ kind, item });
     setResolution("SUCCESS");
     setNote("");
@@ -150,14 +164,16 @@ function Transactions() {
   }
   async function submitAction(event: FormEvent) {
     event.preventDefault();
-    if (!action) return;
+    if (!action || busy) return;
     if (action.kind === "resolve" && !canResolve)
       return setError(
         `Permission ${UI_PERMISSION.TRANSACTION_RECONCILIATION_RESOLVE} is required.`,
       );
     if (action.kind === "reverse" && !canReverse)
       return setError(`Permission ${UI_PERMISSION.TRANSACTION_REVERSAL_REQUEST} is required.`);
-    if (!note.trim())
+    if (action.kind === "recover" && !canRecover)
+      return setError(`Permission ${UI_PERMISSION.TRANSACTION_FINANCIAL_RECOVERY} is required.`);
+    if (action.kind !== "recover" && !note.trim())
       return setError(
         action.kind === "reverse"
           ? "Enter a reversal reason."
@@ -168,19 +184,49 @@ function Transactions() {
     setNotice("");
     try {
       if (action.kind === "resolve") {
-        await adminApi.resolveTransaction(action.item.referenceId, {
+        const result = await adminApi.resolveTransaction(action.item.referenceId, {
           resolution,
           note: note.trim(),
           providerTxnRefId: providerTxnRefId.trim() || undefined,
           rrn: rrn.trim() || undefined,
         });
-        setNotice(`Transaction ${action.item.referenceId} resolved as ${resolution}.`);
+        setNotice(
+          result.nextAction === "RECOVER_FINANCIAL_EFFECTS"
+            ? `Transaction ${action.item.referenceId} resolved as ${resolution}. Financial effects must now be finalized.`
+            : `Transaction ${action.item.referenceId} resolved as ${resolution}.`,
+        );
+        setRecoveryCandidate(
+          result.nextAction === "RECOVER_FINANCIAL_EFFECTS"
+            ? {
+                referenceId: action.item.referenceId,
+                status: result.status || resolution,
+                needsReconciliation: result.needsReconciliation ?? true,
+                statusDescription: result.statusDescription,
+              }
+            : null,
+        );
+      } else if (action.kind === "recover") {
+        const result = await adminApi.recoverFinancialEffects(action.item.referenceId);
+        setRecoveryResult(result);
+        setNotice(
+          result.recoveryComplete && !result.transaction.needsReconciliation
+            ? `Financial state finalized for ${action.item.referenceId}. Provider outcome remains ${result.transaction.status}.`
+            : `Financial recovery for ${action.item.referenceId} remains incomplete. Provider outcome remains ${result.transaction.status}.`,
+        );
+        if (result.recoveryComplete && !result.transaction.needsReconciliation) {
+          setRecoveryCandidate((current) =>
+            current?.referenceId === action.item.referenceId ? null : current,
+          );
+        }
       } else {
         await adminApi.requestReversal(action.item.referenceId, note.trim(), crypto.randomUUID());
         setNotice(`Reversal request submitted for ${action.item.referenceId}.`);
       }
       setAction(null);
       await load(page);
+      if (detail?.referenceId === action.item.referenceId) {
+        await inspect(action.item.referenceId);
+      }
     } catch (caught) {
       setError(messageOf(caught));
     } finally {
@@ -240,6 +286,8 @@ function Transactions() {
               <option value="">All statuses</option>
               <option>PENDING</option>
               <option>UNKNOWN</option>
+              <option>SUCCESS</option>
+              <option>FAILED</option>
             </select>
             <select
               value={operation}
@@ -274,6 +322,20 @@ function Transactions() {
             {notice}
           </p>
         )}
+        {recoveryCandidate &&
+          canRecover &&
+          canRecoverProviderFinancialEffects(recoveryCandidate) && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => openAction("recover", recoveryCandidate)}
+              className="mt-3 inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-extrabold text-amber-900 disabled:opacity-50"
+            >
+              <WalletCards size={16} />
+              Recover financial effects
+            </button>
+          )}
+        {recoveryResult && <RecoveryResultSummary result={recoveryResult} />}
         <div className="mt-5 overflow-x-auto rounded-xl border border-border">
           <table className="w-full min-w-[1050px] text-left text-sm">
             <thead className="bg-muted/60">
@@ -307,9 +369,7 @@ function Transactions() {
                     <Status value={item.status || "UNKNOWN"} />
                   </td>
                   <td className="max-w-[220px] p-3 text-xs leading-5 text-muted-foreground">
-                    {item.reconciliationReason ||
-                      item.providerStatusMessage ||
-                      "Awaiting operator review"}
+                    {providerTransactionDescription(item)}
                   </td>
                   <td className="p-3 text-xs">{dateTime(item.createdAt)}</td>
                   <td className="p-3">
@@ -322,13 +382,22 @@ function Transactions() {
                           <Eye size={15} />
                         </ActionButton>
                       )}
-                      {canResolve && (
+                      {canResolve && canResolveProviderTransaction(item) && (
                         <ActionButton
                           title="Resolve"
                           tone="good"
                           onClick={() => openAction("resolve", item)}
                         >
                           <CheckCircle2 size={15} />
+                        </ActionButton>
+                      )}
+                      {canRecover && canRecoverProviderFinancialEffects(item) && (
+                        <ActionButton
+                          title="Recover financial effects"
+                          tone="warn"
+                          onClick={() => openAction("recover", item)}
+                        >
+                          <WalletCards size={15} />
                         </ActionButton>
                       )}
                     </div>
@@ -373,7 +442,7 @@ function Transactions() {
       </AdminPanel>
       {(detail || detailBusy) && (
         <AdminPanel className="mt-6 border-primary/25">
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-extrabold uppercase tracking-wider text-primary">
                 Transaction details
@@ -382,9 +451,28 @@ function Transactions() {
                 {detail?.referenceId || "Loading record…"}
               </h2>
             </div>
-            <button onClick={() => setDetail(null)} aria-label="Close details">
-              <XCircle size={21} />
-            </button>
+            <div className="flex items-center gap-2">
+              {detail?.referenceId && canRecover && canRecoverProviderFinancialEffects(detail) && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    openAction("recover", {
+                      referenceId: detail.referenceId!,
+                      status: detail.status,
+                      needsReconciliation: detail.needsReconciliation,
+                    })
+                  }
+                  className="inline-flex items-center gap-2 rounded-xl border border-amber-200 px-3 py-2 text-xs font-extrabold text-amber-800 disabled:opacity-50"
+                >
+                  <WalletCards size={15} />
+                  Finalize financial state
+                </button>
+              )}
+              <button onClick={() => setDetail(null)} aria-label="Close details">
+                <XCircle size={21} />
+              </button>
+            </div>
           </div>
           {detailBusy ? (
             <div className="py-10 text-center">
@@ -410,14 +498,24 @@ function Transactions() {
               <span
                 className={`grid h-11 w-11 place-items-center rounded-xl ${action.kind === "resolve" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}
               >
-                {action.kind === "resolve" ? <CheckCircle2 /> : <RotateCcw />}
+                {action.kind === "resolve" ? (
+                  <CheckCircle2 />
+                ) : action.kind === "recover" ? (
+                  <WalletCards />
+                ) : (
+                  <RotateCcw />
+                )}
               </span>
               <div>
                 <p className="text-xs font-extrabold uppercase text-primary">
                   Controlled admin action
                 </p>
                 <h2 className="text-xl font-black">
-                  {action.kind === "resolve" ? "Resolve reconciliation" : "Request reversal"}
+                  {action.kind === "resolve"
+                    ? "Resolve reconciliation"
+                    : action.kind === "recover"
+                      ? "Finalize financial state"
+                      : "Request reversal"}
                 </h2>
                 <p className="mt-1 break-all text-xs text-muted-foreground">
                   {action.item.referenceId}
@@ -457,21 +555,24 @@ function Transactions() {
                 </div>
               </>
             )}
-            <label className="mt-4 block text-xs font-extrabold">
-              {action.kind === "resolve" ? "OPERATOR NOTE" : "REVERSAL REASON"}
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={3}
-                className={`${inputClass} mt-2 resize-none`}
-                placeholder="Required for the audit trail"
-              />
-            </label>
+            {action.kind !== "recover" && (
+              <label className="mt-4 block text-xs font-extrabold">
+                {action.kind === "resolve" ? "OPERATOR NOTE" : "REVERSAL REASON"}
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  rows={3}
+                  className={`${inputClass} mt-2 resize-none`}
+                  placeholder="Required for the audit trail"
+                />
+              </label>
+            )}
             <div className="mt-4 flex gap-3 rounded-xl bg-amber-50 p-4 text-xs leading-5 text-amber-900">
               <ShieldAlert size={18} className="shrink-0" />
               <p>
-                Confirm provider evidence before continuing. Financial actions are idempotent and
-                audited by the backend.
+                {action.kind === "recover"
+                  ? `This finalizes wallet, settlement and commission effects for the existing ${action.item.status} provider outcome. It does not change a FAILED provider outcome to SUCCESS.`
+                  : "Confirm provider evidence before continuing. Financial actions are idempotent and audited by the backend."}
               </p>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -487,13 +588,59 @@ function Transactions() {
                 disabled={busy}
                 className={`inline-flex items-center gap-2 rounded-xl px-5 py-3 text-xs font-extrabold text-white ${action.kind === "resolve" ? "bg-emerald-600" : "bg-amber-600"}`}
               >
-                {busy && <Loader2 size={14} className="animate-spin" />}Confirm action
+                {busy && <Loader2 size={14} className="animate-spin" />}
+                {action.kind === "recover" ? "Recover financial effects" : "Confirm action"}
               </button>
             </div>
           </form>
         </div>
       )}
     </AdminLayout>
+  );
+}
+function RecoveryResultSummary({ result }: { result: RecoverFinancialEffectsResult }) {
+  const walletReference = result.walletTransaction
+    ? String(
+        result.walletTransaction.referenceId ??
+          result.walletTransaction.transactionReference ??
+          result.walletTransaction.id ??
+          "Recorded",
+      )
+    : "Not created";
+  return (
+    <div className="mt-5 rounded-xl border border-border bg-muted/30 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-extrabold uppercase tracking-wider text-secondary">
+          Financial recovery result
+        </p>
+        <Status value={result.recoveryComplete ? "COMPLETE" : "INCOMPLETE"} />
+      </div>
+      <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2 xl:grid-cols-3">
+        <RecoveryValue label="Provider outcome" value={result.transaction.status} />
+        <RecoveryValue
+          label="Description"
+          value={providerTransactionDescription(result.transaction)}
+        />
+        <RecoveryValue
+          label="Needs reconciliation"
+          value={result.transaction.needsReconciliation ? "YES" : "NO"}
+        />
+        <RecoveryValue label="Settlement" value={result.settlement.status || "—"} />
+        <RecoveryValue label="Commission" value={result.commission.status || "—"} />
+        <RecoveryValue label="Wallet transaction" value={walletReference} />
+      </div>
+      {result.commission.reason && (
+        <p className="mt-3 text-xs text-muted-foreground">{result.commission.reason}</p>
+      )}
+    </div>
+  );
+}
+function RecoveryValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-extrabold uppercase text-muted-foreground">{label}</p>
+      <p className="mt-1 break-all font-bold text-secondary">{value}</p>
+    </div>
   );
 }
 function Summary({ label, value }: { label: string; value: string }) {
@@ -507,12 +654,14 @@ function Summary({ label, value }: { label: string; value: string }) {
   );
 }
 function Status({ value }: { value: string }) {
+  const normalized = value.toUpperCase();
+  const tone = ["SUCCESS", "COMPLETE", "COMPLETED"].includes(normalized)
+    ? "bg-emerald-50 text-emerald-700"
+    : ["FAILED", "UNKNOWN", "INCOMPLETE"].includes(normalized)
+      ? "bg-red-50 text-red-700"
+      : "bg-amber-50 text-amber-800";
   return (
-    <span
-      className={`rounded-full px-2 py-1 text-[10px] font-extrabold ${value === "UNKNOWN" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}
-    >
-      {value}
-    </span>
+    <span className={`rounded-full px-2 py-1 text-[10px] font-extrabold ${tone}`}>{value}</span>
   );
 }
 function ActionButton({

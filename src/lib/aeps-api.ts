@@ -6,6 +6,7 @@ import {
   resolveAepsWadh,
 } from "./aeps-pid";
 import { createIdempotencyKey } from "./idempotency-key";
+import { buildAepsBankIinPath, buildAepsOnboardingBankPath } from "./aeps-bank-iins";
 
 export { resolveAepsWadh } from "./aeps-pid";
 
@@ -156,18 +157,16 @@ async function providerPath(token: string, suffix: string): Promise<string> {
 export const aepsApi = {
   providers: (t: string) => get<AepsProvider[]>(t, "/aeps/providers"),
   status: async (t: string) => get<AepsStatus>(t, await providerPath(t, "status")),
-  banks: async (t: string) => get<MasterItem[]>(t, await providerPath(t, "banks")),
+  banks: async (t: string) =>
+    get<MasterItem[]>(t, buildAepsOnboardingBankPath(await activeProviderCode(t))),
   states: async (t: string) => get<MasterItem[]>(t, await providerPath(t, "states")),
   districts: async (t: string, stateCode: string) =>
     get<MasterItem[]>(
       t,
       `${await providerPath(t, "districts")}?stateCode=${encodeURIComponent(stateCode)}`,
     ),
-  bankIins: async (t: string, txnCode: AepsTxnCode, authType: AuthType) =>
-    get<MasterItem[]>(
-      t,
-      `${await providerPath(t, "bank-iins")}?txnCode=${txnCode}&authType=${authType}`,
-    ),
+  bankIins: (t: string, providerCode: string, txnCode: AepsTxnCode, authType: AuthType) =>
+    get<MasterItem[]>(t, buildAepsBankIinPath(providerCode, txnCode, authType)),
   savedBanks: (t: string) => get<SavedBank[]>(t, "/identity/get-my-bank-accounts"),
   myKyc: (t: string) => get<KycProfile>(t, "/kyc/me"),
   register: async (t: string, body: Record<string, string>) =>
