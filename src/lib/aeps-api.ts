@@ -7,6 +7,7 @@ import {
 } from "./aeps-pid";
 import { createIdempotencyKey } from "./idempotency-key";
 import { buildAepsBankIinPath, buildAepsOnboardingBankPath } from "./aeps-bank-iins";
+import { withSelectedAepsProvider } from "./aeps-provider-selection";
 
 export { resolveAepsWadh } from "./aeps-pid";
 
@@ -29,6 +30,7 @@ export type AepsProvider = {
 export type MasterItem = { code?: string; iin?: string; description: string };
 export type AepsStatus = {
   provider: string;
+  providerCode: string;
   pipe: string;
   profileId?: string;
   providerMerchantId?: string;
@@ -129,24 +131,28 @@ const post = <T>(token: string, path: string, body?: unknown, idempotencyKey?: s
     headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
   });
 
-let providerCodeRequest: Promise<string> | null = null;
+let providerRequest: Promise<AepsProvider> | null = null;
 
-async function activeProviderCode(token: string): Promise<string> {
-  if (!providerCodeRequest) {
-    providerCodeRequest = get<AepsProvider[]>(token, "/aeps/providers")
+async function activeProvider(token: string): Promise<AepsProvider> {
+  if (!providerRequest) {
+    providerRequest = get<AepsProvider[]>(token, "/aeps/providers")
       .then((providers) => {
         const provider = providers.find((item) => item.status === "AVAILABLE") ?? providers[0];
-        if (!provider?.providerCode) {
+        if (!provider?.providerCode || !provider.providerName) {
           throw new Error("No AEPS provider is currently available.");
         }
-        return provider.providerCode;
+        return provider;
       })
       .catch((error) => {
-        providerCodeRequest = null;
+        providerRequest = null;
         throw error;
       });
   }
-  return providerCodeRequest;
+  return providerRequest;
+}
+
+async function activeProviderCode(token: string): Promise<string> {
+  return (await activeProvider(token)).providerCode;
 }
 
 async function providerPath(token: string, suffix: string): Promise<string> {
@@ -156,7 +162,14 @@ async function providerPath(token: string, suffix: string): Promise<string> {
 
 export const aepsApi = {
   providers: (t: string) => get<AepsProvider[]>(t, "/aeps/providers"),
-  status: async (t: string) => get<AepsStatus>(t, await providerPath(t, "status")),
+  status: async (t: string) => {
+    const provider = await activeProvider(t);
+    const status = await get<Omit<AepsStatus, "providerCode"> & { providerCode?: string }>(
+      t,
+      `/aeps/providers/${encodeURIComponent(provider.providerCode)}/status`,
+    );
+    return withSelectedAepsProvider(status, provider);
+  },
   banks: async (t: string) =>
     get<MasterItem[]>(t, buildAepsOnboardingBankPath(await activeProviderCode(t))),
   states: async (t: string) => get<MasterItem[]>(t, await providerPath(t, "states")),

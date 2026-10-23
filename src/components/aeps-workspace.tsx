@@ -504,7 +504,7 @@ function AepsFlow({
       return (
         <TransactionWorkspace
           token={token}
-          providerCode={status.provider}
+          providerCode={status.providerCode}
           pipe={status.pipe}
           access={access}
           requestedService={requestedService}
