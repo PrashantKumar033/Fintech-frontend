@@ -7,6 +7,7 @@ import {
   normalizeAepsBankIins,
   toAepsBankIinOptions,
 } from "../src/lib/aeps-bank-iins.ts";
+import { withSelectedAepsProvider } from "../src/lib/aeps-provider-selection.ts";
 import {
   canRecoverProviderFinancialEffects,
   canResolveProviderTransaction,
@@ -116,15 +117,19 @@ test("bank options use a composite key and submit only their IIN value", () => {
   );
 });
 
-test("onboarding banks and transaction bank IIN routes remain separate", () => {
-  const onboardingPath = buildAepsOnboardingBankPath("VIMOPAY");
-  const transactionPath = buildAepsBankIinPath("SELECTED_PROVIDER", "CW", "BA");
-
-  assert.equal(onboardingPath, "/aeps/providers/VIMOPAY/banks");
-  assert.equal(
-    transactionPath,
-    "/aeps/providers/SELECTED_PROVIDER/bank-iins?txnCode=CW&authType=BA",
+test("provider display name stays separate from the public API code", () => {
+  const status = withSelectedAepsProvider(
+    { provider: "Provider 1", pipe: "4", nextAction: "AEPS_TRANSACTION" },
+    { providerCode: "PROVIDER_1", providerName: "Provider 1" },
   );
+  const onboardingPath = buildAepsOnboardingBankPath(status.providerCode);
+  const transactionPath = buildAepsBankIinPath(status.providerCode, "CW", "BA");
+
+  assert.equal(status.provider, "Provider 1");
+  assert.equal(status.providerCode, "PROVIDER_1");
+  assert.equal(onboardingPath, "/aeps/providers/PROVIDER_1/banks");
+  assert.equal(transactionPath, "/aeps/providers/PROVIDER_1/bank-iins?txnCode=CW&authType=BA");
+  assert.doesNotMatch(transactionPath, /Provider(?:%20| )1/);
   assert.doesNotMatch(transactionPath, /\/banks(?:\?|$)/);
   assert.doesNotMatch(onboardingPath, /bank-iins/);
 });
