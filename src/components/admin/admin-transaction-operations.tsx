@@ -7,6 +7,7 @@ import {
   getAdminActor,
   type AdminProviderTransaction,
   type ProviderIncomeInput,
+  type RecoverFinancialEffectsResult,
   type ProviderReversal,
   type ProviderReversalDetail,
   type TransactionDetail,
@@ -17,6 +18,10 @@ import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { ReadableTransactionDetails } from "@/components/readable-transaction-details";
 import { TransactionDetailDialog } from "@/components/transaction-detail-dialog";
 import { getSession } from "@/lib/auth-api";
+import {
+  canRecoverProviderFinancialEffects,
+  providerTransactionDescription,
+} from "@/lib/provider-transaction-ui";
 
 type View = "transactions" | "income" | "reversals";
 
@@ -59,6 +64,7 @@ export function AdminTransactionOperations() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [recoveryResult, setRecoveryResult] = useState<RecoverFinancialEffectsResult | null>(null);
   const [status, setStatus] = useState("");
 
   const [detail, setDetail] = useState<TransactionDetail | null>(null);
@@ -204,6 +210,7 @@ export function AdminTransactionOperations() {
   }
 
   async function processReversal(item: ProviderReversal) {
+    if (busy) return;
     if (!canProcessReversal)
       return setError(`Permission ${UI_PERMISSION.TRANSACTION_REVERSAL_PROCESS} is required.`);
     if (
@@ -229,16 +236,31 @@ export function AdminTransactionOperations() {
   }
 
   async function recover(item: AdminProviderTransaction) {
+    if (busy) return;
     if (!canRecover)
       return setError(`Permission ${UI_PERMISSION.TRANSACTION_FINANCIAL_RECOVERY} is required.`);
-    if (!window.confirm(`Retry financial effects for ${item.referenceId}?`)) return;
+    if (
+      !window.confirm(
+        `Finalize financial state for ${item.status} provider outcome ${item.referenceId}?`,
+      )
+    )
+      return;
 
     setBusy(true);
     setError("");
     try {
-      await adminApi.recoverFinancialEffects(item.referenceId);
-      setNotice(`Financial recovery requested for ${item.referenceId}.`);
+      const result = await adminApi.recoverFinancialEffects(item.referenceId);
+      setRecoveryResult(result);
+      const outcome = result.transaction.status;
+      setNotice(
+        result.recoveryComplete && !result.transaction.needsReconciliation
+          ? `Financial state finalized for ${item.referenceId}. Provider outcome remains ${outcome}.`
+          : `Financial recovery for ${item.referenceId} remains incomplete. Provider outcome remains ${outcome}.`,
+      );
       await load();
+      if (detail?.referenceId === item.referenceId) {
+        setDetail(await adminApi.transaction(item.referenceId));
+      }
     } catch (value) {
       setError(messageOf(value));
     } finally {
@@ -304,6 +326,29 @@ export function AdminTransactionOperations() {
           {notice}
         </p>
       )}
+      {recoveryResult && (
+        <div className="mt-4 grid gap-3 rounded-xl border border-border bg-muted/30 p-4 text-xs sm:grid-cols-2 lg:grid-cols-4">
+          <RecoveryValue label="Provider outcome" value={recoveryResult.transaction.status} />
+          <RecoveryValue
+            label="Description"
+            value={providerTransactionDescription(recoveryResult.transaction)}
+          />
+          <RecoveryValue
+            label="Recovery complete"
+            value={recoveryResult.recoveryComplete ? "YES" : "NO"}
+          />
+          <RecoveryValue
+            label="Needs reconciliation"
+            value={recoveryResult.transaction.needsReconciliation ? "YES" : "NO"}
+          />
+          <RecoveryValue label="Settlement" value={recoveryResult.settlement.status || "—"} />
+          <RecoveryValue label="Commission" value={recoveryResult.commission.status || "—"} />
+          <RecoveryValue
+            label="Wallet transaction"
+            value={walletTransactionLabel(recoveryResult.walletTransaction)}
+          />
+        </div>
+      )}
 
       <div className="mt-4 flex justify-end">
         <select
@@ -346,6 +391,7 @@ export function AdminTransactionOperations() {
             canReconcileIncome={canReconcileIncome}
             canRequestReversal={canRequestReversal}
             canRecover={canRecover}
+            busy={busy}
             canInspect={canViewDetail}
             receiptScope={receiptScope}
             openReceipt={(item, scope) =>
@@ -474,6 +520,25 @@ export function AdminTransactionOperations() {
   );
 }
 
+function walletTransactionLabel(walletTransaction?: Record<string, unknown> | null): string {
+  if (!walletTransaction) return "Not created";
+  return String(
+    walletTransaction.referenceId ??
+      walletTransaction.transactionReference ??
+      walletTransaction.id ??
+      "Recorded",
+  );
+}
+
+function RecoveryValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-extrabold uppercase text-muted-foreground">{label}</p>
+      <p className="mt-1 break-all font-bold text-secondary">{value}</p>
+    </div>
+  );
+}
+
 function TransactionTable({
   items,
   view,
@@ -484,6 +549,7 @@ function TransactionTable({
   canReconcileIncome,
   canRequestReversal,
   canRecover,
+  busy,
   canInspect,
   receiptScope,
   openReceipt,
@@ -497,6 +563,7 @@ function TransactionTable({
   canReconcileIncome: boolean;
   canRequestReversal: boolean;
   canRecover: boolean;
+  busy: boolean;
   canInspect: boolean;
   receiptScope: (item: AdminProviderTransaction) => "self" | "network" | null;
   openReceipt: (item: AdminProviderTransaction, scope: "self" | "network") => void;
@@ -512,6 +579,7 @@ function TransactionTable({
             "Provider",
             "Amount",
             "Status",
+            "Description",
             "Settlement",
             "Commission",
             "Created",
@@ -541,6 +609,9 @@ function TransactionTable({
             </td>
             <td className="p-3 font-bold">{money(item.amount)}</td>
             <td className="p-3 font-bold">{item.status}</td>
+            <td className="max-w-[240px] p-3 leading-5 text-muted-foreground">
+              {providerTransactionDescription(item)}
+            </td>
             <td className="p-3">{item.settlementStatus || "—"}</td>
             <td className="p-3">{item.commissionStatus || "—"}</td>
             <td className="p-3">{time(item.createdAt)}</td>
@@ -589,14 +660,14 @@ function TransactionTable({
                 )}
                 {view === "transactions" &&
                   canRecover &&
-                  !item.needsReconciliation &&
-                  (item.settlementStatus === "FAILED" || item.commissionStatus === "FAILED") && (
+                  canRecoverProviderFinancialEffects(item) && (
                     <button
                       type="button"
+                      disabled={busy}
                       onClick={() => recover(item)}
-                      className="rounded-lg border px-2 py-1 font-bold text-red-700"
+                      className="rounded-lg border px-2 py-1 font-bold text-red-700 disabled:opacity-50"
                     >
-                      Recover
+                      {busy ? <Loader2 size={14} className="animate-spin" /> : "Recover"}
                     </button>
                   )}
               </div>

@@ -13,7 +13,13 @@ const fields: DetailField[] = [
   { keys: ["sourceRole"], label: "Customer role" },
   { keys: ["rrn"], label: "Bank reference (RRN)" },
   {
-    keys: ["npciMessage", "providerStatusMessage", "statusDescription"],
+    keys: [
+      "statusDescription",
+      "npciMessage",
+      "providerStatusMessage",
+      "reconciliationReason",
+      "status",
+    ],
     label: "Transaction result",
   },
   { keys: ["aadhaarLast4", "maskedAadhaar"], label: "Aadhaar number", kind: "aadhaar" },

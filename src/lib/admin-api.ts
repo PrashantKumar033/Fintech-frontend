@@ -7,6 +7,10 @@ import {
 } from "@/lib/auth-api";
 import { getDeviceId } from "@/lib/device-id";
 import type { ProviderTransaction } from "@/lib/operations-api";
+import {
+  buildFinancialRecoveryPath,
+  financialRecoveryRequestInit,
+} from "@/lib/provider-transaction-ui";
 import type {
   PayoutPage,
   PayoutPaymentMode,
@@ -112,6 +116,13 @@ export type TransactionDetail = Record<string, unknown> & {
   operation?: string;
   amount?: string | number;
   status?: string;
+  statusDescription?: string | null;
+  npciMessage?: string | null;
+  providerStatusMessage?: string | null;
+  reconciliationReason?: string | null;
+  needsReconciliation?: boolean;
+  settlementStatus?: string | null;
+  commissionStatus?: string | null;
   rrn?: string | null;
   providerTxnRefId?: string | null;
   createdAt?: string;
@@ -154,6 +165,7 @@ export type ReconciliationItem = {
   operation?: string;
   amount?: string | number;
   status?: ReconciliationStatus | string;
+  statusDescription?: string | null;
   providerMerchantRefId?: string | null;
   providerTxnRefId?: string | null;
   rrn?: string | null;
@@ -189,6 +201,30 @@ export type ResolveTransactionResult = Record<string, unknown> & {
   status?: string;
   needsReconciliation?: boolean;
   reconciledAt?: string | null;
+  statusDescription?: string | null;
+  nextAction?: "RECOVER_FINANCIAL_EFFECTS" | "NONE" | string;
+};
+export type RecoverFinancialEffectsResult = {
+  transaction: {
+    referenceId: string;
+    status: string;
+    operation?: string;
+    amount?: string | number;
+    needsReconciliation: boolean;
+    statusDescription?: string | null;
+  };
+  settlement: {
+    status?: string | null;
+    transactionReference?: string | null;
+    compensationTransactionReference?: string | null;
+  };
+  commission: {
+    status?: string | null;
+    reason?: string | null;
+  };
+  walletTransaction?: Record<string, unknown> | null;
+  recoveryComplete: boolean;
+  duplicate?: boolean;
 };
 export type ReversalRequestResult = Record<string, unknown> & {
   id?: string;
@@ -1584,9 +1620,9 @@ export const adminApi = {
       json("POST", body),
     ),
   recoverFinancialEffects: (referenceId: string) =>
-    call(
-      `/admin/transactions/reconciliation/${encodeURIComponent(referenceId)}/recover-financial-effects`,
-      { method: "POST" },
+    call<RecoverFinancialEffectsResult>(
+      buildFinancialRecoveryPath(referenceId),
+      financialRecoveryRequestInit(),
     ),
   requestReversal: (referenceId: string, reason: string, idempotencyKey: string) =>
     call<ReversalRequestResult>(`/admin/transactions/${encodeURIComponent(referenceId)}/reversal`, {

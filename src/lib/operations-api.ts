@@ -176,6 +176,7 @@ export type ProviderTransaction = {
   rrn?: string | null;
   npciCode?: string | null;
   npciMessage?: string | null;
+  statusDescription?: string | null;
   providerStatusCode?: string | null;
   providerStatusMessage?: string | null;
   bankIIN?: string | null;
