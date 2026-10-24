@@ -84,7 +84,7 @@ function TransactionsPage() {
   const rows = useMemo(
     () =>
       (page?.data ?? []).filter((item) =>
-        `${item.referenceId} ${item.providerReference ?? item.providerTxnRefId ?? ""} ${item.serviceType || "AEPS"} ${item.provider} ${item.operation} ${item.rrn ?? ""}`
+        `${item.referenceId} ${item.providerReference ?? item.providerTxnRefId ?? ""} ${item.serviceType || "AEPS"} ${item.operation} ${item.rrn ?? ""}`
           .toLowerCase()
           .includes(query.toLowerCase()),
       ),
@@ -98,13 +98,12 @@ function TransactionsPage() {
     );
   function exportCsv() {
     const csv = [
-      "Reference,Provider Reference,Service,Provider,Operation,Amount,Commission,Commission Status,Status,RRN,Created",
+      "Reference,Provider Reference,Service,Operation,Amount,Commission,Commission Status,Status,RRN,Created",
       ...rows.map((row) =>
         [
           row.referenceId,
           row.providerReference ?? row.providerTxnRefId ?? "",
           row.serviceType || "AEPS",
-          row.provider,
           row.operation,
           row.amount,
           row.commissionAmount ?? "",
@@ -130,7 +129,7 @@ function TransactionsPage() {
       active="transactions"
       eyebrow="Transaction service"
       title="Transaction history"
-      description="Track AEPS provider operations, response status, references and reconciliation indicators."
+      description="Track AEPS operations, response status, references and reconciliation indicators."
     >
       {error && (
         <div className="mb-5">
@@ -187,7 +186,6 @@ function TransactionsPage() {
                     "Reference",
                     "Provider reference",
                     "Service",
-                    "Provider",
                     "Operation",
                     "Amount",
                     "Commission",
@@ -217,7 +215,6 @@ function TransactionsPage() {
                       {row.providerReference || row.providerTxnRefId || "—"}
                     </td>
                     <td className="px-5 py-4">{row.serviceType || "AEPS"}</td>
-                    <td className="px-5 py-4">{row.provider}</td>
                     <td className="px-5 py-4">{operationLabel(row.operation)}</td>
                     <td className="px-5 py-4 font-extrabold">
                       ₹{Number(row.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
@@ -261,7 +258,7 @@ function TransactionsPage() {
           </div>
         )}
         <div className="border-t border-border p-4 text-xs text-muted-foreground">
-          {page?.total ?? 0} total provider transactions
+          {page?.total ?? 0} total AEPS transactions
         </div>
       </section>
       <TransactionDetailDialog

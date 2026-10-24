@@ -38,6 +38,12 @@ const operationLabels: Record<ProviderOperation, string> = {
   CD: "Cash deposit",
 };
 
+function statusTone(status: ProviderTransactionStatus) {
+  if (status === "SUCCESS") return "bg-emerald-50 text-emerald-700";
+  if (status === "FAILED") return "bg-red-50 text-red-700";
+  return "bg-amber-50 text-amber-700";
+}
+
 export function NetworkAepsTransactions({
   title,
   description,
@@ -172,7 +178,6 @@ export function NetworkAepsTransactions({
                 <th className="p-3">Reference</th>
                 <th className="p-3">Provider reference</th>
                 <th className="p-3">Operation</th>
-                <th className="p-3">Provider</th>
                 <th className="p-3">Amount</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Date</th>
@@ -206,9 +211,14 @@ export function NetworkAepsTransactions({
                     {row.providerReference || row.providerTxnRefId || "—"}
                   </td>
                   <td className="p-3">{operationLabels[row.operation] ?? row.operation}</td>
-                  <td className="p-3">{row.provider}</td>
                   <td className="p-3">₹{Number(row.amount || 0).toLocaleString("en-IN")}</td>
-                  <td className="p-3 font-bold">{row.status}</td>
+                  <td className="p-3">
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${statusTone(row.status)}`}
+                    >
+                      {row.status}
+                    </span>
+                  </td>
                   <td className="p-3">{new Date(row.createdAt).toLocaleString("en-IN")}</td>
                 </tr>
               ))}

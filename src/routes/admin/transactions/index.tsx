@@ -341,7 +341,7 @@ function Transactions() {
             <thead className="bg-muted/60">
               <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
                 <th className="p-3">Reference</th>
-                <th className="p-3">Provider / service</th>
+                <th className="p-3">Service</th>
                 <th className="p-3">Operation</th>
                 <th className="p-3">Amount</th>
                 <th className="p-3">Status</th>
@@ -360,8 +360,7 @@ function Transactions() {
                     </p>
                   </td>
                   <td className="p-3">
-                    <p className="font-bold">{item.provider || "—"}</p>
-                    <p className="text-xs text-muted-foreground">{item.serviceType || "—"}</p>
+                    <p className="font-bold">{item.serviceType || "AEPS"}</p>
                   </td>
                   <td className="p-3 font-bold">{item.operation || "—"}</td>
                   <td className="p-3 font-black">{amount(item.amount)}</td>

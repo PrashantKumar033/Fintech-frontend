@@ -9,17 +9,10 @@ const fields: DetailField[] = [
   { keys: ["operation", "transactionType"], label: "Service", kind: "operation" },
   { keys: ["amount"], label: "Amount", kind: "money" },
   { keys: ["status"], label: "Status" },
-  { keys: ["provider"], label: "Service provider" },
   { keys: ["sourceRole"], label: "Customer role" },
   { keys: ["rrn"], label: "Bank reference (RRN)" },
   {
-    keys: [
-      "statusDescription",
-      "npciMessage",
-      "providerStatusMessage",
-      "reconciliationReason",
-      "status",
-    ],
+    keys: ["statusDescription", "npciMessage", "reconciliationReason", "status"],
     label: "Transaction result",
   },
   { keys: ["aadhaarLast4", "maskedAadhaar"], label: "Aadhaar number", kind: "aadhaar" },

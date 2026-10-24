@@ -33,6 +33,18 @@ const money = (value: string | number) =>
 
 const time = (value?: string | null) => (value ? new Date(value).toLocaleString("en-IN") : "—");
 
+function TransactionStatusBadge({ value }: { value: string }) {
+  const tone =
+    value === "SUCCESS"
+      ? "bg-emerald-50 text-emerald-700"
+      : value === "FAILED"
+        ? "bg-red-50 text-red-700"
+        : "bg-amber-50 text-amber-700";
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-[10px] font-extrabold ${tone}`}>{value}</span>
+  );
+}
+
 const inputClass =
   "rounded-xl border border-border bg-white px-3 py-2.5 text-xs outline-none focus:border-primary";
 
@@ -576,7 +588,7 @@ function TransactionTable({
             "Reference",
             "Provider reference",
             "User",
-            "Provider",
+            "Service / operation",
             "Amount",
             "Status",
             "Description",
@@ -605,10 +617,12 @@ function TransactionTable({
               </p>
             </td>
             <td className="p-3">
-              {item.provider} / {item.operation}
+              {item.serviceType || "AEPS"} / {item.operation}
             </td>
             <td className="p-3 font-bold">{money(item.amount)}</td>
-            <td className="p-3 font-bold">{item.status}</td>
+            <td className="p-3">
+              <TransactionStatusBadge value={item.status} />
+            </td>
             <td className="max-w-[240px] p-3 leading-5 text-muted-foreground">
               {providerTransactionDescription(item)}
             </td>
@@ -698,13 +712,11 @@ function ReversalTable({
     <table className="w-full min-w-[900px] text-left text-xs">
       <thead className="bg-muted">
         <tr>
-          {["Reversal", "Transaction", "Provider", "Amount", "Status", "Reason", "Actions"].map(
-            (value) => (
-              <th key={value} className="p-3">
-                {value}
-              </th>
-            ),
-          )}
+          {["Reversal", "Transaction", "Amount", "Status", "Reason", "Actions"].map((value) => (
+            <th key={value} className="p-3">
+              {value}
+            </th>
+          ))}
         </tr>
       </thead>
       <tbody>
@@ -712,7 +724,6 @@ function ReversalTable({
           <tr key={item.referenceId} className="border-t">
             <td className="p-3 font-bold">{item.referenceId}</td>
             <td className="p-3">{item.providerTransactionReference}</td>
-            <td className="p-3">{item.provider}</td>
             <td className="p-3">{money(item.amount)}</td>
             <td className="p-3 font-bold">{item.status}</td>
             <td className="p-3">{item.failedReason || item.reason || "—"}</td>
@@ -778,7 +789,6 @@ function ReversalDetailDialog({
     transaction
       ? [
           ["Transaction Reference", transaction.referenceId],
-          ["Provider", transaction.provider],
           ["Service", transaction.serviceType],
           ["Operation", transaction.operation],
           ["Original Amount", money(transaction.amount)],
@@ -789,7 +799,7 @@ function ReversalDetailDialog({
           ["Provider Transaction Ref", transaction.providerTxnRefId],
           ["RRN", transaction.rrn],
           ["NPCI Code", transaction.npciCode],
-          ["NPCI Message", transaction.npciMessage],
+          ["Transaction Result", providerTransactionDescription(transaction)],
           ["Needs Reconciliation", transaction.needsReconciliation],
           ["Created At", time(transaction.createdAt)],
           ["Completed At", time(transaction.completedAt)],

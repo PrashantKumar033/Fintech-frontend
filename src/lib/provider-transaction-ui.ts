@@ -8,18 +8,30 @@ export type ProviderStatusFields = {
   recoveryComplete?: boolean;
 };
 
-export function providerTransactionDescription(item: ProviderStatusFields): string {
-  for (const value of [
-    item.statusDescription,
-    item.npciMessage,
-    item.providerStatusMessage,
-    item.reconciliationReason,
-    item.status,
-  ]) {
-    const description = value?.trim();
-    if (description) return description;
+function firstText(values: Array<string | null | undefined>): string | undefined {
+  for (const value of values) {
+    const text = value?.trim();
+    if (text) return text;
   }
-  return "—";
+  return undefined;
+}
+
+export function directAepsTransactionMessage(
+  item: Pick<ProviderStatusFields, "npciMessage" | "statusDescription">,
+  genericMessage?: string | null,
+): string {
+  return (
+    firstText([item.npciMessage, item.statusDescription, genericMessage]) ?? "Response received"
+  );
+}
+
+export function providerTransactionReason(item: ProviderStatusFields): string {
+  return firstText([item.statusDescription, item.npciMessage, item.reconciliationReason]) ?? "—";
+}
+
+export function providerTransactionDescription(item: ProviderStatusFields): string {
+  const reason = providerTransactionReason(item);
+  return reason !== "—" ? reason : (firstText([item.status]) ?? "—");
 }
 
 export function canResolveProviderTransaction(item: ProviderStatusFields): boolean {

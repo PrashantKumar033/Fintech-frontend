@@ -12,9 +12,29 @@ import {
   canRecoverProviderFinancialEffects,
   canResolveProviderTransaction,
   buildFinancialRecoveryPath,
+  directAepsTransactionMessage,
   financialRecoveryRequestInit,
   providerTransactionDescription,
+  providerTransactionReason,
 } from "../src/lib/provider-transaction-ui.ts";
+
+test("direct AEPS result shows NPCI reason before status description and generic failure", () => {
+  assert.equal(
+    directAepsTransactionMessage(
+      {
+        npciMessage: "Customer Bank Account is blocked for AEPS transactions",
+        statusDescription: "Sanitized fallback",
+      },
+      "Transaction failed",
+    ),
+    "Customer Bank Account is blocked for AEPS transactions",
+  );
+  assert.equal(
+    directAepsTransactionMessage({ statusDescription: "Sanitized fallback" }, "Transaction failed"),
+    "Sanitized fallback",
+  );
+  assert.equal(directAepsTransactionMessage({}, "Transaction failed"), "Transaction failed");
+});
 
 test("NPCI message is shown before the generic provider message", () => {
   assert.equal(
@@ -38,6 +58,13 @@ test("status description wins and generic fallback remains available when it is 
     "SUSPECTED FRAUD",
   );
   assert.equal(providerTransactionDescription({ status: "FAILED" }), "FAILED");
+  assert.equal(
+    providerTransactionReason({
+      providerStatusMessage: "Vimo-branded raw provider failure",
+      status: "FAILED",
+    }),
+    "—",
+  );
 });
 
 test("resolve and financial recovery actions are shown for their distinct states", () => {
