@@ -120,6 +120,7 @@ test("bank IINs preserve provider descriptions, order and distinct same-IIN pair
     { iin: "607161", description: "Provider label two" },
     { iin: "607152", description: "STATE BANK OF INDIA" },
   ]);
+  assert.deepEqual(filterAepsBankIins(banks, ""), banks);
   assert.deepEqual(filterAepsBankIins(banks, "PROVIDER LABEL"), banks.slice(0, 2));
 });
 
