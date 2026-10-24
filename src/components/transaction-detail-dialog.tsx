@@ -7,6 +7,7 @@ import {
   type ProviderTransactionReceipt,
 } from "@/lib/operations-api";
 import { compactTransactionReference } from "@/lib/transaction-display";
+import { providerTransactionReason } from "@/lib/provider-transaction-ui";
 
 type Props = {
   accessToken: string;
@@ -28,9 +29,7 @@ const transactionFields: Array<{ key: keyof ProviderTransaction; label: string }
   { key: "operation", label: "Service" },
   { key: "amount", label: "Amount" },
   { key: "status", label: "Status" },
-  { key: "provider", label: "Service provider" },
   { key: "rrn", label: "Bank reference (RRN)" },
-  { key: "npciMessage", label: "Transaction result" },
   { key: "aadhaarLast4", label: "Aadhaar number" },
   { key: "settlementStatus", label: "Settlement" },
   { key: "commissionStatus", label: "Commission" },
@@ -44,7 +43,6 @@ const receiptFields: Array<{ key: keyof ProviderTransactionReceipt; label: strin
   { key: "transactionReferenceId", label: "Transaction reference" },
   { key: "providerReference", label: "Provider reference" },
   { key: "status", label: "Status" },
-  { key: "statusDescription", label: "Transaction result" },
   { key: "amount", label: "Amount" },
   { key: "transactionDateTime", label: "Date and time" },
   { key: "rrn", label: "Bank reference (RRN)" },
@@ -74,6 +72,13 @@ function displayValue(key: string, value: unknown) {
   return String(value).replaceAll("_", " ");
 }
 
+function statusTone(value: unknown) {
+  const status = String(value).toUpperCase();
+  if (status === "SUCCESS") return "bg-emerald-50 text-emerald-700";
+  if (status === "FAILED") return "bg-red-50 text-red-700";
+  return "bg-amber-50 text-amber-700";
+}
+
 function escapeHtml(value: unknown) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -84,9 +89,9 @@ function escapeHtml(value: unknown) {
 }
 
 function transactionReceiptDocument(receipt: ProviderTransactionReceipt, autoPrint: boolean) {
+  const transactionResult = providerTransactionReason(receipt);
   const printableRows: Array<[string, unknown, keyof ProviderTransactionReceipt]> = [
     ["Service", receipt.transactionTypeLabel, "transactionTypeLabel"],
-    ["Provider", receipt.provider, "provider"],
     ["Transaction reference", receipt.transactionReferenceId, "transactionReferenceId"],
     ["Provider reference", receipt.providerReference, "providerReference"],
     ["Bank reference (RRN)", receipt.rrn, "rrn"],
@@ -94,7 +99,11 @@ function transactionReceiptDocument(receipt: ProviderTransactionReceipt, autoPri
     ["Client reference", receipt.clientRefNo, "clientRefNo"],
     ["Aadhaar number", receipt.maskedAadhaar, "maskedAadhaar"],
     ["Bank IIN", receipt.bankIIN, "bankIIN"],
-    ["Transaction result", receipt.statusDescription || receipt.npciMessage, "statusDescription"],
+    [
+      "Transaction result",
+      transactionResult === "—" ? undefined : transactionResult,
+      "statusDescription",
+    ],
     ["NPCI response code", receipt.npciCode, "npciCode"],
     ["Date and time", receipt.transactionDateTime, "transactionDateTime"],
     ["Available balance", receipt.availableBalance, "availableBalance"],
@@ -292,13 +301,31 @@ export function TransactionDetailDialog({
                     <p className="text-[10px] font-extrabold uppercase text-muted-foreground">
                       {label}
                     </p>
-                    <p className="mt-1 break-all text-xs font-bold text-secondary">
-                      {key === "referenceId"
-                        ? compactTransactionReference(String(detail[key]))
-                        : displayValue(key, detail[key])}
-                    </p>
+                    {key === "status" ? (
+                      <span
+                        className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-[10px] font-extrabold ${statusTone(detail[key])}`}
+                      >
+                        {displayValue(key, detail[key])}
+                      </span>
+                    ) : (
+                      <p className="mt-1 break-all text-xs font-bold text-secondary">
+                        {key === "referenceId"
+                          ? compactTransactionReference(String(detail[key]))
+                          : displayValue(key, detail[key])}
+                      </p>
+                    )}
                   </div>
                 ))}
+              {providerTransactionReason(detail) !== "—" && (
+                <div className="rounded-xl bg-muted/60 p-3">
+                  <p className="text-[10px] font-extrabold uppercase text-muted-foreground">
+                    Transaction result
+                  </p>
+                  <p className="mt-1 break-all text-xs font-bold text-secondary">
+                    {providerTransactionReason(detail)}
+                  </p>
+                </div>
+              )}
             </div>
           )
         )}
@@ -352,6 +379,14 @@ export function TransactionDetailDialog({
               </p>
             </div>
             <div className="mt-4 grid gap-x-6 gap-y-3">
+              {providerTransactionReason(receipt) !== "—" && (
+                <div className="flex justify-between gap-3 border-b border-dashed border-border py-2 text-xs">
+                  <span className="text-muted-foreground">Transaction result</span>
+                  <strong className="break-all text-right">
+                    {providerTransactionReason(receipt)}
+                  </strong>
+                </div>
+              )}
               {receiptFields
                 .filter(({ key }) => receipt[key] !== null && receipt[key] !== undefined)
                 .map(({ key, label }) => (
@@ -360,11 +395,19 @@ export function TransactionDetailDialog({
                     className="flex justify-between gap-3 border-b border-dashed border-border py-2 text-xs"
                   >
                     <span className="text-muted-foreground">{label}</span>
-                    <strong className="break-all text-right">
-                      {key === "transactionReferenceId"
-                        ? compactTransactionReference(String(receipt[key]))
-                        : displayValue(key, receipt[key])}
-                    </strong>
+                    {key === "status" ? (
+                      <strong
+                        className={`rounded-full px-2.5 py-1 text-[10px] ${statusTone(receipt[key])}`}
+                      >
+                        {displayValue(key, receipt[key])}
+                      </strong>
+                    ) : (
+                      <strong className="break-all text-right">
+                        {key === "transactionReferenceId"
+                          ? compactTransactionReference(String(receipt[key]))
+                          : displayValue(key, receipt[key])}
+                      </strong>
+                    )}
                   </div>
                 ))}
             </div>

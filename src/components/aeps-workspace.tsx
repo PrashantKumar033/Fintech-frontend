@@ -22,6 +22,7 @@ import {
   normalizeAepsBankIins,
   toAepsBankIinOptions,
 } from "@/lib/aeps-bank-iins";
+import { directAepsTransactionMessage } from "@/lib/provider-transaction-ui";
 import {
   credentialsPending,
   managementBasePath,
@@ -1816,6 +1817,7 @@ function Receipt({ result, again }: { result: TransactionResult; again: () => vo
     providerStatus === "PENDING" ||
     providerStatus === "UNKNOWN" ||
     result.settlement?.status === "PENDING";
+  const displayStatus = success ? "SUCCESS" : pending ? providerStatus || "PENDING" : "FAILED";
   return (
     <Panel
       title={
@@ -1824,12 +1826,39 @@ function Receipt({ result, again }: { result: TransactionResult; again: () => vo
       description="Keep the Nexus platform reference for support and transaction tracking."
     >
       <div
-        className={`rounded-2xl p-6 text-center ${success ? "bg-emerald-50 text-emerald-900" : "bg-amber-50 text-amber-900"}`}
+        className={`rounded-2xl p-6 text-center ${success ? "bg-emerald-50 text-emerald-900" : pending ? "bg-amber-50 text-amber-900" : "bg-red-50 text-red-900"}`}
       >
-        <CheckCircle2 className="mx-auto" size={42} />
+        {success ? (
+          <CheckCircle2 className="mx-auto" size={42} />
+        ) : pending ? (
+          <Clock3 className="mx-auto" size={42} />
+        ) : (
+          <ShieldAlert className="mx-auto" size={42} />
+        )}
+        <span className="mt-3 inline-flex rounded-full bg-white/70 px-3 py-1 text-[10px] font-extrabold tracking-wide">
+          {displayStatus}
+        </span>
         <p className="mt-3 text-sm font-bold">
-          {String(
-            detail.statusDescription || detail.npciMessage || result.message || "Response received",
+          {directAepsTransactionMessage(
+            {
+              npciMessage:
+                typeof detail.npciMessage === "string"
+                  ? detail.npciMessage
+                  : typeof result.npciMessage === "string"
+                    ? result.npciMessage
+                    : undefined,
+              statusDescription:
+                typeof detail.statusDescription === "string"
+                  ? detail.statusDescription
+                  : typeof result.statusDescription === "string"
+                    ? result.statusDescription
+                    : undefined,
+            },
+            success
+              ? "Transaction successful"
+              : pending
+                ? "Transaction pending"
+                : "Transaction failed",
           )}
         </p>
         {detail.availableBalance != null && (
