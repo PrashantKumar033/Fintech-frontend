@@ -4,6 +4,7 @@ import {
   BadgeIndianRupee,
   Banknote,
   CheckCircle2,
+  ChevronDown,
   Circle,
   Clock3,
   Fingerprint,
@@ -12,16 +13,13 @@ import {
   MapPin,
   ReceiptText,
   RefreshCw,
+  Search,
   ShieldAlert,
   WalletCards,
 } from "lucide-react";
 import { getSession } from "@/lib/auth-api";
 import { aepsErrorMessage } from "@/lib/aeps-errors";
-import {
-  filterAepsBankIins,
-  normalizeAepsBankIins,
-  toAepsBankIinOptions,
-} from "@/lib/aeps-bank-iins";
+import { normalizeAepsBankIins, toAepsBankIinOptions } from "@/lib/aeps-bank-iins";
 import { directAepsTransactionMessage } from "@/lib/provider-transaction-ui";
 import {
   credentialsPending,
@@ -63,6 +61,7 @@ import {
 import { BusinessPage } from "@/components/business-page";
 import { AdminLayout } from "@/components/admin/admin-layout";
 import { ActionPermissionNotice } from "@/components/action-permission-notice";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { useServiceReadiness } from "@/lib/service-readiness";
@@ -1390,7 +1389,6 @@ function TransactionForm({
   });
   const [authType, setAuthType] = useState<AuthType>("BA"),
     [iins, setIins] = useState<MasterItem[]>([]),
-    [bankSearch, setBankSearch] = useState(""),
     [otp, setOtp] = useState(""),
     [auth, setAuth] = useState<{ authRequestId: string; expiresAt: string } | null>(null),
     [otpNotRequired, setOtpNotRequired] = useState(false),
@@ -1401,7 +1399,6 @@ function TransactionForm({
   const otpRequired =
     transactionRequiresOtp(operation, form.amount, pipe, form.bankIIN) && !otpNotRequired;
   const airtelPipe4Bypass = highValue && pipe === "4" && form.bankIIN === "607094" && !otpRequired;
-  const visibleIins = filterAepsBankIins(iins, bankSearch);
   const previousPipeRef = useRef(pipe);
   useEffect(() => {
     let cancelled = false;
@@ -1568,7 +1565,6 @@ function TransactionForm({
             onChange={(v) => {
               setAuthType(v as AuthType);
               setForm((current) => ({ ...current, bankIIN: "", pidData: "" }));
-              setBankSearch("");
               setAuth(null);
               setOtp("");
               setOtpNotRequired(false);
@@ -1576,20 +1572,11 @@ function TransactionForm({
             }}
             options={[{ value: "BA", label: "Fingerprint / biometric" }]}
           />
-          <Field
-            label="Search customer bank"
-            value={bankSearch}
-            onChange={(value) => {
-              setBankSearch(value);
-              if (form.bankIIN) set("bankIIN", "");
-            }}
-            placeholder="Bank name or IIN"
-          />
-          <SelectField
+          <BankIinField
             label="Customer bank"
             value={form.bankIIN}
             onChange={(v) => set("bankIIN", v)}
-            options={toAepsBankIinOptions(visibleIins)}
+            options={toAepsBankIinOptions(iins)}
           />
           <RdDeviceField value={form.deviceType} onChange={(v) => set("deviceType", v)} />
           <LocationStatus
@@ -2048,6 +2035,141 @@ function Field({
     </label>
   );
 }
+
+function BankIinField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ key: string; value: string; label: string }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selectedOptionKey, setSelectedOptionKey] = useState("");
+  const normalizedQuery = query.trim().toLocaleLowerCase("en-IN");
+  const visibleOptions = normalizedQuery
+    ? options.filter((option) =>
+        `${option.label} ${option.value}`.toLocaleLowerCase("en-IN").includes(normalizedQuery),
+      )
+    : options;
+  const selectedOption =
+    options.find((option) => option.key === selectedOptionKey && option.value === value) ??
+    options.find((option) => option.value === value);
+
+  useEffect(() => {
+    if (!value) {
+      setSelectedOptionKey("");
+      return;
+    }
+    if (selectedOptionKey && !options.some((option) => option.key === selectedOptionKey)) {
+      setSelectedOptionKey("");
+    }
+  }, [options, selectedOptionKey, value]);
+
+  return (
+    <div className="block">
+      <span className="text-xs font-bold text-muted-foreground">{label}</span>
+      <Popover
+        open={open}
+        onOpenChange={(nextOpen) => {
+          setOpen(nextOpen);
+          if (!nextOpen) setQuery("");
+        }}
+      >
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            role="combobox"
+            aria-expanded={open}
+            aria-required="true"
+            className="mt-1.5 flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-background px-3 py-3 text-left text-sm outline-none transition hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/10"
+          >
+            <span className={selectedOption ? "truncate" : "truncate text-muted-foreground"}>
+              {selectedOption
+                ? `${selectedOption.label} (${selectedOption.value})`
+                : "Select bank…"}
+            </span>
+            <ChevronDown
+              size={16}
+              aria-hidden="true"
+              className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+            />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          sideOffset={6}
+          className="w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-xl border-border p-0 shadow-xl"
+        >
+          <div className="border-b border-border bg-muted/35 p-2.5">
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5">
+              <Search size={15} aria-hidden="true" className="shrink-0 text-muted-foreground" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search bank name or IIN…"
+                aria-label="Search customer banks"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+          </div>
+          <div
+            role="listbox"
+            aria-label="Customer banks"
+            className="max-h-72 overflow-y-auto p-1.5"
+          >
+            {visibleOptions.map((option) => {
+              const isSelected = selectedOption?.key === option.key;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    setSelectedOptionKey(option.key);
+                    onChange(option.value);
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                  className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+                    isSelected
+                      ? "bg-primary/10 font-bold text-secondary"
+                      : "text-secondary hover:bg-muted"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate">{option.label}</span>
+                    <span className="mt-0.5 block text-xs font-medium text-muted-foreground">
+                      IIN {option.value}
+                    </span>
+                  </span>
+                  {isSelected && (
+                    <CheckCircle2 size={16} aria-hidden="true" className="shrink-0 text-primary" />
+                  )}
+                </button>
+              );
+            })}
+            {!visibleOptions.length && (
+              <div className="px-4 py-8 text-center">
+                <p className="text-sm font-bold text-secondary">No matching banks</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Try a different bank name or IIN.
+                </p>
+              </div>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 function SelectField({
   label,
   value,
