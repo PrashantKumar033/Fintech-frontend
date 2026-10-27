@@ -28,6 +28,13 @@ import {
   type PayoutSettlement,
   type PayoutSourceWallet,
 } from "@/lib/payout-api";
+import {
+  PAYOUT_TOTAL_DEBIT_LABEL,
+  payoutFailureDescription,
+  payoutFailureNpciCode,
+  payoutProviderPublicCode,
+  payoutProviderPublicName,
+} from "@/lib/payout-ui";
 import { isManagementRole, managementBasePath } from "@/lib/role-hierarchy";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { formatWalletBalance, isNegativeWalletBalance } from "@/lib/wallet-balance";
@@ -128,7 +135,14 @@ function CreatePayoutSettlementPanel() {
     [accounts, sourceWallet],
   );
   const selectedAccount = eligibleAccounts.find((account) => account.id === bankAccountId);
-  const selectedProvider = providers.find((provider) => provider.providerCode === providerCode);
+  const selectedProvider = providers.find(
+    (provider) => payoutProviderPublicCode(provider) === providerCode,
+  );
+  const resultProvider = result
+    ? providers.find((provider) => payoutProviderPublicCode(provider) === result.providerCode)
+    : undefined;
+  const resultFailureDescription = result ? payoutFailureDescription(result) : null;
+  const resultNpciCode = result ? payoutFailureNpciCode(result) : null;
   const aepsBalance = Number(balances?.wallets.aeps ?? 0);
   const mainBalance = Number(balances?.wallets.main ?? 0);
   const mainAvailableBalance = Number(balances?.wallets.mainAvailable ?? mainBalance);
@@ -158,7 +172,9 @@ function CreatePayoutSettlementPanel() {
 
     if (providerResult.status === "fulfilled") {
       setProviders(providerResult.value);
-      setProviderCode((current) => current || providerResult.value[0]?.providerCode || "");
+      setProviderCode(
+        (current) => current || payoutProviderPublicCode(providerResult.value[0]) || "",
+      );
     } else {
       setProviders([]);
       failures.push(payoutMessage(providerResult.reason));
@@ -213,7 +229,10 @@ function CreatePayoutSettlementPanel() {
 
   function validateIntent(): boolean {
     const numericAmount = Number(amount);
-    if (!providerCode || !providers.some((provider) => provider.providerCode === providerCode)) {
+    if (
+      !providerCode ||
+      !providers.some((provider) => payoutProviderPublicCode(provider) === providerCode)
+    ) {
       setError("Select an available payout provider.");
       return false;
     }
@@ -338,9 +357,12 @@ function CreatePayoutSettlementPanel() {
                   {result.status === "SUCCESS"
                     ? "The provider accepted the settlement and the wallet debit was captured."
                     : result.status === "FAILED"
-                      ? "The payout failed. Any reserved wallet amount follows the backend release flow."
+                      ? resultFailureDescription
                       : "The payout is still being processed. Do not create another payout for the same transfer."}
                 </p>
+                {resultNpciCode ? (
+                  <p className="mt-1 text-xs font-bold">NPCI code: {resultNpciCode}</p>
+                ) : null}
               </div>
             </div>
             <button
@@ -357,14 +379,14 @@ function CreatePayoutSettlementPanel() {
               ["Reference", result.merchantRefId],
               ["Payout amount", inr.format(Number(result.amount))],
               ["Surcharge", inr.format(Number(result.surcharge.amount))],
-              [`Total ${result.sourceWallet} debit`, inr.format(Number(result.totalWalletDebit))],
+              [PAYOUT_TOTAL_DEBIT_LABEL, inr.format(Number(result.totalWalletDebit))],
               ["Mode", result.paymentMode],
               [
                 "Bank account",
                 `•••• ${result.bankAccount?.last4 || selectedAccount?.accountNumberLast4 || "—"}`,
               ],
               ["Wallet state", result.walletState.replaceAll("_", " ")],
-              ["Provider", result.providerCode],
+              ["Provider", payoutProviderPublicName(resultProvider ?? result)],
             ].map(([label, value]) => (
               <div key={label} className="rounded-xl bg-white/65 p-3">
                 <p className="text-[10px] font-black uppercase opacity-65">{label}</p>
@@ -468,11 +490,14 @@ function CreatePayoutSettlementPanel() {
               className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
             >
               <option value="">Select provider</option>
-              {providers.map((provider) => (
-                <option key={provider.providerCode} value={provider.providerCode}>
-                  {provider.providerCode}
-                </option>
-              ))}
+              {providers.map((provider) => {
+                const code = payoutProviderPublicCode(provider);
+                return (
+                  <option key={code} value={code}>
+                    {payoutProviderPublicName(provider)}
+                  </option>
+                );
+              })}
             </select>
           </label>
 
@@ -631,7 +656,7 @@ function CreatePayoutSettlementPanel() {
                 ["From", `${selectedWalletLabel} wallet`],
                 ["To", `${selectedAccount.bankName} •••• ${selectedAccount.accountNumberLast4}`],
                 ["Mode", paymentMode],
-                ["Provider", selectedProvider.providerCode],
+                ["Provider", payoutProviderPublicName(selectedProvider)],
               ].map(([label, value]) => (
                 <div
                   key={label}
