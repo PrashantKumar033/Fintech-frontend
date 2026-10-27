@@ -22,9 +22,15 @@ import {
   type AdminPayoutReconciliation,
   type AdminPayoutSettlement,
   type AdminPayoutSettlementFilters,
+  type ProviderRegistryEntry,
   type ResolvePayoutReconciliationInput,
 } from "@/lib/admin-api";
 import type { PayoutSettlementStatus } from "@/lib/payout-api";
+import {
+  payoutFailureDescription,
+  payoutFailureNpciCode,
+  payoutProviderPublicName,
+} from "@/lib/payout-ui";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 
 type View = "settlements" | "reconciliation";
@@ -89,6 +95,7 @@ export function AdminPayoutOperations() {
   const [view, setView] = useState<View>(canViewSettlements ? "settlements" : "reconciliation");
   const [settlements, setSettlements] = useState<AdminPayoutSettlement[]>([]);
   const [reconciliation, setReconciliation] = useState<AdminPayoutReconciliation[]>([]);
+  const [providers, setProviders] = useState<ProviderRegistryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -120,6 +127,12 @@ export function AdminPayoutOperations() {
     reason: "",
     evidenceReference: "",
   });
+  const providerLabelForCode = (providerCode: string) =>
+    payoutProviderPublicName(providers.find((provider) => provider.publicCode === providerCode));
+  const providerLabel = (item: AdminPayoutSettlement) =>
+    payoutProviderPublicName(
+      providers.find((provider) => provider.publicCode === item.providerCode) ?? item,
+    );
 
   useEffect(() => {
     if (view === "settlements" && !canViewSettlements && canViewReconciliation) {
@@ -177,6 +190,22 @@ export function AdminPayoutOperations() {
     if (view === "settlements") void loadSettlements();
     else void loadReconciliation();
   }, [loadReconciliation, loadSettlements, view]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (actor?.kind !== "SUPER_ADMIN") return;
+    adminApi.superAdminPayout.providers
+      .list()
+      .then((items) => {
+        if (!cancelled) setProviders(items);
+      })
+      .catch(() => {
+        if (!cancelled) setProviders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [actor?.kind]);
 
   function applySettlementFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -280,7 +309,9 @@ export function AdminPayoutOperations() {
 
   return (
     <section className="mb-6">
-      {canViewSettlements ? <PayoutOverviewPanel /> : null}
+      {canViewSettlements ? (
+        <PayoutOverviewPanel providerNameForCode={providerLabelForCode} />
+      ) : null}
 
       <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl border border-border bg-white p-1">
@@ -472,6 +503,8 @@ export function AdminPayoutOperations() {
               ) : visibleItems.length ? (
                 visibleItems.map((item) => {
                   const queueItem = isReconciliationItem(item) ? item : null;
+                  const failureDescription = payoutFailureDescription(item);
+                  const npciCode = payoutFailureNpciCode(item);
                   return (
                     <tr key={item.id} className="border-t border-border">
                       <td className="p-3 font-bold" title={item.merchantRefId}>
@@ -480,7 +513,7 @@ export function AdminPayoutOperations() {
                       <td className="p-3 text-xs" title={item.identityId}>
                         {shortReference(item.identityId)}
                       </td>
-                      <td className="p-3">{item.providerCode}</td>
+                      <td className="p-3">{providerLabel(item)}</td>
                       <td className="p-3">
                         <span className="font-bold">{item.paymentMode}</span>
                         <span className="mt-0.5 block text-[10px] text-muted-foreground">
@@ -497,6 +530,16 @@ export function AdminPayoutOperations() {
                         >
                           {item.status.replaceAll("_", " ")}
                         </span>
+                        {failureDescription ? (
+                          <span className="mt-2 block max-w-64 text-xs font-semibold text-red-700">
+                            {failureDescription}
+                          </span>
+                        ) : null}
+                        {npciCode ? (
+                          <span className="mt-1 block text-[10px] font-bold text-red-600">
+                            NPCI code: {npciCode}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="p-3">
                         <span
@@ -587,7 +630,13 @@ export function AdminPayoutOperations() {
         </div>
       </AdminPanel>
 
-      {detail ? <PayoutDetailDialog detail={detail} onClose={() => setDetail(null)} /> : null}
+      {detail ? (
+        <PayoutDetailDialog
+          detail={detail}
+          providerLabel={providerLabel(detail)}
+          onClose={() => setDetail(null)}
+        />
+      ) : null}
 
       {resolveTarget ? (
         <div className="fixed inset-0 z-[130] grid place-items-center bg-secondary/65 p-4 backdrop-blur-sm">
@@ -762,7 +811,11 @@ const overviewRanges: Array<{ value: Exclude<AdminPayoutOverviewRange, "CUSTOM">
     { value: "LAST_24_HOURS", label: "24 hours" },
   ];
 
-function PayoutOverviewPanel() {
+function PayoutOverviewPanel({
+  providerNameForCode,
+}: {
+  providerNameForCode: (providerCode: string) => string;
+}) {
   const [overview, setOverview] = useState<AdminPayoutOverview | null>(null);
   const [draft, setDraft] = useState<AdminPayoutOverviewFilters>({ range: "LAST_24_HOURS" });
   const [applied, setApplied] = useState<AdminPayoutOverviewFilters>({
@@ -980,7 +1033,10 @@ function PayoutOverviewPanel() {
           <div className="mt-5 grid gap-4 xl:grid-cols-3">
             <OverviewBreakdown
               title="Providers"
-              items={overview.providers.map((item) => ({ ...item, label: item.providerCode }))}
+              items={overview.providers.map((item) => ({
+                ...item,
+                label: providerNameForCode(item.providerCode),
+              }))}
             />
             <OverviewBreakdown
               title="Payment modes"
@@ -1042,18 +1098,22 @@ function OverviewBreakdown({
 
 function PayoutDetailDialog({
   detail,
+  providerLabel,
   onClose,
 }: {
   detail: AdminPayoutSettlement;
+  providerLabel: string;
   onClose: () => void;
 }) {
+  const failureDescription = payoutFailureDescription(detail);
+  const npciCode = payoutFailureNpciCode(detail);
   const fields = [
     ["Identity ID", detail.identityId],
     ["Settlement UUID", detail.id],
     ["Merchant reference", detail.merchantRefId],
     ["Status", detail.status.replaceAll("_", " ")],
     ["Wallet state", detail.walletState.replaceAll("_", " ")],
-    ["Provider", detail.providerCode],
+    ["Provider", providerLabel],
     ["Provider reference", detail.providerReference || "—"],
     ["RRN", detail.rrn || "—"],
     ["Payment mode", detail.paymentMode],
@@ -1096,10 +1156,11 @@ function PayoutDetailDialog({
             </div>
           ))}
         </div>
-        {detail.failure ? (
+        {failureDescription ? (
           <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-            <p className="font-black">Failure {detail.failure.code || ""}</p>
-            <p className="mt-1">{detail.failure.message || "No provider failure message."}</p>
+            <p className="font-black">Failure reason</p>
+            <p className="mt-1">{failureDescription}</p>
+            {npciCode ? <p className="mt-1 text-xs font-bold">NPCI code: {npciCode}</p> : null}
           </div>
         ) : null}
       </div>

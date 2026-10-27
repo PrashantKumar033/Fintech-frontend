@@ -16,11 +16,19 @@ import { getSession } from "@/lib/auth-api";
 import {
   payoutApi,
   payoutMessage,
+  type PayoutProvider,
   type PayoutReceipt,
   type PayoutSettlement,
   type PayoutSettlementDetail,
   type PayoutSettlementStatus,
 } from "@/lib/payout-api";
+import {
+  PAYOUT_TOTAL_DEBIT_LABEL,
+  payoutFailureDescription,
+  payoutFailureNpciCode,
+  payoutProviderPublicCode,
+  payoutProviderPublicName,
+} from "@/lib/payout-ui";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 
 const money = new Intl.NumberFormat("en-IN", {
@@ -68,6 +76,8 @@ function escapeHtml(value: unknown) {
 
 function payoutReceiptDocument(receipt: PayoutReceipt, autoPrint: boolean) {
   const receiptMoney = (value: string) => money.format(Number(value));
+  const failureDescription = payoutFailureDescription(receipt);
+  const npciCode = payoutFailureNpciCode(receipt);
   const rows: Array<[string, string | null]> = [
     ["Payment mode", receipt.paymentMode],
     ["Source wallet", receipt.sourceWallet],
@@ -94,6 +104,11 @@ function payoutReceiptDocument(receipt: PayoutReceipt, autoPrint: boolean) {
     )
     .join("");
   const successful = receipt.status === "SUCCESS";
+  const failureSection = failureDescription
+    ? `<section class="failure"><strong>${escapeHtml(failureDescription)}</strong>${
+        npciCode ? `<span>NPCI code: ${escapeHtml(npciCode)}</span>` : ""
+      }</section>`
+    : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -113,6 +128,9 @@ function payoutReceiptDocument(receipt: PayoutReceipt, autoPrint: boolean) {
       .amount-label { color: #607a76; font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
       .amount { margin: 5px 0 8px; color: #043f39; font-size: 31px; font-weight: 800; }
       .status { display: inline-block; padding: 5px 12px; border-radius: 20px; background: ${successful ? "#e2f8ed" : "#fff4dc"}; color: ${successful ? "#087443" : "#8a5300"}; font-size: 10px; font-weight: 800; letter-spacing: .6px; }
+      .failure { margin: 16px 0 0; padding: 13px 15px; border: 1px solid #fecaca; border-radius: 10px; background: #fef2f2; color: #991b1b; }
+      .failure strong, .failure span { display: block; }
+      .failure span { margin-top: 4px; font-size: 11px; }
       .charges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 18px 0; border-bottom: 1px dashed #9dbdb7; }
       .charge { padding: 12px; border-radius: 10px; background: #f1f8f6; text-align: center; }
       .charge span { display: block; color: #607a76; font-size: 9px; font-weight: 700; text-transform: uppercase; }
@@ -143,11 +161,12 @@ function payoutReceiptDocument(receipt: PayoutReceipt, autoPrint: boolean) {
         <div class="amount">${escapeHtml(receiptMoney(receipt.transactionAmount))}</div>
         <div class="status">${escapeHtml(receipt.status.replaceAll("_", " "))}</div>
       </section>
+      ${failureSection}
       <section class="charges">
         <div class="charge"><span>Platform charges (GST incl.)</span><strong>${escapeHtml(receiptMoney(receipt.platformCharges.amount))}</strong></div>
         <div class="charge"><span>Taxable charge</span><strong>${escapeHtml(receiptMoney(receipt.platformCharges.taxableAmount))}</strong></div>
         <div class="charge"><span>GST @ ${escapeHtml(receipt.platformCharges.gst.rate)}%</span><strong>${escapeHtml(receiptMoney(receipt.platformCharges.gst.amount))}</strong></div>
-        <div class="charge"><span>Total wallet debit</span><strong>${escapeHtml(receiptMoney(receipt.totalAmount))}</strong></div>
+        <div class="charge"><span>${escapeHtml(PAYOUT_TOTAL_DEBIT_LABEL)}</span><strong>${escapeHtml(receiptMoney(receipt.totalAmount))}</strong></div>
       </section>
       <section class="details">${detailRows}</section>
       <footer class="footer">
@@ -192,6 +211,7 @@ export function PayoutHistoryPanel() {
     "RETAILER",
   ]);
   const [items, setItems] = useState<PayoutSettlement[]>([]);
+  const [providers, setProviders] = useState<PayoutProvider[]>([]);
   const [status, setStatus] = useState<PayoutSettlementStatus | "">("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -203,6 +223,13 @@ export function PayoutHistoryPanel() {
   const [detail, setDetail] = useState<PayoutSettlementDetail | null>(null);
   const [receipt, setReceipt] = useState<PayoutReceipt | null>(null);
   const [error, setError] = useState("");
+  const providerLabel = (item: PayoutSettlement) =>
+    payoutProviderPublicName(
+      providers.find((provider) => payoutProviderPublicCode(provider) === item.providerCode) ??
+        item,
+    );
+  const detailFailureDescription = detail ? payoutFailureDescription(detail) : null;
+  const detailNpciCode = detail ? payoutFailureNpciCode(detail) : null;
 
   const load = useCallback(async () => {
     if (!accessToken || !allowed) {
@@ -229,6 +256,22 @@ export function PayoutHistoryPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!accessToken || !allowed) return;
+    payoutApi
+      .providers(accessToken)
+      .then((availableProviders) => {
+        if (!cancelled) setProviders(availableProviders);
+      })
+      .catch(() => {
+        if (!cancelled) setProviders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, allowed]);
 
   async function openDetail(id: string) {
     if (!accessToken || !allowed) return;
@@ -355,77 +398,93 @@ export function PayoutHistoryPanel() {
                   </td>
                 </tr>
               ) : items.length ? (
-                items.map((item) => (
-                  <tr key={item.id} className="border-t border-border align-middle">
-                    <td className="p-3 font-bold text-secondary" title={item.merchantRefId}>
-                      {shortReference(item.merchantRefId)}
-                    </td>
-                    <td className="p-3 font-mono text-xs">{item.providerReference || "—"}</td>
-                    <td className="p-3">{item.providerCode}</td>
-                    <td className="p-3">
-                      {item.bankAccount?.last4 ? `•••• ${item.bankAccount.last4}` : "—"}
-                    </td>
-                    <td className="p-3">
-                      <span className="font-bold">{item.paymentMode}</span>
-                      <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                        {item.sourceWallet} wallet
-                      </span>
-                    </td>
-                    <td className="p-3 font-bold">{money.format(Number(item.amount))}</td>
-                    <td className="p-3 font-bold">{money.format(Number(item.totalWalletDebit))}</td>
-                    <td className="p-3">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-black ${statusClass(item.status)}`}
-                      >
-                        {item.status.replaceAll("_", " ")}
-                      </span>
-                    </td>
-                    <td className="p-3 text-xs">{formatTime(item.createdAt)}</td>
-                    <td className="p-3">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void openReceipt(item.id)}
-                          disabled={receiptLoadingId === item.id}
-                          className="grid h-9 w-9 place-items-center rounded-xl border border-border text-secondary disabled:opacity-50"
-                          aria-label={`View ${item.merchantRefId} receipt`}
-                          title="View receipt"
+                items.map((item) => {
+                  const failureDescription = payoutFailureDescription(item);
+                  const npciCode = payoutFailureNpciCode(item);
+                  return (
+                    <tr key={item.id} className="border-t border-border align-middle">
+                      <td className="p-3 font-bold text-secondary" title={item.merchantRefId}>
+                        {shortReference(item.merchantRefId)}
+                      </td>
+                      <td className="p-3 font-mono text-xs">{item.providerReference || "—"}</td>
+                      <td className="p-3">{providerLabel(item)}</td>
+                      <td className="p-3">
+                        {item.bankAccount?.last4 ? `•••• ${item.bankAccount.last4}` : "—"}
+                      </td>
+                      <td className="p-3">
+                        <span className="font-bold">{item.paymentMode}</span>
+                        <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                          {item.sourceWallet} wallet
+                        </span>
+                      </td>
+                      <td className="p-3 font-bold">{money.format(Number(item.amount))}</td>
+                      <td className="p-3 font-bold">
+                        {money.format(Number(item.totalWalletDebit))}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-black ${statusClass(item.status)}`}
                         >
-                          {receiptLoadingId === item.id ? (
-                            <LoaderCircle className="animate-spin" size={15} />
-                          ) : (
-                            <ReceiptText size={16} />
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void refreshStatus(item)}
-                          disabled={refreshingReference === item.merchantRefId}
-                          className="grid h-9 w-9 place-items-center rounded-xl border border-border text-secondary disabled:opacity-50"
-                          aria-label={`Refresh ${item.merchantRefId} status`}
-                          title="Refresh status"
-                        >
-                          <RefreshCw
-                            className={
-                              refreshingReference === item.merchantRefId ? "animate-spin" : ""
-                            }
-                            size={15}
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void openDetail(item.id)}
-                          disabled={detailLoading}
-                          className="grid h-9 w-9 place-items-center rounded-xl border border-border text-secondary disabled:opacity-50"
-                          aria-label={`View ${item.merchantRefId}`}
-                          title="View details"
-                        >
-                          <Eye size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {item.status.replaceAll("_", " ")}
+                        </span>
+                        {failureDescription ? (
+                          <span className="mt-2 block max-w-64 text-xs font-semibold text-red-700">
+                            {failureDescription}
+                          </span>
+                        ) : null}
+                        {npciCode ? (
+                          <span className="mt-1 block text-[10px] font-bold text-red-600">
+                            NPCI code: {npciCode}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="p-3 text-xs">{formatTime(item.createdAt)}</td>
+                      <td className="p-3">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void openReceipt(item.id)}
+                            disabled={receiptLoadingId === item.id}
+                            className="grid h-9 w-9 place-items-center rounded-xl border border-border text-secondary disabled:opacity-50"
+                            aria-label={`View ${item.merchantRefId} receipt`}
+                            title="View receipt"
+                          >
+                            {receiptLoadingId === item.id ? (
+                              <LoaderCircle className="animate-spin" size={15} />
+                            ) : (
+                              <ReceiptText size={16} />
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void refreshStatus(item)}
+                            disabled={refreshingReference === item.merchantRefId}
+                            className="grid h-9 w-9 place-items-center rounded-xl border border-border text-secondary disabled:opacity-50"
+                            aria-label={`Refresh ${item.merchantRefId} status`}
+                            title="Refresh status"
+                          >
+                            <RefreshCw
+                              className={
+                                refreshingReference === item.merchantRefId ? "animate-spin" : ""
+                              }
+                              size={15}
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void openDetail(item.id)}
+                            disabled={detailLoading}
+                            className="grid h-9 w-9 place-items-center rounded-xl border border-border text-secondary disabled:opacity-50"
+                            aria-label={`View ${item.merchantRefId}`}
+                            title="View details"
+                          >
+                            <Eye size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan={10} className="p-12 text-center text-muted-foreground">
@@ -489,7 +548,7 @@ export function PayoutHistoryPanel() {
               {[
                 ["Status", detail.status.replaceAll("_", " ")],
                 ["Wallet state", detail.walletState.replaceAll("_", " ")],
-                ["Provider", detail.providerCode],
+                ["Provider", providerLabel(detail)],
                 ["Provider reference", detail.providerReference || "—"],
                 ["RRN", detail.rrn || "—"],
                 ["Payment mode", detail.paymentMode],
@@ -514,10 +573,13 @@ export function PayoutHistoryPanel() {
               ))}
             </div>
 
-            {detail.failure ? (
+            {detailFailureDescription ? (
               <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                <p className="font-black">Failure {detail.failure.code || ""}</p>
-                <p className="mt-1">{detail.failure.message || "No provider failure message."}</p>
+                <p className="font-black">Failure reason</p>
+                <p className="mt-1">{detailFailureDescription}</p>
+                {detailNpciCode ? (
+                  <p className="mt-1 text-xs font-bold">NPCI code: {detailNpciCode}</p>
+                ) : null}
               </div>
             ) : null}
 
@@ -572,6 +634,9 @@ function PayoutReceiptDialog({
   onClose: () => void;
   onError: (message: string) => void;
 }) {
+  const failureDescription = payoutFailureDescription(receipt);
+  const npciCode = payoutFailureNpciCode(receipt);
+
   return (
     <div className="fixed inset-0 z-[140] grid place-items-center bg-secondary/65 p-4 backdrop-blur-sm">
       <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
@@ -634,6 +699,12 @@ function PayoutReceiptDialog({
             >
               {receipt.status.replaceAll("_", " ")}
             </span>
+            {failureDescription ? (
+              <div className="mx-auto mt-4 max-w-xl rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                <p className="font-bold">{failureDescription}</p>
+                {npciCode ? <p className="mt-1 text-xs">NPCI code: {npciCode}</p> : null}
+              </div>
+            ) : null}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
@@ -649,7 +720,7 @@ function PayoutReceiptDialog({
                 `GST @ ${receipt.platformCharges.gst.rate}%`,
                 money.format(Number(receipt.platformCharges.gst.amount)),
               ],
-              ["Total wallet debit", money.format(Number(receipt.totalAmount))],
+              [PAYOUT_TOTAL_DEBIT_LABEL, money.format(Number(receipt.totalAmount))],
             ].map(([label, value]) => (
               <div key={label} className="rounded-xl bg-muted p-3 text-center">
                 <p className="text-[10px] font-black uppercase text-muted-foreground">{label}</p>

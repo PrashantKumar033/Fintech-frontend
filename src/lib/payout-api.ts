@@ -2,8 +2,10 @@ import { ApiError, authenticatedRequest } from "@/lib/auth-api";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 
 export type PayoutProvider = {
-  providerCode: string;
-  providerName: string;
+  publicCode?: string | null;
+  publicName?: string | null;
+  providerCode?: string | null;
+  providerName?: string | null;
   status: "AVAILABLE";
 };
 
@@ -31,12 +33,27 @@ export type PayoutWalletState =
   | "RELEASED"
   | "UNKNOWN";
 
-export type PayoutSettlement = {
+export type PayoutFailure = {
+  code: string | null;
+  message: string | null;
+};
+
+export type PayoutStatusFields = {
+  status: PayoutSettlementStatus;
+  providerStatusCode?: string | null;
+  npciCode?: string | null;
+  npciMessage?: string | null;
+  statusDescription?: string | null;
+  failure?: PayoutFailure | null;
+};
+
+export type PayoutSettlement = PayoutStatusFields & {
   id: string;
   merchantRefId: string;
   providerReference?: string | null;
   providerCode: string;
-  status: PayoutSettlementStatus;
+  publicName?: string | null;
+  providerName?: string | null;
   walletState: PayoutWalletState;
   amount: string;
   surcharge: {
@@ -58,10 +75,6 @@ export type PayoutSettlement = {
 export type PayoutSettlementDetail = PayoutSettlement & {
   providerReference: string | null;
   rrn: string | null;
-  failure: {
-    code: string | null;
-    message: string | null;
-  } | null;
   timeline: {
     queuedAt: string | null;
     callbackReceivedAt: string | null;
@@ -85,11 +98,10 @@ export type PayoutHistoryQuery = {
   status?: PayoutSettlementStatus | "";
 };
 
-export type PayoutReceipt = {
+export type PayoutReceipt = PayoutStatusFields & {
   receiptType: "PAYOUT";
   receiptNumber: string;
   transactionId: string;
-  status: PayoutSettlementStatus;
   currency: "INR";
   paymentMode: PayoutPaymentMode;
   sourceWallet: PayoutSourceWallet;
