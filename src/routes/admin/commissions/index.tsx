@@ -1,5 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -41,6 +49,7 @@ import {
   type CommissionServiceCatalog,
   type CreateCommissionDistributionInput,
   type CreateCommissionRuleInput,
+  type ProviderRegistryEntry,
   type UpdateCommissionDistributionInput,
   type UpdateCommissionRuleInput,
 } from "@/lib/admin-api";
@@ -48,9 +57,13 @@ import {
   catalogItemForService,
   catalogServiceLabel,
   numericDraftValue,
+  providerAfterServiceChange,
+  providerRegistryForService,
   ruleTdsRate,
+  ruleProviderOptions,
   shouldShowRuleDistributions,
   shouldShowRuleTds,
+  type RuleProviderRegistry,
 } from "@/lib/commission-rule-ui";
 
 export const Route = createFileRoute("/admin/commissions/")({
@@ -178,6 +191,21 @@ function draftFromRule(rule: CommissionRule): RuleDraft {
       rule.maxAmount === null || rule.maxAmount === undefined ? "" : String(rule.maxAmount),
     priority: String(rule.priority ?? 0),
     isActive: Boolean(rule.isActive),
+  };
+}
+
+function draftFromCatalog(catalog: CommissionServiceCatalog[]): RuleDraft {
+  const service = catalog[0];
+  if (!service) return { ...emptyRuleDraft };
+  return {
+    ...emptyRuleDraft,
+    serviceType: service.serviceType,
+    rulePurpose: service.defaultRulePurpose,
+    commissionType: service.supportedValueTypes[0] || emptyRuleDraft.commissionType,
+    tdsRate:
+      service.defaultRulePurpose === "SURCHARGE" || !service.supportsTds
+        ? "0"
+        : emptyRuleDraft.tdsRate,
   };
 }
 
@@ -312,6 +340,17 @@ function Commissions() {
         : "DISTRIBUTIONS";
   const [rules, setRules] = useState<CommissionRule[]>([]);
   const [serviceCatalog, setServiceCatalog] = useState<CommissionServiceCatalog[]>([]);
+  const [providersByRegistry, setProvidersByRegistry] = useState<
+    Partial<Record<RuleProviderRegistry, ProviderRegistryEntry[]>>
+  >({});
+  const providerCacheRef = useRef<Partial<Record<RuleProviderRegistry, ProviderRegistryEntry[]>>>(
+    {},
+  );
+  const providerRequestsRef = useRef<
+    Partial<Record<RuleProviderRegistry, Promise<ProviderRegistryEntry[]>>>
+  >({});
+  const [providerLoading, setProviderLoading] = useState<RuleProviderRegistry | null>(null);
+  const [providerError, setProviderError] = useState("");
   const [distributions, setDistributions] = useState<CommissionDistribution[]>([]);
   const [rulesLoading, setRulesLoading] = useState(canManage);
   const [catalogLoading, setCatalogLoading] = useState(canManage);
@@ -444,6 +483,50 @@ function Commissions() {
     ? catalogItemForService(serviceCatalog, selectedRule.serviceType)
     : undefined;
   const showDraftTds = shouldShowRuleTds(selectedDraftCatalog, ruleDraft.rulePurpose);
+  const selectedProviderRegistry = providerRegistryForService(ruleDraft.serviceType);
+  const selectedProviders = selectedProviderRegistry
+    ? providersByRegistry[selectedProviderRegistry] || []
+    : [];
+  const providerOptions = ruleProviderOptions(selectedProviders, ruleDraft.operator);
+
+  const loadProviderRegistry = useCallback(async (registry: RuleProviderRegistry) => {
+    setProviderError("");
+    const cached = providerCacheRef.current[registry];
+    if (cached) return cached;
+    const pending = providerRequestsRef.current[registry];
+    if (pending) return pending;
+
+    setProviderLoading(registry);
+    const request = (
+      registry === "AEPS"
+        ? adminApi.superAdminAeps.providers.list()
+        : adminApi.superAdminPayout.providers.list()
+    )
+      .then((providers) => {
+        providerCacheRef.current[registry] = providers;
+        setProvidersByRegistry((current) => ({ ...current, [registry]: providers }));
+        return providers;
+      })
+      .catch((caught) => {
+        setProviderError(
+          caught instanceof AdminApiError
+            ? caught.message
+            : `Unable to load ${registry === "AEPS" ? "AEPS" : "payout"} providers.`,
+        );
+        throw caught;
+      })
+      .finally(() => {
+        delete providerRequestsRef.current[registry];
+        setProviderLoading((current) => (current === registry ? null : current));
+      });
+    providerRequestsRef.current[registry] = request;
+    return request;
+  }, []);
+
+  useEffect(() => {
+    if (!ruleEditorOpen || !selectedProviderRegistry) return;
+    void loadProviderRegistry(selectedProviderRegistry).catch(() => undefined);
+  }, [loadProviderRegistry, ruleEditorOpen, selectedProviderRegistry]);
 
   const selectedRuleDistributions = useMemo(
     () => distributions.filter((item) => item.commissionRuleId === selectedRuleId),
@@ -488,19 +571,58 @@ function Commissions() {
   function startCreateRule() {
     if (!canCreateRule)
       return setError(`Permission ${UI_PERMISSION.COMMISSION_RULE_CREATE} is required.`);
-    const firstService = serviceCatalog[0];
     setEditingRuleId(null);
-    setRuleDraft({
-      ...emptyRuleDraft,
-      serviceType: firstService?.serviceType || "",
-      rulePurpose: firstService?.defaultRulePurpose || "COMMISSION",
-      commissionType: firstService?.supportedValueTypes[0] || "FIXED",
-      tdsRate:
-        firstService?.defaultRulePurpose === "SURCHARGE" || !firstService?.supportsTds ? "0" : "2",
-    });
+    setRuleDraft(draftFromCatalog(serviceCatalog));
+    setProviderError("");
     setError("");
     setNotice("");
     setRuleEditorOpen(true);
+  }
+
+  async function changeRuleService(serviceType: string) {
+    const item = catalogItemForService(serviceCatalog, serviceType);
+    if (!item) return;
+    setProviderError("");
+    const previousRegistry = providerRegistryForService(ruleDraft.serviceType);
+    const nextRegistry = providerRegistryForService(serviceType);
+    const cachedProviders = nextRegistry ? providerCacheRef.current[nextRegistry] : undefined;
+
+    setRuleDraft((current) => {
+      const rulePurpose = item.supportedRulePurposes.includes(current.rulePurpose)
+        ? current.rulePurpose
+        : item.defaultRulePurpose;
+      const operator =
+        previousRegistry !== nextRegistry
+          ? ""
+          : cachedProviders
+            ? providerAfterServiceChange(current.operator, cachedProviders)
+            : current.operator;
+      return {
+        ...current,
+        serviceType,
+        operator,
+        rulePurpose,
+        commissionType: item.supportedValueTypes.includes(current.commissionType)
+          ? current.commissionType
+          : item.supportedValueTypes[0] || current.commissionType,
+        tdsRate: rulePurpose === "SURCHARGE" || !item.supportsTds ? "0" : current.tdsRate,
+      };
+    });
+
+    if (!nextRegistry || cachedProviders) return;
+    try {
+      const providers = await loadProviderRegistry(nextRegistry);
+      setRuleDraft((current) =>
+        current.serviceType === serviceType
+          ? {
+              ...current,
+              operator: providerAfterServiceChange(current.operator, providers),
+            }
+          : current,
+      );
+    } catch {
+      // The inline registry error keeps the current selection recoverable.
+    }
   }
 
   async function startEditRule(rule: CommissionRule) {
@@ -509,6 +631,7 @@ function Commissions() {
     setRuleEditorOpen(true);
     setEditingRuleId(rule.id);
     setRuleDraft(draftFromRule(rule));
+    setProviderError("");
     setLoadingRule(true);
     setError("");
     setNotice("");
@@ -528,7 +651,7 @@ function Commissions() {
   }
 
   function validateRuleDraft() {
-    const serviceType = normalizeCode(ruleDraft.serviceType);
+    const serviceType = ruleDraft.serviceType.trim();
     if (!serviceType) return "Service type is required.";
     const catalogItem = catalogItemForService(serviceCatalog, serviceType);
     if (!catalogItem) return "Select a service from the configured service catalog.";
@@ -540,12 +663,12 @@ function Commissions() {
     }
     if (!ruleDraft.role.trim()) return "Role is required.";
 
-    if (!ruleDraft.commissionValue.trim()) return "Commission value is required.";
+    if (!ruleDraft.commissionValue.trim()) return "Rule value is required.";
     const commissionValue = Number(ruleDraft.commissionValue);
     if (!Number.isFinite(commissionValue) || commissionValue < 0)
-      return "Commission value must be 0 or more.";
+      return "Rule value must be 0 or more.";
     if (ruleDraft.commissionType === "PERCENTAGE" && commissionValue > 100) {
-      return "Percentage commission cannot be more than 100%.";
+      return "Percentage value cannot be more than 100%.";
     }
 
     if (shouldShowRuleTds(catalogItem, ruleDraft.rulePurpose)) {
@@ -590,10 +713,11 @@ function Commissions() {
 
     const minAmount = numberOrUndefined(ruleDraft.minAmount);
     const maxAmount = numberOrUndefined(ruleDraft.maxAmount);
-    const operator = normalizeCode(ruleDraft.operator);
-    const catalogItem = catalogItemForService(serviceCatalog, normalizeCode(ruleDraft.serviceType));
+    const operator = ruleDraft.operator.trim();
+    const serviceType = ruleDraft.serviceType.trim();
+    const catalogItem = catalogItemForService(serviceCatalog, serviceType);
     const common = {
-      serviceType: normalizeCode(ruleDraft.serviceType),
+      serviceType,
       role: normalizeCode(ruleDraft.role),
       rulePurpose: ruleDraft.rulePurpose,
       commissionType: ruleDraft.commissionType,
@@ -626,7 +750,7 @@ function Commissions() {
       }
       setRuleEditorOpen(false);
       setEditingRuleId(null);
-      setRuleDraft(emptyRuleDraft);
+      setRuleDraft(draftFromCatalog(serviceCatalog));
       await loadRules();
     } catch (caught) {
       setError(
@@ -1104,7 +1228,7 @@ function Commissions() {
                 {editingRuleId ? "Update configured rule" : "Create configured rule"}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Service, operator and role codes are normalized to uppercase by the backend.
+                Service and provider values are submitted from their backend registries.
               </p>
             </div>
             <button
@@ -1112,7 +1236,7 @@ function Commissions() {
               onClick={() => {
                 setRuleEditorOpen(false);
                 setEditingRuleId(null);
-                setRuleDraft(emptyRuleDraft);
+                setRuleDraft(draftFromCatalog(serviceCatalog));
               }}
               aria-label="Close rule editor"
               className="grid h-9 w-9 place-items-center rounded-xl border border-border text-muted-foreground hover:bg-muted"
@@ -1132,29 +1256,7 @@ function Commissions() {
                   <select
                     value={ruleDraft.serviceType}
                     disabled={catalogLoading || !serviceCatalog.length}
-                    onChange={(event) => {
-                      const serviceType = event.target.value;
-                      const item = catalogItemForService(serviceCatalog, serviceType);
-                      setRuleDraft((current) => {
-                        const rulePurpose = item?.supportedRulePurposes.includes(
-                          current.rulePurpose,
-                        )
-                          ? current.rulePurpose
-                          : item?.defaultRulePurpose || "COMMISSION";
-                        return {
-                          ...current,
-                          serviceType,
-                          rulePurpose,
-                          commissionType: item?.supportedValueTypes.includes(current.commissionType)
-                            ? current.commissionType
-                            : item?.supportedValueTypes[0] || "FIXED",
-                          tdsRate:
-                            rulePurpose === "SURCHARGE" || !item?.supportsTds
-                              ? "0"
-                              : current.tdsRate,
-                        };
-                      });
-                    }}
+                    onChange={(event) => void changeRuleService(event.target.value)}
                     className={inputClass}
                   >
                     <option value="">Select service</option>
@@ -1179,22 +1281,40 @@ function Commissions() {
                     options={selectedDraftCatalog?.supportedRulePurposes || []}
                   />
                 </Field>
-                <Field label="Operator / provider" hint="Optional. Leave blank for any operator.">
-                  <input
+                <Field label="Provider" hint="Optional. Select Any provider for a general rule.">
+                  <select
                     value={ruleDraft.operator}
+                    disabled={
+                      !selectedProviderRegistry ||
+                      (providerLoading === selectedProviderRegistry && !selectedProviders.length)
+                    }
                     onChange={(event) =>
                       setRuleDraft((current) => ({ ...current, operator: event.target.value }))
                     }
-                    placeholder="PROVIDER_1"
                     className={inputClass}
-                  />
-                  <SuggestionChips
-                    value={ruleDraft.operator}
-                    onChange={(value) =>
-                      setRuleDraft((current) => ({ ...current, operator: value }))
-                    }
-                    options={["PROVIDER_1"]}
-                  />
+                  >
+                    <option value="">Any provider</option>
+                    {providerOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedProviderRegistry && providerLoading === selectedProviderRegistry ? (
+                    <p className="mt-2 text-[10px] font-semibold text-muted-foreground">
+                      Loading providers…
+                    </p>
+                  ) : providerError ? (
+                    <p className="mt-2 text-[10px] font-semibold text-red-600">{providerError}</p>
+                  ) : selectedProviderRegistry && !selectedProviders.length ? (
+                    <p className="mt-2 text-[10px] font-semibold text-muted-foreground">
+                      No providers are currently available in this registry.
+                    </p>
+                  ) : !selectedProviderRegistry ? (
+                    <p className="mt-2 text-[10px] font-semibold text-muted-foreground">
+                      This service does not use an AEPS or payout provider registry.
+                    </p>
+                  ) : null}
                 </Field>
                 <Field label="Source role *" hint="Role whose transaction matches this rule.">
                   <Select
@@ -1346,7 +1466,7 @@ function Commissions() {
                   onClick={() => {
                     setRuleEditorOpen(false);
                     setEditingRuleId(null);
-                    setRuleDraft(emptyRuleDraft);
+                    setRuleDraft(draftFromCatalog(serviceCatalog));
                   }}
                   className="rounded-xl border border-border px-5 py-3 text-xs font-extrabold text-secondary hover:bg-muted"
                 >
