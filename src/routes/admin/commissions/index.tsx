@@ -36,12 +36,22 @@ import {
   type CommissionDistribution,
   type CommissionDistributionType,
   type CommissionRule,
+  type CommissionRulePurpose,
   type CommissionRuleType,
+  type CommissionServiceCatalog,
   type CreateCommissionDistributionInput,
   type CreateCommissionRuleInput,
   type UpdateCommissionDistributionInput,
   type UpdateCommissionRuleInput,
 } from "@/lib/admin-api";
+import {
+  catalogItemForService,
+  catalogServiceLabel,
+  numericDraftValue,
+  ruleTdsRate,
+  shouldShowRuleDistributions,
+  shouldShowRuleTds,
+} from "@/lib/commission-rule-ui";
 
 export const Route = createFileRoute("/admin/commissions/")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -59,6 +69,7 @@ type RuleDraft = {
   serviceType: string;
   operator: string;
   role: string;
+  rulePurpose: CommissionRulePurpose;
   commissionType: CommissionRuleType;
   commissionValue: string;
   tdsRate: string;
@@ -87,6 +98,7 @@ const emptyRuleDraft: RuleDraft = {
   serviceType: "",
   operator: "",
   role: "RETAILER",
+  rulePurpose: "COMMISSION",
   commissionType: "FIXED",
   commissionValue: "",
   tdsRate: "2",
@@ -156,9 +168,10 @@ function draftFromRule(rule: CommissionRule): RuleDraft {
     serviceType: rule.serviceType || "",
     operator: rule.operator || "",
     role: rule.role || "RETAILER",
+    rulePurpose: rule.rulePurpose,
     commissionType: rule.commissionType,
     commissionValue: String(rule.commissionValue ?? ""),
-    tdsRate: rule.tdsRate === null || rule.tdsRate === undefined ? "0" : String(rule.tdsRate),
+    tdsRate: numericDraftValue(rule.tdsRate, "0"),
     minAmount:
       rule.minAmount === null || rule.minAmount === undefined ? "" : String(rule.minAmount),
     maxAmount:
@@ -200,7 +213,7 @@ function distributionHealth(
   if (!rule) {
     return {
       tone: "warn",
-      title: "Select a commission rule",
+      title: "Select a configured rule",
       detail: "Choose a rule to review its active distribution setup.",
     };
   }
@@ -298,8 +311,10 @@ function Commissions() {
         ? "RULES"
         : "DISTRIBUTIONS";
   const [rules, setRules] = useState<CommissionRule[]>([]);
+  const [serviceCatalog, setServiceCatalog] = useState<CommissionServiceCatalog[]>([]);
   const [distributions, setDistributions] = useState<CommissionDistribution[]>([]);
   const [rulesLoading, setRulesLoading] = useState(canManage);
+  const [catalogLoading, setCatalogLoading] = useState(canManage);
   const [distributionsLoading, setDistributionsLoading] = useState(canManage);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -339,10 +354,24 @@ function Commissions() {
       setRules(await adminApi.commissionRules.list());
     } catch (caught) {
       setError(
-        caught instanceof AdminApiError ? caught.message : "Unable to load commission rules.",
+        caught instanceof AdminApiError ? caught.message : "Unable to load configured rules.",
       );
     } finally {
       setRulesLoading(false);
+    }
+  }, [canListRules]);
+
+  const loadServiceCatalog = useCallback(async () => {
+    if (!canListRules) return;
+    setCatalogLoading(true);
+    try {
+      setServiceCatalog(await adminApi.commissionRules.serviceCatalog());
+    } catch (caught) {
+      setError(
+        caught instanceof AdminApiError ? caught.message : "Unable to load the service catalog.",
+      );
+    } finally {
+      setCatalogLoading(false);
     }
   }, [canListRules]);
 
@@ -364,22 +393,34 @@ function Commissions() {
 
   async function refreshAll() {
     setError("");
-    await Promise.all([loadRules(), loadDistributions()]);
+    await Promise.all([loadServiceCatalog(), loadRules(), loadDistributions()]);
   }
 
   useEffect(() => {
     if (!canManage) return;
-    void Promise.all([loadRules(), loadDistributions()]);
-  }, [canManage, loadDistributions, loadRules]);
+    void Promise.all([loadServiceCatalog(), loadRules(), loadDistributions()]);
+  }, [canManage, loadDistributions, loadRules, loadServiceCatalog]);
+
+  const distributionRules = useMemo(
+    () =>
+      rules.filter((rule) =>
+        shouldShowRuleDistributions(
+          catalogItemForService(serviceCatalog, rule.serviceType),
+          rule.rulePurpose,
+        ),
+      ),
+    [rules, serviceCatalog],
+  );
 
   useEffect(() => {
-    if (!rules.length) {
+    const selectableRules = view === "DISTRIBUTIONS" ? distributionRules : rules;
+    if (!selectableRules.length) {
       setSelectedRuleId("");
       return;
     }
-    if (selectedRuleId && rules.some((rule) => rule.id === selectedRuleId)) return;
-    setSelectedRuleId(rules.find((rule) => rule.isActive)?.id || rules[0].id);
-  }, [rules, selectedRuleId]);
+    if (selectedRuleId && selectableRules.some((rule) => rule.id === selectedRuleId)) return;
+    setSelectedRuleId(selectableRules.find((rule) => rule.isActive)?.id || selectableRules[0].id);
+  }, [distributionRules, rules, selectedRuleId, view]);
 
   const visibleRules = useMemo(() => {
     const search = ruleQuery.trim().toLowerCase();
@@ -388,16 +429,21 @@ function Commissions() {
       if (ruleStatus === "INACTIVE" && rule.isActive) return false;
       if (ruleRoleFilter !== "ALL" && rule.role !== ruleRoleFilter) return false;
       if (!search) return true;
-      return `${rule.serviceType} ${rule.operator || ""} ${rule.role} ${rule.commissionType} ${rule.id}`
+      return `${catalogServiceLabel(serviceCatalog, rule.serviceType)} ${rule.serviceType} ${rule.operator || ""} ${rule.role} ${rule.rulePurpose} ${rule.commissionType} ${rule.id}`
         .toLowerCase()
         .includes(search);
     });
-  }, [rules, ruleQuery, ruleStatus, ruleRoleFilter]);
+  }, [rules, ruleQuery, ruleStatus, ruleRoleFilter, serviceCatalog]);
 
   const selectedRule = useMemo(
     () => rules.find((rule) => rule.id === selectedRuleId),
     [rules, selectedRuleId],
   );
+  const selectedDraftCatalog = catalogItemForService(serviceCatalog, ruleDraft.serviceType);
+  const selectedRuleCatalog = selectedRule
+    ? catalogItemForService(serviceCatalog, selectedRule.serviceType)
+    : undefined;
+  const showDraftTds = shouldShowRuleTds(selectedDraftCatalog, ruleDraft.rulePurpose);
 
   const selectedRuleDistributions = useMemo(
     () => distributions.filter((item) => item.commissionRuleId === selectedRuleId),
@@ -442,8 +488,16 @@ function Commissions() {
   function startCreateRule() {
     if (!canCreateRule)
       return setError(`Permission ${UI_PERMISSION.COMMISSION_RULE_CREATE} is required.`);
+    const firstService = serviceCatalog[0];
     setEditingRuleId(null);
-    setRuleDraft(emptyRuleDraft);
+    setRuleDraft({
+      ...emptyRuleDraft,
+      serviceType: firstService?.serviceType || "",
+      rulePurpose: firstService?.defaultRulePurpose || "COMMISSION",
+      commissionType: firstService?.supportedValueTypes[0] || "FIXED",
+      tdsRate:
+        firstService?.defaultRulePurpose === "SURCHARGE" || !firstService?.supportsTds ? "0" : "2",
+    });
     setError("");
     setNotice("");
     setRuleEditorOpen(true);
@@ -476,6 +530,14 @@ function Commissions() {
   function validateRuleDraft() {
     const serviceType = normalizeCode(ruleDraft.serviceType);
     if (!serviceType) return "Service type is required.";
+    const catalogItem = catalogItemForService(serviceCatalog, serviceType);
+    if (!catalogItem) return "Select a service from the configured service catalog.";
+    if (!catalogItem.supportedRulePurposes.includes(ruleDraft.rulePurpose)) {
+      return `${catalogItem.label} does not support ${ruleDraft.rulePurpose.toLowerCase()} rules.`;
+    }
+    if (!catalogItem.supportedValueTypes.includes(ruleDraft.commissionType)) {
+      return `${catalogItem.label} does not support ${ruleDraft.commissionType.toLowerCase()} values.`;
+    }
     if (!ruleDraft.role.trim()) return "Role is required.";
 
     if (!ruleDraft.commissionValue.trim()) return "Commission value is required.";
@@ -486,13 +548,15 @@ function Commissions() {
       return "Percentage commission cannot be more than 100%.";
     }
 
-    if (!ruleDraft.tdsRate.trim()) return "TDS rate is required.";
-    const tdsRate = Number(ruleDraft.tdsRate);
-    if (!Number.isFinite(tdsRate) || tdsRate < 0 || tdsRate > 100) {
-      return "TDS rate must be between 0 and 100%.";
-    }
-    if (!/^(?:\d+|\d*\.\d{1,2})$/.test(ruleDraft.tdsRate.trim())) {
-      return "TDS rate can have at most 2 decimal places.";
+    if (shouldShowRuleTds(catalogItem, ruleDraft.rulePurpose)) {
+      if (!ruleDraft.tdsRate.trim()) return "TDS rate is required.";
+      const tdsRate = Number(ruleDraft.tdsRate);
+      if (!Number.isFinite(tdsRate) || tdsRate < 0 || tdsRate > 100) {
+        return "TDS rate must be between 0 and 100%.";
+      }
+      if (!/^(?:\d+|\d*\.\d{1,2})$/.test(ruleDraft.tdsRate.trim())) {
+        return "TDS rate can have at most 2 decimal places.";
+      }
     }
 
     const minAmount = numberOrUndefined(ruleDraft.minAmount);
@@ -527,12 +591,14 @@ function Commissions() {
     const minAmount = numberOrUndefined(ruleDraft.minAmount);
     const maxAmount = numberOrUndefined(ruleDraft.maxAmount);
     const operator = normalizeCode(ruleDraft.operator);
+    const catalogItem = catalogItemForService(serviceCatalog, normalizeCode(ruleDraft.serviceType));
     const common = {
       serviceType: normalizeCode(ruleDraft.serviceType),
       role: normalizeCode(ruleDraft.role),
+      rulePurpose: ruleDraft.rulePurpose,
       commissionType: ruleDraft.commissionType,
       commissionValue: Number(ruleDraft.commissionValue),
-      tdsRate: Number(ruleDraft.tdsRate),
+      tdsRate: ruleTdsRate(catalogItem, ruleDraft.rulePurpose, ruleDraft.tdsRate),
       priority: Number(ruleDraft.priority || 0),
       isActive: ruleDraft.isActive,
     };
@@ -564,7 +630,7 @@ function Commissions() {
       await loadRules();
     } catch (caught) {
       setError(
-        caught instanceof AdminApiError ? caught.message : "Unable to save the commission rule.",
+        caught instanceof AdminApiError ? caught.message : "Unable to save the configured rule.",
       );
     } finally {
       setSaving(false);
@@ -606,7 +672,14 @@ function Commissions() {
     if (!canCreateDistribution)
       return setError(`Permission ${UI_PERMISSION.COMMISSION_DISTRIBUTION_CREATE} is required.`);
     if (!selectedRuleId) {
-      setError("Create a commission rule first, then select it before adding a distribution.");
+      setError("Create a distribution-enabled configured rule first, then select it.");
+      return;
+    }
+    if (
+      !selectedRule ||
+      !shouldShowRuleDistributions(selectedRuleCatalog, selectedRule.rulePurpose)
+    ) {
+      setError("Distributions are not available for the selected configured rule.");
       return;
     }
     setEditingDistributionId(null);
@@ -619,6 +692,17 @@ function Commissions() {
   async function startEditDistribution(distribution: CommissionDistribution) {
     if (!canUpdateDistribution)
       return setError(`Permission ${UI_PERMISSION.COMMISSION_DISTRIBUTION_UPDATE} is required.`);
+    const rule = rules.find((item) => item.id === distribution.commissionRuleId);
+    if (
+      !rule ||
+      !shouldShowRuleDistributions(
+        catalogItemForService(serviceCatalog, rule.serviceType),
+        rule.rulePurpose,
+      )
+    ) {
+      setError("Distributions are not available for this configured rule.");
+      return;
+    }
     setDistributionEditorOpen(true);
     setEditingDistributionId(distribution.id);
     setDistributionDraft(draftFromDistribution(distribution));
@@ -708,6 +792,16 @@ function Commissions() {
       : UI_PERMISSION.COMMISSION_DISTRIBUTION_CREATE;
     if (editingDistributionId ? !canUpdateDistribution : !canCreateDistribution)
       return setError(`Permission ${required} is required.`);
+    const distributionRule = rules.find((rule) => rule.id === distributionDraft.commissionRuleId);
+    if (
+      !distributionRule ||
+      !shouldShowRuleDistributions(
+        catalogItemForService(serviceCatalog, distributionRule.serviceType),
+        distributionRule.rulePurpose,
+      )
+    ) {
+      return setError("Distribution APIs are not available for this configured rule.");
+    }
     setError("");
     setNotice("");
     const validationError = validateDistributionDraft();
@@ -754,6 +848,18 @@ function Commissions() {
   async function confirmDistributionStatusChange() {
     if (!pendingDistributionStatus) return;
     const { distribution, nextActive } = pendingDistributionStatus;
+    const rule = rules.find((item) => item.id === distribution.commissionRuleId);
+    if (
+      !rule ||
+      !shouldShowRuleDistributions(
+        catalogItemForService(serviceCatalog, rule.serviceType),
+        rule.rulePurpose,
+      )
+    ) {
+      setPendingDistributionStatus(null);
+      setError("Distribution APIs are not available for this configured rule.");
+      return;
+    }
     if (nextActive ? !canUpdateDistribution : !canDeactivateDistribution)
       return setError(
         `Permission ${nextActive ? UI_PERMISSION.COMMISSION_DISTRIBUTION_UPDATE : UI_PERMISSION.COMMISSION_DISTRIBUTION_DEACTIVATE} is required.`,
@@ -804,8 +910,8 @@ function Commissions() {
       <AdminLayout
         active="commissions"
         eyebrow="Pricing"
-        title="Commission setup"
-        description="Global commission rules and distributions are restricted to Admin and Super Admin accounts."
+        title="Configured Rules"
+        description="Global configured rules and distributions are restricted to Admin and Super Admin accounts."
       >
         <AdminPanel>
           <div className="flex gap-3 rounded-xl bg-amber-50 p-4 text-amber-900">
@@ -829,8 +935,8 @@ function Commissions() {
     <AdminLayout
       active="commissions"
       eyebrow="Pricing"
-      title="Commission setup"
-      description="Manage the commission pool rules and the hierarchy shares paid from each matched rule."
+      title="Configured Rules"
+      description="Manage catalog-driven commission and surcharge rules, slabs and eligible hierarchy distributions."
     >
       <div className="inline-flex rounded-xl border border-border bg-white p-1">
         {canListRules && (
@@ -841,7 +947,7 @@ function Commissions() {
               view === "RULES" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"
             }`}
           >
-            Commission Rules
+            Configured Rules
           </button>
         )}
         {canListDistributions && (
@@ -918,7 +1024,7 @@ function Commissions() {
       {view === "RULES" && pendingRuleStatus && (
         <AdminPanel className="mt-5 border-amber-200 bg-amber-50/60">
           <p className="text-sm font-black text-secondary">
-            {pendingRuleStatus.nextActive ? "Reactivate" : "Deactivate"} this commission rule?
+            {pendingRuleStatus.nextActive ? "Reactivate" : "Deactivate"} this configured rule?
           </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             {pendingRuleStatus.rule.serviceType} · {pendingRuleStatus.rule.role} ·{" "}
@@ -995,7 +1101,7 @@ function Commissions() {
                 {editingRuleId ? "Edit rule" : "New rule"}
               </p>
               <h2 className="mt-1 text-xl font-black">
-                {editingRuleId ? "Update commission rule" : "Create commission rule"}
+                {editingRuleId ? "Update configured rule" : "Create configured rule"}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Service, operator and role codes are normalized to uppercase by the backend.
@@ -1021,22 +1127,56 @@ function Commissions() {
             </div>
           ) : (
             <form onSubmit={submitRule} className="mt-6 space-y-5">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <Field label="Service type *" hint="Example: AEPS or ADD_MONEY">
-                  <input
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <Field label="Service *" hint="Options are loaded from the backend catalog.">
+                  <select
                     value={ruleDraft.serviceType}
-                    onChange={(event) =>
-                      setRuleDraft((current) => ({ ...current, serviceType: event.target.value }))
-                    }
-                    placeholder="AEPS"
+                    disabled={catalogLoading || !serviceCatalog.length}
+                    onChange={(event) => {
+                      const serviceType = event.target.value;
+                      const item = catalogItemForService(serviceCatalog, serviceType);
+                      setRuleDraft((current) => {
+                        const rulePurpose = item?.supportedRulePurposes.includes(
+                          current.rulePurpose,
+                        )
+                          ? current.rulePurpose
+                          : item?.defaultRulePurpose || "COMMISSION";
+                        return {
+                          ...current,
+                          serviceType,
+                          rulePurpose,
+                          commissionType: item?.supportedValueTypes.includes(current.commissionType)
+                            ? current.commissionType
+                            : item?.supportedValueTypes[0] || "FIXED",
+                          tdsRate:
+                            rulePurpose === "SURCHARGE" || !item?.supportsTds
+                              ? "0"
+                              : current.tdsRate,
+                        };
+                      });
+                    }}
                     className={inputClass}
-                  />
-                  <SuggestionChips
-                    value={ruleDraft.serviceType}
+                  >
+                    <option value="">Select service</option>
+                    {serviceCatalog.map((item) => (
+                      <option key={item.serviceType} value={item.serviceType}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Rule purpose *">
+                  <Select
+                    value={ruleDraft.rulePurpose}
                     onChange={(value) =>
-                      setRuleDraft((current) => ({ ...current, serviceType: value }))
+                      setRuleDraft((current) => ({
+                        ...current,
+                        rulePurpose: value as CommissionRulePurpose,
+                        tdsRate: value === "SURCHARGE" ? "0" : current.tdsRate,
+                      }))
                     }
-                    options={["AEPS", "ADD_MONEY", "AEPS_CASH_DEPOSIT_COMPENSATION"]}
+                    className={inputClass}
+                    options={selectedDraftCatalog?.supportedRulePurposes || []}
                   />
                 </Field>
                 <Field label="Operator / provider" hint="Optional. Leave blank for any operator.">
@@ -1081,7 +1221,7 @@ function Commissions() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                <Field label="Commission type *">
+                <Field label="Value type *">
                   <Select
                     value={ruleDraft.commissionType}
                     onChange={(value) =>
@@ -1091,15 +1231,11 @@ function Commissions() {
                       }))
                     }
                     className={inputClass}
-                    options={["FIXED", "PERCENTAGE"]}
+                    options={selectedDraftCatalog?.supportedValueTypes || []}
                   />
                 </Field>
                 <Field
-                  label={
-                    ruleDraft.commissionType === "PERCENTAGE"
-                      ? "Commission % *"
-                      : "Commission amount *"
-                  }
+                  label={ruleDraft.commissionType === "PERCENTAGE" ? "Rate (%) *" : "Fixed value *"}
                   hint={
                     ruleDraft.commissionType === "PERCENTAGE"
                       ? "0 to 100"
@@ -1126,32 +1262,34 @@ function Commissions() {
                     />
                   </div>
                 </Field>
-                <Field
-                  label="TDS rate (%) *"
-                  hint="Percentage deducted from earned commission: 0 to 100."
-                >
-                  <div className="relative">
-                    <Percent
-                      size={14}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                      required
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={ruleDraft.tdsRate}
-                      onChange={(event) =>
-                        setRuleDraft((current) => ({
-                          ...current,
-                          tdsRate: event.target.value,
-                        }))
-                      }
-                      className={`${inputClass} pl-9`}
-                    />
-                  </div>
-                </Field>
+                {showDraftTds ? (
+                  <Field
+                    label="TDS rate (%) *"
+                    hint="Percentage deducted from earned commission: 0 to 100."
+                  >
+                    <div className="relative">
+                      <Percent
+                        size={14}
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                      />
+                      <input
+                        required
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={ruleDraft.tdsRate}
+                        onChange={(event) =>
+                          setRuleDraft((current) => ({
+                            ...current,
+                            tdsRate: event.target.value,
+                          }))
+                        }
+                        className={`${inputClass} pl-9`}
+                      />
+                    </div>
+                  </Field>
+                ) : null}
                 <Field label="Minimum transaction amount" hint="Blank means no lower limit.">
                   <div className="relative">
                     <IndianRupee
@@ -1265,19 +1403,21 @@ function Commissions() {
               <button
                 type="button"
                 onClick={() => void refreshAll()}
-                disabled={rulesLoading || distributionsLoading}
+                disabled={rulesLoading || catalogLoading || distributionsLoading}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-xs font-extrabold text-secondary hover:bg-muted disabled:opacity-50"
               >
                 <RefreshCw
                   size={14}
-                  className={rulesLoading || distributionsLoading ? "animate-spin" : ""}
+                  className={
+                    rulesLoading || catalogLoading || distributionsLoading ? "animate-spin" : ""
+                  }
                 />{" "}
                 Refresh
               </button>
               <button
                 type="button"
                 onClick={startCreateRule}
-                disabled={!canCreateRule}
+                disabled={!canCreateRule || catalogLoading || !serviceCatalog.length}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-white"
               >
                 <Plus size={14} /> New rule
@@ -1286,7 +1426,7 @@ function Commissions() {
           </div>
 
           {rulesLoading && !rules.length ? (
-            <LoadingBox text="Loading commission rules…" />
+            <LoadingBox text="Loading configured rules…" />
           ) : (
             <div className="mt-6 overflow-x-auto rounded-xl border border-border">
               <table className="min-w-[1050px] w-full text-left text-xs">
@@ -1295,7 +1435,7 @@ function Commissions() {
                     <th className="px-4 py-3">Service / operator</th>
                     <th className="px-4 py-3">Role</th>
                     <th className="px-4 py-3">Slab</th>
-                    <th className="px-4 py-3">Commission pool</th>
+                    <th className="px-4 py-3">Rule value</th>
                     <th className="px-4 py-3">Distributions</th>
                     <th className="px-4 py-3">Priority</th>
                     <th className="px-4 py-3">Status</th>
@@ -1304,6 +1444,11 @@ function Commissions() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {visibleRules.map((rule) => {
+                    const catalogItem = catalogItemForService(serviceCatalog, rule.serviceType);
+                    const distributionsAllowed = shouldShowRuleDistributions(
+                      catalogItem,
+                      rule.rulePurpose,
+                    );
                     const linked = distributions.filter(
                       (item) => item.commissionRuleId === rule.id,
                     );
@@ -1311,7 +1456,12 @@ function Commissions() {
                     return (
                       <tr key={rule.id} className="bg-white align-top hover:bg-muted/25">
                         <td className="px-4 py-4">
-                          <p className="font-black text-secondary">{rule.serviceType}</p>
+                          <p className="font-black text-secondary">
+                            {catalogServiceLabel(serviceCatalog, rule.serviceType)}
+                          </p>
+                          <p className="mt-1 text-[10px] font-black text-primary">
+                            {rule.rulePurpose}
+                          </p>
                           <p className="mt-1 text-[11px] text-muted-foreground">
                             {rule.operator || "Any operator"}
                           </p>
@@ -1334,20 +1484,28 @@ function Commissions() {
                             {rule.commissionType}
                           </p>
                           <p className="mt-1 text-[10px] font-bold text-muted-foreground">
-                            TDS {Number(rule.tdsRate ?? 0)}%
+                            {shouldShowRuleTds(catalogItem, rule.rulePurpose)
+                              ? `TDS ${Number(rule.tdsRate ?? 0)}%`
+                              : "TDS not applicable"}
                           </p>
                         </td>
                         <td className="px-4 py-4">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedRuleId(rule.id);
-                              switchView("DISTRIBUTIONS");
-                            }}
-                            className="rounded-lg border border-border px-3 py-2 font-extrabold text-secondary hover:bg-muted"
-                          >
-                            {activeLinked} active / {linked.length} total
-                          </button>
+                          {distributionsAllowed ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedRuleId(rule.id);
+                                switchView("DISTRIBUTIONS");
+                              }}
+                              className="rounded-lg border border-border px-3 py-2 font-extrabold text-secondary hover:bg-muted"
+                            >
+                              {activeLinked} active / {linked.length} total
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-bold text-muted-foreground">
+                              Not applicable
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-4 font-black text-secondary">{rule.priority}</td>
                         <td className="px-4 py-4">
@@ -1388,7 +1546,7 @@ function Commissions() {
                         colSpan={8}
                         className="px-4 py-12 text-center text-sm text-muted-foreground"
                       >
-                        No commission rules match the current filters.
+                        No configured rules match the current filters.
                       </td>
                     </tr>
                   )}
@@ -1417,7 +1575,8 @@ function Commissions() {
                     hint="Distributions run only when this rule wins the commission match."
                   >
                     <CommissionRuleSelect
-                      rules={rules}
+                      rules={distributionRules}
+                      serviceCatalog={serviceCatalog}
                       value={selectedRuleId}
                       onChange={(value) => {
                         setSelectedRuleId(value);
@@ -1426,7 +1585,7 @@ function Commissions() {
                         setError("");
                         setNotice("");
                       }}
-                      disabled={!rules.length}
+                      disabled={!distributionRules.length}
                     />
                   </Field>
                 </div>
@@ -1459,7 +1618,7 @@ function Commissions() {
               <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <InfoBox
                   label="Service / provider"
-                  value={`${selectedRule.serviceType} · ${selectedRule.operator || "Any operator"}`}
+                  value={`${catalogServiceLabel(serviceCatalog, selectedRule.serviceType)} · ${selectedRule.operator || "Any operator"}`}
                 />
                 <InfoBox label="Source role" value={selectedRule.role} />
                 <InfoBox
@@ -1552,7 +1711,8 @@ function Commissions() {
                         }
                       >
                         <CommissionRuleSelect
-                          rules={rules}
+                          rules={distributionRules}
+                          serviceCatalog={serviceCatalog}
                           value={distributionDraft.commissionRuleId}
                           onChange={(value) =>
                             setDistributionDraft((current) => ({
@@ -1727,7 +1887,7 @@ function Commissions() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   {selectedRule
                     ? `${visibleDistributions.length} of ${selectedRuleDistributions.length} distribution${selectedRuleDistributions.length === 1 ? "" : "s"} shown for the selected rule.`
-                    : "Select a commission rule first."}
+                    : "Select a distribution-enabled configured rule first."}
                 </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -1843,7 +2003,7 @@ function Commissions() {
                         >
                           {selectedRule
                             ? "No distributions match the current filters for this rule."
-                            : "Create a commission rule before adding distributions."}
+                            : "Create a distribution-enabled configured rule before adding distributions."}
                         </td>
                       </tr>
                     )}
@@ -1914,11 +2074,13 @@ function MetricSummary({
 
 function CommissionRuleSelect({
   rules,
+  serviceCatalog,
   value,
   onChange,
   disabled,
 }: {
   rules: CommissionRule[];
+  serviceCatalog: CommissionServiceCatalog[];
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
@@ -1931,6 +2093,7 @@ function CommissionRuleSelect({
     ? rules.filter((rule) =>
         [
           rule.serviceType,
+          catalogServiceLabel(serviceCatalog, rule.serviceType),
           rule.operator || "any operator",
           rule.role,
           rule.commissionType,
@@ -1952,7 +2115,7 @@ function CommissionRuleSelect({
         <button
           type="button"
           disabled={disabled}
-          aria-label="Choose commission rule"
+          aria-label="Choose configured rule"
           className="group flex min-h-16 w-full items-center gap-3 rounded-2xl border border-border bg-white px-4 py-3 text-left shadow-sm outline-none transition hover:border-primary/40 hover:shadow-md focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60"
         >
           <span
@@ -1962,7 +2125,7 @@ function CommissionRuleSelect({
             <span className="min-w-0 flex-1">
               <span className="flex flex-wrap items-center gap-2">
                 <span className="truncate text-sm font-black text-secondary">
-                  {selected.serviceType}
+                  {catalogServiceLabel(serviceCatalog, selected.serviceType)}
                 </span>
                 <span className="text-xs text-muted-foreground">•</span>
                 <span className="truncate text-xs font-bold text-secondary/75">
@@ -1980,7 +2143,7 @@ function CommissionRuleSelect({
             </span>
           ) : (
             <span className="min-w-0 flex-1 text-sm font-semibold text-muted-foreground">
-              {rules.length ? "Choose a commission rule" : "No commission rules found"}
+              {rules.length ? "Choose a configured rule" : "No configured rules found"}
             </span>
           )}
           <ChevronDown
@@ -2032,7 +2195,7 @@ function CommissionRuleSelect({
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center justify-between gap-2">
                       <span className="font-black text-secondary">
-                        {rule.serviceType}
+                        {catalogServiceLabel(serviceCatalog, rule.serviceType)}
                         <span className="font-semibold text-muted-foreground">
                           {" "}
                           · {rule.operator || "Any operator"}

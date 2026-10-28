@@ -1798,6 +1798,16 @@ function Capture({
 
 function Receipt({ result, again }: { result: TransactionResult; again: () => void }) {
   const detail = result.result || result;
+  const transactionType = String(
+    result.transactionType || detail.transactionType || detail.operation || "",
+  ).toUpperCase();
+  const aadhaarPay = transactionType === "AP" || transactionType === "AADHAAR_PAY";
+  const accountingAmount = (
+    key: "grossAmount" | "commissionAmount" | "surchargeAmount" | "netSettlementAmount",
+  ) => {
+    const value = result.accounting?.[key] ?? detail[key];
+    return value === null || value === undefined || value === "" ? undefined : String(value);
+  };
   const providerStatus = String(detail.status || result.status || "").toUpperCase();
   const success = providerStatus === "000" || providerStatus === "SUCCESS";
   const pending =
@@ -1864,12 +1874,27 @@ function Receipt({ result, again }: { result: TransactionResult; again: () => vo
           ["Amount", result.amount ? `₹${result.amount}` : undefined],
           [
             "Gross amount",
-            result.accounting?.grossAmount ? `₹${result.accounting.grossAmount}` : undefined,
+            accountingAmount("grossAmount") ? `₹${accountingAmount("grossAmount")}` : undefined,
           ],
           [
             "Commission",
-            result.accounting?.commissionAmount
-              ? `₹${result.accounting.commissionAmount}`
+            aadhaarPay
+              ? "Not applicable"
+              : accountingAmount("commissionAmount")
+                ? `₹${accountingAmount("commissionAmount")}`
+                : undefined,
+          ],
+          ["TDS", aadhaarPay ? "Not applicable" : undefined],
+          [
+            "Surcharge amount",
+            accountingAmount("surchargeAmount")
+              ? `₹${accountingAmount("surchargeAmount")}`
+              : undefined,
+          ],
+          [
+            "Net settlement amount",
+            accountingAmount("netSettlementAmount")
+              ? `₹${accountingAmount("netSettlementAmount")}`
               : undefined,
           ],
           [
