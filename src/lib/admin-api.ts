@@ -570,16 +570,6 @@ export type ServiceControlStatus = {
   updatedAt?: string | null;
 };
 
-export type PayoutSurchargeConfiguration = {
-  sourceWallet: PayoutSourceWallet;
-  type: "PERCENTAGE" | "FIXED";
-  surchargeValue: string;
-  version: number;
-  isActive: boolean;
-  updatedBy?: string | null;
-  updatedAt: string;
-};
-
 export type AdminPayoutSettlement = PayoutSettlementDetail & {
   identityId: string;
 };
@@ -813,12 +803,23 @@ export type BankVerificationReconciliationPage = {
 };
 
 export type CommissionRuleType = "FIXED" | "PERCENTAGE";
+export type CommissionRulePurpose = "COMMISSION" | "SURCHARGE";
+export type CommissionServiceCatalog = {
+  serviceType: string;
+  label: string;
+  supportedRulePurposes: CommissionRulePurpose[];
+  defaultRulePurpose: CommissionRulePurpose;
+  supportedValueTypes: CommissionRuleType[];
+  supportsTds: boolean;
+  supportsDistributions: boolean;
+};
 export type CommissionRule = {
   id: string;
   ruleKey: string;
   serviceType: string;
   operator?: string | null;
   role: string;
+  rulePurpose: CommissionRulePurpose;
   commissionType: CommissionRuleType;
   commissionValue: string | number;
   tdsRate?: string | number | null;
@@ -833,6 +834,7 @@ export type CreateCommissionRuleInput = {
   serviceType: string;
   operator?: string;
   role: string;
+  rulePurpose: CommissionRulePurpose;
   commissionType: CommissionRuleType;
   commissionValue: number;
   tdsRate: number;
@@ -1195,20 +1197,6 @@ export const adminApi = {
         call<ServiceControlStatus>(
           "/super-admin/payout/service/status",
           json("PATCH", { enabled, ...(reason?.trim() ? { reason: reason.trim() } : {}) }),
-        ),
-    },
-    surcharge: {
-      get: (sourceWallet: PayoutSourceWallet) =>
-        call<PayoutSurchargeConfiguration>(
-          `/super-admin/payout/surcharge${queryString({ sourceWallet })}`,
-          {
-            cache: "no-store",
-          },
-        ),
-      update: (sourceWallet: PayoutSourceWallet, type: "PERCENTAGE" | "FIXED", value: number) =>
-        call<PayoutSurchargeConfiguration>(
-          "/super-admin/payout/surcharge",
-          json("PATCH", { sourceWallet, type, value }),
         ),
     },
   },
@@ -1681,6 +1669,7 @@ export const adminApi = {
       ),
   },
   commissionRules: {
+    serviceCatalog: () => call<CommissionServiceCatalog[]>("/commission-rules/service-catalog"),
     list: () => call<CommissionRule[]>("/commission-rules"),
     get: (id: string) => call<CommissionRule>(`/commission-rules/${encodeURIComponent(id)}`),
     create: (body: CreateCommissionRuleInput) =>

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { GitBranch, Loader2, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
 import { ActionPermissionNotice } from "@/components/action-permission-notice";
@@ -64,7 +64,7 @@ function Hierarchy() {
       setBusy(false);
     }
   }
-  async function load() {
+  const load = useCallback(async () => {
     if (!canViewHierarchy) {
       setLoading(false);
       return;
@@ -78,11 +78,10 @@ function Hierarchy() {
     } finally {
       setLoading(false);
     }
-  }
-  useEffect(() => {
-    if (canViewHierarchy) void load();
-    else setLoading(false);
   }, [canViewHierarchy]);
+  useEffect(() => {
+    void load();
+  }, [load]);
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!canCreateHierarchy)
@@ -172,7 +171,7 @@ function Hierarchy() {
           search={{ view: "rules" }}
           className="rounded-lg px-4 py-2.5 text-xs font-extrabold text-muted-foreground"
         >
-          Commission Rules
+          Configured Rules
         </Link>
         <Link
           to="/admin/commissions"

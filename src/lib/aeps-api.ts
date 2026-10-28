@@ -74,6 +74,8 @@ export type BiometricPayload = {
 export type AepsAccounting = {
   grossAmount?: string;
   commissionAmount?: string;
+  surchargeAmount?: string;
+  netSettlementAmount?: string;
   customerPayoutAmount?: string;
   netPrincipalAmount?: string;
 };

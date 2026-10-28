@@ -192,7 +192,7 @@ export const APP_NAVIGATION: readonly AppNavigationItem[] = [
     key: "commissionSetup",
     active: "commissions",
     activeByRole: { RETAILER: "commission" },
-    label: "Commission setup",
+    label: "Configured Rules",
     destinations: { SUPER_ADMIN: "/admin/commissions", ADMIN: "/admin/commissions" },
     area: "commissions",
     icon: Percent,

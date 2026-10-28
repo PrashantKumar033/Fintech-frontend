@@ -6,7 +6,7 @@ export function SiteFooter() {
   return (
     <footer className="mt-24 bg-secondary text-secondary-foreground">
       <div className="mx-auto max-w-7xl px-6 py-16">
-        <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-12 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.2fr]">
           <div>
             <Link to="/" className="flex items-center">
               <img src={logo} alt="UMOBIPAY logo" className="h-10 w-auto object-contain" />
