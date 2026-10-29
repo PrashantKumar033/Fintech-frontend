@@ -59,6 +59,7 @@ import {
   numericDraftValue,
   providerAfterServiceChange,
   providerRegistryForService,
+  rulePurposeForService,
   ruleTdsRate,
   ruleProviderOptions,
   shouldShowRuleDistributions,
@@ -200,12 +201,9 @@ function draftFromCatalog(catalog: CommissionServiceCatalog[]): RuleDraft {
   return {
     ...emptyRuleDraft,
     serviceType: service.serviceType,
-    rulePurpose: service.defaultRulePurpose,
+    rulePurpose: rulePurposeForService(service),
     commissionType: service.supportedValueTypes[0] || emptyRuleDraft.commissionType,
-    tdsRate:
-      service.defaultRulePurpose === "SURCHARGE" || !service.supportsTds
-        ? "0"
-        : emptyRuleDraft.tdsRate,
+    tdsRate: emptyRuleDraft.tdsRate,
   };
 }
 
@@ -588,9 +586,7 @@ function Commissions() {
     const cachedProviders = nextRegistry ? providerCacheRef.current[nextRegistry] : undefined;
 
     setRuleDraft((current) => {
-      const rulePurpose = item.supportedRulePurposes.includes(current.rulePurpose)
-        ? current.rulePurpose
-        : item.defaultRulePurpose;
+      const rulePurpose = rulePurposeForService(item, current.rulePurpose);
       const operator =
         previousRegistry !== nextRegistry
           ? ""
@@ -605,7 +601,6 @@ function Commissions() {
         commissionType: item.supportedValueTypes.includes(current.commissionType)
           ? current.commissionType
           : item.supportedValueTypes[0] || current.commissionType,
-        tdsRate: rulePurpose === "SURCHARGE" || !item.supportsTds ? "0" : current.tdsRate,
       };
     });
 
@@ -737,16 +732,16 @@ function Commissions() {
           maxAmount: maxAmount ?? null,
         };
         await adminApi.commissionRules.update(editingRuleId, body);
-        setNotice("Commission rule updated successfully.");
+        setNotice("Configured rule updated successfully.");
       } else {
         const body: CreateCommissionRuleInput = {
           ...common,
           ...(operator ? { operator } : {}),
-          ...(minAmount !== undefined ? { minAmount } : {}),
-          ...(maxAmount !== undefined ? { maxAmount } : {}),
+          minAmount: minAmount ?? null,
+          maxAmount: maxAmount ?? null,
         };
         await adminApi.commissionRules.create(body);
-        setNotice("Commission rule created successfully.");
+        setNotice("Configured rule created successfully.");
       }
       setRuleEditorOpen(false);
       setEditingRuleId(null);
@@ -1274,7 +1269,6 @@ function Commissions() {
                       setRuleDraft((current) => ({
                         ...current,
                         rulePurpose: value as CommissionRulePurpose,
-                        tdsRate: value === "SURCHARGE" ? "0" : current.tdsRate,
                       }))
                     }
                     className={inputClass}
@@ -1355,7 +1349,11 @@ function Commissions() {
                   />
                 </Field>
                 <Field
-                  label={ruleDraft.commissionType === "PERCENTAGE" ? "Rate (%) *" : "Fixed value *"}
+                  label={
+                    ruleDraft.commissionType === "PERCENTAGE"
+                      ? "Percentage value *"
+                      : "Fixed value *"
+                  }
                   hint={
                     ruleDraft.commissionType === "PERCENTAGE"
                       ? "0 to 100"
