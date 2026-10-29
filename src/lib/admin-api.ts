@@ -832,14 +832,14 @@ export type CommissionRule = {
 };
 export type CreateCommissionRuleInput = {
   serviceType: string;
-  operator?: string;
+  operator?: string | null;
   role: string;
   rulePurpose: CommissionRulePurpose;
   commissionType: CommissionRuleType;
   commissionValue: number;
   tdsRate: number;
-  minAmount?: number;
-  maxAmount?: number;
+  minAmount?: number | null;
+  maxAmount?: number | null;
   priority?: number;
   isActive?: boolean;
 };

@@ -39,6 +39,15 @@ export function catalogItemForService(
   return catalog.find((item) => item.serviceType === serviceType);
 }
 
+export function rulePurposeForService(
+  item: RuleServiceCatalogItem,
+  currentPurpose?: RulePurpose,
+): RulePurpose {
+  return currentPurpose && item.supportedRulePurposes.includes(currentPurpose)
+    ? currentPurpose
+    : item.defaultRulePurpose;
+}
+
 export function shouldShowRuleTds(
   item: RuleServiceCatalogItem | undefined,
   purpose: RulePurpose,
