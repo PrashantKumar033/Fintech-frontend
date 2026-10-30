@@ -173,13 +173,6 @@ function Hierarchy() {
         >
           Configured Rules
         </Link>
-        <Link
-          to="/admin/commissions"
-          search={{ view: "distributions" }}
-          className="rounded-lg px-4 py-2.5 text-xs font-extrabold text-muted-foreground"
-        >
-          Distribution Setup
-        </Link>
         <span className="rounded-lg bg-secondary px-4 py-2.5 text-xs font-extrabold text-white">
           Hierarchy
         </span>

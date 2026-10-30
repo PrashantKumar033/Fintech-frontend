@@ -15,6 +15,12 @@ export type RuleProviderOption = {
   isFallback: boolean;
 };
 
+export type FinancialRoleEntry = {
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+};
+
 export type RuleServiceCatalogItem = {
   serviceType: string;
   label: string;
@@ -23,6 +29,18 @@ export type RuleServiceCatalogItem = {
   supportedValueTypes: RuleValueType[];
   supportsTds: boolean;
   supportsDistributions: boolean;
+  hierarchyConfiguration?: {
+    inlineCommissionAllocationsSupported: boolean;
+    separateDistributionUiRequired: boolean;
+  };
+};
+
+export type HierarchyAllocationDraftLike = {
+  recipientRole: string;
+  distributionType: RuleValueType;
+  distributionValue: string | number;
+  priority: string | number;
+  isActive: boolean;
 };
 
 export function catalogServiceLabel(
@@ -59,7 +77,64 @@ export function shouldShowRuleDistributions(
   item: RuleServiceCatalogItem | undefined,
   purpose: RulePurpose,
 ): boolean {
-  return purpose === "COMMISSION" && Boolean(item?.supportsDistributions);
+  return (
+    purpose === "COMMISSION" &&
+    Boolean(item?.supportsDistributions) &&
+    item?.hierarchyConfiguration?.inlineCommissionAllocationsSupported !== false &&
+    item?.hierarchyConfiguration?.separateDistributionUiRequired !== true
+  );
+}
+
+export function validateHierarchyAllocations(
+  allocations: HierarchyAllocationDraftLike[],
+): string | null {
+  const roles = new Set<string>();
+  let activePercentageTotal = 0;
+
+  for (const allocation of allocations) {
+    const role = allocation.recipientRole.trim().toUpperCase();
+    if (!role) return "Recipient role is required for every hierarchy allocation.";
+    if (roles.has(role)) return `Recipient role ${role} is configured more than once.`;
+    roles.add(role);
+
+    if (typeof allocation.distributionValue === "string" && !allocation.distributionValue.trim()) {
+      return `Allocation value for ${role} is required.`;
+    }
+    const value = Number(allocation.distributionValue);
+    if (!Number.isFinite(value) || value < 0) {
+      return `Allocation value for ${role} must be a valid non-negative number.`;
+    }
+    if (allocation.isActive && value <= 0) {
+      return `Active allocation value for ${role} must be greater than 0.`;
+    }
+    if (allocation.distributionType === "PERCENTAGE") {
+      if (value > 100) return `Percentage allocation for ${role} cannot exceed 100%.`;
+      if (allocation.isActive) activePercentageTotal += value;
+    }
+
+    const priority = Number(allocation.priority);
+    if (!Number.isInteger(priority)) return `Priority for ${role} must be a whole number.`;
+  }
+
+  if (activePercentageTotal > 100) {
+    return "Active hierarchy percentage allocations cannot total more than 100%.";
+  }
+  return null;
+}
+
+export function hierarchyAllocationsForPayload(
+  item: RuleServiceCatalogItem | undefined,
+  purpose: RulePurpose,
+  allocations: HierarchyAllocationDraftLike[],
+) {
+  if (!shouldShowRuleDistributions(item, purpose)) return [];
+  return allocations.map((allocation) => ({
+    recipientRole: allocation.recipientRole.trim(),
+    distributionType: allocation.distributionType,
+    distributionValue: Number(allocation.distributionValue),
+    priority: Number(allocation.priority),
+    isActive: allocation.isActive,
+  }));
 }
 
 export function ruleTdsRate(
@@ -122,4 +197,21 @@ export function providerAfterServiceChange(
 ): string {
   const current = currentOperator.trim();
   return providers.some((provider) => provider.publicCode.trim() === current) ? current : "";
+}
+
+export function financialRoleOptions(roles: FinancialRoleEntry[], preserved: string[] = []) {
+  const options = roles
+    .filter((role) => role.isActive && role.name.trim().toUpperCase() !== "SUPER_ADMIN")
+    .map((role) => ({
+      value: role.name.trim(),
+      label: role.description?.trim() || role.name.trim(),
+    }));
+  const values = new Set(options.map((option) => option.value));
+  preserved
+    .map((role) => role.trim())
+    .filter(Boolean)
+    .forEach((value) => {
+      if (!values.has(value)) options.push({ value, label: `${value} — Saved role` });
+    });
+  return options;
 }

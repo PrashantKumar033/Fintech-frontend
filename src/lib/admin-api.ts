@@ -812,6 +812,29 @@ export type CommissionServiceCatalog = {
   supportedValueTypes: CommissionRuleType[];
   supportsTds: boolean;
   supportsDistributions: boolean;
+  hierarchyConfiguration: {
+    sourceRolesEndpoint: string;
+    inlineAllocationField: "hierarchyAllocations" | string;
+    inlineCommissionAllocationsSupported: boolean;
+    surchargeAppliesTo: "SOURCE_ROLE" | string;
+    allocationsReplaceOnUpdate: boolean;
+    separateDistributionUiRequired: boolean;
+  };
+};
+export type CommissionHierarchyAllocationInput = {
+  recipientRole: string;
+  distributionType: CommissionRuleType;
+  distributionValue: number;
+  priority: number;
+  isActive: boolean;
+};
+export type CommissionHierarchyAllocation = Omit<
+  CommissionHierarchyAllocationInput,
+  "distributionValue"
+> & {
+  id: string;
+  commissionRuleId: string;
+  distributionValue: string | number;
 };
 export type CommissionRule = {
   id: string;
@@ -827,6 +850,7 @@ export type CommissionRule = {
   maxAmount?: string | number | null;
   priority: number;
   isActive: boolean;
+  hierarchyAllocations: CommissionHierarchyAllocation[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -842,6 +866,7 @@ export type CreateCommissionRuleInput = {
   maxAmount?: number | null;
   priority?: number;
   isActive?: boolean;
+  hierarchyAllocations: CommissionHierarchyAllocationInput[];
 };
 export type UpdateCommissionRuleInput = Partial<
   Omit<CreateCommissionRuleInput, "operator" | "minAmount" | "maxAmount">
