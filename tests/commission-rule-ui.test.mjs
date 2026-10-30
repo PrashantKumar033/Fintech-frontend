@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   catalogServiceLabel,
+  financialRoleOptions,
+  hierarchyAllocationsForPayload,
   numericDraftValue,
   providerAfterServiceChange,
   providerRegistryForService,
@@ -11,6 +13,7 @@ import {
   ruleProviderOptions,
   shouldShowRuleDistributions,
   shouldShowRuleTds,
+  validateHierarchyAllocations,
 } from "../src/lib/commission-rule-ui.ts";
 
 const commissionService = {
@@ -21,6 +24,10 @@ const commissionService = {
   supportedValueTypes: ["FIXED", "PERCENTAGE"],
   supportsTds: true,
   supportsDistributions: true,
+  hierarchyConfiguration: {
+    inlineCommissionAllocationsSupported: true,
+    separateDistributionUiRequired: false,
+  },
 };
 
 const surchargeService = {
@@ -31,6 +38,10 @@ const surchargeService = {
   supportedValueTypes: ["FIXED", "PERCENTAGE"],
   supportsTds: true,
   supportsDistributions: false,
+  hierarchyConfiguration: {
+    inlineCommissionAllocationsSupported: true,
+    separateDistributionUiRequired: false,
+  },
 };
 
 const mainPayoutSurchargeService = {
@@ -121,7 +132,7 @@ test("edit mapping preserves backend purpose and new drafts keep commission TDS 
   );
   assert.match(formSource, /rulePurpose: rule\.rulePurpose/);
   assert.match(formSource, /tdsRate: numericDraftValue\(rule\.tdsRate, "0"\)/);
-  assert.match(formSource, /tdsRate: emptyRuleDraft\.tdsRate/);
+  assert.match(formSource, /tdsRate: "2"/);
 });
 
 test("purpose dropdown stays catalog-driven and selectable for AEPS and payout services", async () => {
@@ -130,7 +141,7 @@ test("purpose dropdown stays catalog-driven and selectable for AEPS and payout s
     "utf8",
   );
   assert.match(formSource, /<Field label="Rule purpose \*">/);
-  assert.match(formSource, /selectedDraftCatalog\?\.supportedRulePurposes \|\| \[\]/);
+  assert.match(formSource, /selectedCatalog\?\.supportedRulePurposes \|\| \[\]/);
   assert.doesNotMatch(formSource, /disabled=\{[^}]*rulePurpose/);
   for (const service of dualPurposeServices) {
     assert.deepEqual(service.supportedRulePurposes, ["COMMISSION", "SURCHARGE"]);
@@ -172,6 +183,126 @@ test("provider labels use public names while submitted values use public codes",
   assert.equal(JSON.stringify(options).includes("VIMOPAY"), false);
 });
 
+test("source roles use active backend roles and exclude super admin", () => {
+  assert.deepEqual(
+    financialRoleOptions([
+      { name: "RETAILER", description: "Retailer", isActive: true },
+      { name: "DISTRIBUTOR", description: "Distributor", isActive: false },
+      { name: "SUPER_ADMIN", description: "Super Admin", isActive: true },
+    ]),
+    [{ value: "RETAILER", label: "Retailer" }],
+  );
+  assert.deepEqual(financialRoleOptions([], ["SUPER_DISTRIBUTOR"]), [
+    { value: "SUPER_DISTRIBUTOR", label: "SUPER_DISTRIBUTOR — Saved role" },
+  ]);
+});
+
+test("commission submits inline hierarchy allocations while surcharge submits an empty array", () => {
+  const rows = [
+    {
+      recipientRole: "DISTRIBUTOR",
+      distributionType: "PERCENTAGE",
+      distributionValue: "20",
+      priority: "10",
+      isActive: true,
+    },
+    {
+      recipientRole: "SUPER_DISTRIBUTOR",
+      distributionType: "FIXED",
+      distributionValue: "1",
+      priority: "5",
+      isActive: true,
+    },
+  ];
+  assert.deepEqual(hierarchyAllocationsForPayload(commissionService, "COMMISSION", rows), [
+    {
+      recipientRole: "DISTRIBUTOR",
+      distributionType: "PERCENTAGE",
+      distributionValue: 20,
+      priority: 10,
+      isActive: true,
+    },
+    {
+      recipientRole: "SUPER_DISTRIBUTOR",
+      distributionType: "FIXED",
+      distributionValue: 1,
+      priority: 5,
+      isActive: true,
+    },
+  ]);
+  assert.deepEqual(hierarchyAllocationsForPayload(commissionService, "SURCHARGE", rows), []);
+  assert.equal(ruleTdsRate(commissionService, "SURCHARGE", "2"), 0);
+});
+
+test("duplicate recipients and active percentage totals above 100 are blocked", () => {
+  assert.match(
+    validateHierarchyAllocations([
+      {
+        recipientRole: "DISTRIBUTOR",
+        distributionType: "FIXED",
+        distributionValue: "1",
+        priority: "1",
+        isActive: true,
+      },
+      {
+        recipientRole: "DISTRIBUTOR",
+        distributionType: "PERCENTAGE",
+        distributionValue: "10",
+        priority: "2",
+        isActive: true,
+      },
+    ]),
+    /configured more than once/,
+  );
+  assert.match(
+    validateHierarchyAllocations([
+      {
+        recipientRole: "DISTRIBUTOR",
+        distributionType: "PERCENTAGE",
+        distributionValue: "60",
+        priority: "1",
+        isActive: true,
+      },
+      {
+        recipientRole: "SUPER_DISTRIBUTOR",
+        distributionType: "PERCENTAGE",
+        distributionValue: "41",
+        priority: "2",
+        isActive: true,
+      },
+    ]),
+    /cannot total more than 100%/,
+  );
+  assert.match(
+    validateHierarchyAllocations([
+      {
+        recipientRole: "DISTRIBUTOR",
+        distributionType: "FIXED",
+        distributionValue: "0",
+        priority: "1",
+        isActive: true,
+      },
+    ]),
+    /must be greater than 0/,
+  );
+});
+
+test("services without distribution support hide and clear inline allocations", () => {
+  assert.equal(shouldShowRuleDistributions(surchargeService, "COMMISSION"), false);
+  assert.deepEqual(
+    hierarchyAllocationsForPayload(surchargeService, "COMMISSION", [
+      {
+        recipientRole: "DISTRIBUTOR",
+        distributionType: "FIXED",
+        distributionValue: "1",
+        priority: "0",
+        isActive: true,
+      },
+    ]),
+    [],
+  );
+});
+
 test("inactive and missing saved providers remain selectable while service changes clear invalid values", () => {
   const inactiveProviders = [
     { publicCode: "PROVIDER_1", publicName: "Provider 1", isActive: false },
@@ -190,23 +321,31 @@ test("inactive and missing saved providers remain selectable while service chang
   assert.equal(providerAfterServiceChange("PROVIDER_2", inactiveProviders), "");
 });
 
-test("commission API keeps service catalog route and removes old payout surcharge requests", async () => {
-  const [apiSource, controlsSource, formSource] = await Promise.all([
+test("commission API keeps catalog routes and configured rules avoids legacy mutation workflow", async () => {
+  const [apiSource, controlsSource, formSource, hierarchySource] = await Promise.all([
     readFile(new URL("../src/lib/admin-api.ts", import.meta.url), "utf8"),
     readFile(
       new URL("../src/components/admin/super-admin-payout-controls.tsx", import.meta.url),
       "utf8",
     ),
     readFile(new URL("../src/routes/admin/commissions/index.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/routes/admin/commissions/hierarchy.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(apiSource, /commission-rules\/service-catalog/);
   assert.match(apiSource, /super-admin\/providers/);
   assert.match(apiSource, /super-admin\/payout\/providers/);
   assert.match(formSource, /adminApi\.superAdminAeps\.providers\.list\(\)/);
   assert.match(formSource, /adminApi\.superAdminPayout\.providers\.list\(\)/);
+  assert.match(formSource, /adminApi\.roles\.list\(\)/);
+  assert.match(formSource, /hierarchyAllocationsForPayload/);
+  assert.match(formSource, /update\(rule\.id, \{ isActive: true \}\)/);
+  assert.match(formSource, /hierarchyAllocations,/);
   assert.match(formSource, /\? "Percentage value \*"/);
-  assert.match(formSource, /minAmount: minAmount \?\? null/);
-  assert.match(formSource, /maxAmount: maxAmount \?\? null/);
+  assert.match(formSource, /minAmount: numberOrNull\(draft\.minAmount\)/);
+  assert.match(formSource, /maxAmount: numberOrNull\(draft\.maxAmount\)/);
+  assert.doesNotMatch(formSource, /commissionDistributions/);
+  assert.doesNotMatch(formSource, /commission-distributions\/distributions/);
+  assert.doesNotMatch(hierarchySource, /Distribution Setup/);
   assert.doesNotMatch(formSource, /VIMOPAY/);
   assert.doesNotMatch(apiSource, /super-admin\/payout\/surcharge/);
   assert.doesNotMatch(controlsSource, /superAdminPayout\.surcharge/);

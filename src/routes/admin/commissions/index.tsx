@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -9,63 +10,53 @@ import {
   type ReactNode,
 } from "react";
 import {
-  CheckCircle2,
   ChevronDown,
-  CircleDollarSign,
+  ChevronUp,
   Edit3,
-  IndianRupee,
-  Layers3,
   Loader2,
-  Percent,
   Plus,
   RefreshCw,
   Search,
   ShieldAlert,
-  SlidersHorizontal,
-  UsersRound,
+  Trash2,
   X,
 } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
 import { CommissionCalculator } from "@/components/admin/commission-calculator";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Select as UiSelect,
-  SelectContent as UiSelectContent,
-  SelectItem as UiSelectItem,
-  SelectTrigger as UiSelectTrigger,
-  SelectValue as UiSelectValue,
-} from "@/components/ui/select";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
-import { UI_PERMISSION } from "@/lib/ui-permissions";
 import {
   AdminApiError,
   adminApi,
+  asArray,
   getAdminActor,
-  type CommissionDistribution,
-  type CommissionDistributionType,
+  type AdminEntity,
+  type CommissionHierarchyAllocation,
+  type CommissionHierarchyAllocationInput,
   type CommissionRule,
   type CommissionRulePurpose,
   type CommissionRuleType,
   type CommissionServiceCatalog,
-  type CreateCommissionDistributionInput,
   type CreateCommissionRuleInput,
   type ProviderRegistryEntry,
-  type UpdateCommissionDistributionInput,
   type UpdateCommissionRuleInput,
 } from "@/lib/admin-api";
 import {
   catalogItemForService,
   catalogServiceLabel,
+  financialRoleOptions,
+  hierarchyAllocationsForPayload,
   numericDraftValue,
   providerAfterServiceChange,
   providerRegistryForService,
+  ruleProviderOptions,
   rulePurposeForService,
   ruleTdsRate,
-  ruleProviderOptions,
   shouldShowRuleDistributions,
   shouldShowRuleTds,
+  validateHierarchyAllocations,
   type RuleProviderRegistry,
 } from "@/lib/commission-rule-ui";
+import { UI_PERMISSION } from "@/lib/ui-permissions";
 
 export const Route = createFileRoute("/admin/commissions/")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -77,7 +68,14 @@ export const Route = createFileRoute("/admin/commissions/")({
 const inputClass =
   "w-full rounded-xl border border-border bg-white px-3.5 py-3 text-sm text-secondary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground";
 
-type CommissionView = "RULES" | "DISTRIBUTIONS";
+type AllocationDraft = {
+  key: string;
+  recipientRole: string;
+  distributionType: CommissionRuleType;
+  distributionValue: string;
+  priority: string;
+  isActive: boolean;
+};
 
 type RuleDraft = {
   serviceType: string;
@@ -91,27 +89,13 @@ type RuleDraft = {
   maxAmount: string;
   priority: string;
   isActive: boolean;
-};
-
-type DistributionDraft = {
-  commissionRuleId: string;
-  recipientRole: string;
-  distributionType: CommissionDistributionType;
-  distributionValue: string;
-  priority: string;
-  isActive: boolean;
-};
-
-type Health = {
-  tone: "good" | "warn" | "danger";
-  title: string;
-  detail: string;
+  hierarchyAllocations: AllocationDraft[];
 };
 
 const emptyRuleDraft: RuleDraft = {
   serviceType: "",
   operator: "",
-  role: "RETAILER",
+  role: "",
   rulePurpose: "COMMISSION",
   commissionType: "FIXED",
   commissionValue: "",
@@ -120,24 +104,58 @@ const emptyRuleDraft: RuleDraft = {
   maxAmount: "",
   priority: "0",
   isActive: true,
+  hierarchyAllocations: [],
 };
 
-const emptyDistributionDraft: DistributionDraft = {
-  commissionRuleId: "",
-  recipientRole: "",
-  distributionType: "FIXED",
-  distributionValue: "",
-  priority: "0",
-  isActive: true,
-};
+let allocationKey = 0;
+const nextAllocationKey = () => `allocation-${++allocationKey}`;
 
-function normalizeCode(value: string) {
-  return value.trim().toUpperCase();
+function allocationDraftFromApi(
+  allocation: CommissionHierarchyAllocation,
+  index: number,
+): AllocationDraft {
+  return {
+    key: allocation.id || `saved-allocation-${index}`,
+    recipientRole: allocation.recipientRole || "",
+    distributionType: allocation.distributionType,
+    distributionValue: numericDraftValue(allocation.distributionValue),
+    priority: numericDraftValue(allocation.priority, "0"),
+    isActive: Boolean(allocation.isActive),
+  };
 }
 
-function numberOrUndefined(value: string) {
-  if (!value.trim()) return undefined;
-  return Number(value);
+function draftFromRule(rule: CommissionRule): RuleDraft {
+  return {
+    serviceType: rule.serviceType || "",
+    operator: rule.operator || "",
+    role: rule.role || "",
+    rulePurpose: rule.rulePurpose,
+    commissionType: rule.commissionType,
+    commissionValue: numericDraftValue(rule.commissionValue),
+    tdsRate: numericDraftValue(rule.tdsRate, "0"),
+    minAmount: numericDraftValue(rule.minAmount),
+    maxAmount: numericDraftValue(rule.maxAmount),
+    priority: numericDraftValue(rule.priority, "0"),
+    isActive: Boolean(rule.isActive),
+    hierarchyAllocations: (rule.hierarchyAllocations || []).map(allocationDraftFromApi),
+  };
+}
+
+function draftFromCatalog(catalog: CommissionServiceCatalog[], roles: AdminEntity[]): RuleDraft {
+  const service = catalog[0];
+  const role = financialRoleOptions(roles)[0]?.value || "";
+  if (!service) return { ...emptyRuleDraft, role };
+  return {
+    ...emptyRuleDraft,
+    serviceType: service.serviceType,
+    role,
+    rulePurpose: rulePurposeForService(service),
+    commissionType: service.supportedValueTypes[0] || "FIXED",
+  };
+}
+
+function numberOrNull(value: string) {
+  return value.trim() ? Number(value) : null;
 }
 
 function money(value: string | number | null | undefined) {
@@ -151,241 +169,68 @@ function money(value: string | number | null | undefined) {
   }).format(amount);
 }
 
-function dateTime(value?: string) {
-  if (!value) return "Not available";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "Not available";
-  return new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(parsed);
+function ruleValue(rule: CommissionRule) {
+  return rule.commissionType === "PERCENTAGE"
+    ? `${Number(rule.commissionValue)}%`
+    : money(rule.commissionValue);
 }
 
-function ruleRate(rule: CommissionRule) {
-  const value = Number(rule.commissionValue);
-  if (rule.commissionType === "PERCENTAGE") {
-    return `${Number.isFinite(value) ? value : rule.commissionValue}%`;
-  }
-  return money(rule.commissionValue);
-}
-
-function distributionRate(distribution: CommissionDistribution) {
-  const value = Number(distribution.distributionValue);
-  if (distribution.distributionType === "PERCENTAGE") {
-    return `${Number.isFinite(value) ? value : distribution.distributionValue}% of commission pool`;
-  }
-  return `${money(distribution.distributionValue)} from commission pool`;
-}
-
-function draftFromRule(rule: CommissionRule): RuleDraft {
-  return {
-    serviceType: rule.serviceType || "",
-    operator: rule.operator || "",
-    role: rule.role || "RETAILER",
-    rulePurpose: rule.rulePurpose,
-    commissionType: rule.commissionType,
-    commissionValue: String(rule.commissionValue ?? ""),
-    tdsRate: numericDraftValue(rule.tdsRate, "0"),
-    minAmount:
-      rule.minAmount === null || rule.minAmount === undefined ? "" : String(rule.minAmount),
-    maxAmount:
-      rule.maxAmount === null || rule.maxAmount === undefined ? "" : String(rule.maxAmount),
-    priority: String(rule.priority ?? 0),
-    isActive: Boolean(rule.isActive),
-  };
-}
-
-function draftFromCatalog(catalog: CommissionServiceCatalog[]): RuleDraft {
-  const service = catalog[0];
-  if (!service) return { ...emptyRuleDraft };
-  return {
-    ...emptyRuleDraft,
-    serviceType: service.serviceType,
-    rulePurpose: rulePurposeForService(service),
-    commissionType: service.supportedValueTypes[0] || emptyRuleDraft.commissionType,
-    tdsRate: emptyRuleDraft.tdsRate,
-  };
-}
-
-function draftFromDistribution(distribution: CommissionDistribution): DistributionDraft {
-  return {
-    commissionRuleId: distribution.commissionRuleId,
-    recipientRole: distribution.recipientRole || "",
-    distributionType: distribution.distributionType,
-    distributionValue: String(distribution.distributionValue ?? ""),
-    priority: String(distribution.priority ?? 0),
-    isActive: Boolean(distribution.isActive),
-  };
-}
-
-function activeTotals(distributions: CommissionDistribution[]) {
-  return distributions.reduce(
-    (totals, item) => {
-      if (!item.isActive) return totals;
-      const value = Number(item.distributionValue);
-      if (!Number.isFinite(value)) return totals;
-      if (item.distributionType === "PERCENTAGE") totals.percentage += value;
-      else totals.fixed += value;
-      return totals;
-    },
-    { percentage: 0, fixed: 0 },
-  );
-}
-
-function distributionHealth(
-  rule: CommissionRule | undefined,
-  distributions: CommissionDistribution[],
-): Health {
-  if (!rule) {
-    return {
-      tone: "warn",
-      title: "Select a configured rule",
-      detail: "Choose a rule to review its active distribution setup.",
-    };
-  }
-
-  const totals = activeTotals(distributions);
-  if (totals.percentage > 100.000001) {
-    return {
-      tone: "danger",
-      title: "Distribution setup can exceed the commission pool",
-      detail: `Active percentage shares total ${totals.percentage.toFixed(4)}%. The backend checks the full pool at execution and will reject an over-allocation.`,
-    };
-  }
-
-  if (rule.commissionType === "FIXED") {
-    const pool = Number(rule.commissionValue);
-    if (Number.isFinite(pool)) {
-      const configured = totals.fixed + (pool * totals.percentage) / 100;
-      if (configured > pool + 0.005) {
-        return {
-          tone: "danger",
-          title: "Configured shares are larger than this fixed commission pool",
-          detail: `${money(configured)} is configured against a ${money(pool)} pool. Reduce a fixed or percentage share before activating this setup.`,
-        };
-      }
-      const remainder = Math.max(0, pool - configured);
-      return {
-        tone: "good",
-        title: "Distribution fits this fixed commission pool",
-        detail: `${money(configured)} is configured for hierarchy recipients. Up to ${money(remainder)} remains for the source merchant when all configured recipients are eligible.`,
-      };
-    }
-  }
-
-  if (totals.fixed > 0) {
-    const rulePercent = Number(rule.commissionValue);
-    const minAmount = Number(rule.minAmount);
-    if (
-      rule.commissionType === "PERCENTAGE" &&
-      Number.isFinite(rulePercent) &&
-      Number.isFinite(minAmount) &&
-      minAmount > 0
-    ) {
-      const minPool = (minAmount * rulePercent) / 100;
-      const configuredAtMin = totals.fixed + (minPool * totals.percentage) / 100;
-      if (configuredAtMin > minPool + 0.005) {
-        return {
-          tone: "danger",
-          title: "Fixed shares can exceed the pool at the start of this slab",
-          detail: `At ${money(minAmount)}, the estimated commission pool is ${money(minPool)}, but active shares need about ${money(configuredAtMin)}.`,
-        };
-      }
-    }
-
-    return {
-      tone: "warn",
-      title: "Mixed fixed and percentage shares need runtime room",
-      detail: `Active setup has ${money(totals.fixed)} fixed plus ${totals.percentage.toFixed(4)}% of the pool. The backend makes the final over-allocation check for each real transaction.`,
-    };
-  }
-
-  return {
-    tone: "good",
-    title: "Percentage setup is within the commission pool",
-    detail: `${totals.percentage.toFixed(4)}% is configured for hierarchy recipients. The unallocated part stays with the source merchant.`,
-  };
+function allocationValue(allocation: CommissionHierarchyAllocation) {
+  return allocation.distributionType === "PERCENTAGE"
+    ? `${Number(allocation.distributionValue)}% of gross commission pool`
+    : `${money(allocation.distributionValue)} from gross commission pool`;
 }
 
 function Commissions() {
-  const search = Route.useSearch();
-  const navigate = Route.useNavigate();
   const actor = getAdminActor();
   const { can } = useEffectiveAccess();
-  const allowed = (code: string) => actor?.kind === "SUPER_ADMIN" || can(code, ["ADMIN"]);
-  const supportedAdminRole = actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN";
-  const canListRules = supportedAdminRole && allowed(UI_PERMISSION.COMMISSION_RULE_LIST);
-  const canInspectRule = supportedAdminRole && allowed(UI_PERMISSION.COMMISSION_RULE_VIEW);
-  const canListDistributions =
-    supportedAdminRole && allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_LIST);
-  const canInspectDistribution =
-    supportedAdminRole && allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_VIEW);
+  const allowed = (permission: string) =>
+    actor?.kind === "SUPER_ADMIN" || can(permission, ["ADMIN"]);
+  const supportedRole = actor?.role === "SUPER_ADMIN" || actor?.role === "ADMIN";
+  const canList = supportedRole && allowed(UI_PERMISSION.COMMISSION_RULE_LIST);
+  const canInspect = supportedRole && allowed(UI_PERMISSION.COMMISSION_RULE_VIEW);
+  const canCreate = supportedRole && allowed(UI_PERMISSION.COMMISSION_RULE_CREATE);
+  const canUpdate = supportedRole && allowed(UI_PERMISSION.COMMISSION_RULE_UPDATE);
+  const canDeactivate = supportedRole && allowed(UI_PERMISSION.COMMISSION_RULE_DEACTIVATE);
   const canViewHierarchy = allowed(UI_PERMISSION.COMMISSION_HIERARCHY_VIEW);
-  const canManage = canListRules || canListDistributions;
-  const canCreateRule = allowed(UI_PERMISSION.COMMISSION_RULE_CREATE);
-  const canUpdateRule = allowed(UI_PERMISSION.COMMISSION_RULE_UPDATE);
-  const canDeactivateRule = allowed(UI_PERMISSION.COMMISSION_RULE_DEACTIVATE);
-  const canCreateDistribution = allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_CREATE);
-  const canUpdateDistribution = allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_UPDATE);
-  const canDeactivateDistribution = allowed(UI_PERMISSION.COMMISSION_DISTRIBUTION_DEACTIVATE);
 
-  const requestedView: CommissionView = search.view === "distributions" ? "DISTRIBUTIONS" : "RULES";
-  const view: CommissionView =
-    requestedView === "DISTRIBUTIONS" && canListDistributions
-      ? "DISTRIBUTIONS"
-      : canListRules
-        ? "RULES"
-        : "DISTRIBUTIONS";
   const [rules, setRules] = useState<CommissionRule[]>([]);
-  const [serviceCatalog, setServiceCatalog] = useState<CommissionServiceCatalog[]>([]);
-  const [providersByRegistry, setProvidersByRegistry] = useState<
-    Partial<Record<RuleProviderRegistry, ProviderRegistryEntry[]>>
-  >({});
-  const providerCacheRef = useRef<Partial<Record<RuleProviderRegistry, ProviderRegistryEntry[]>>>(
-    {},
-  );
-  const providerRequestsRef = useRef<
-    Partial<Record<RuleProviderRegistry, Promise<ProviderRegistryEntry[]>>>
-  >({});
-  const [providerLoading, setProviderLoading] = useState<RuleProviderRegistry | null>(null);
-  const [providerError, setProviderError] = useState("");
-  const [distributions, setDistributions] = useState<CommissionDistribution[]>([]);
-  const [rulesLoading, setRulesLoading] = useState(canManage);
-  const [catalogLoading, setCatalogLoading] = useState(canManage);
-  const [distributionsLoading, setDistributionsLoading] = useState(canManage);
+  const [catalog, setCatalog] = useState<CommissionServiceCatalog[]>([]);
+  const [roles, setRoles] = useState<AdminEntity[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(canList);
+  const [catalogLoading, setCatalogLoading] = useState(canList);
+  const [rolesLoading, setRolesLoading] = useState(canList);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const [ruleQuery, setRuleQuery] = useState("");
-  const [ruleStatus, setRuleStatus] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
-  const [ruleRoleFilter, setRuleRoleFilter] = useState("ALL");
-  const [ruleEditorOpen, setRuleEditorOpen] = useState(false);
+  const [providersByRegistry, setProvidersByRegistry] = useState<
+    Partial<Record<RuleProviderRegistry, ProviderRegistryEntry[]>>
+  >({});
+  const providerCache = useRef<Partial<Record<RuleProviderRegistry, ProviderRegistryEntry[]>>>({});
+  const providerRequests = useRef<
+    Partial<Record<RuleProviderRegistry, Promise<ProviderRegistryEntry[]>>>
+  >({});
+  const [providerLoading, setProviderLoading] = useState<
+    Partial<Record<RuleProviderRegistry, boolean>>
+  >({});
+  const [providerError, setProviderError] = useState("");
+
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [expandedRuleId, setExpandedRuleId] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
-  const [ruleDraft, setRuleDraft] = useState<RuleDraft>(emptyRuleDraft);
   const [loadingRule, setLoadingRule] = useState(false);
-  const [pendingRuleStatus, setPendingRuleStatus] = useState<{
+  const [draft, setDraft] = useState<RuleDraft>(emptyRuleDraft);
+  const [pendingStatus, setPendingStatus] = useState<{
     rule: CommissionRule;
     nextActive: boolean;
   } | null>(null);
 
-  const [selectedRuleId, setSelectedRuleId] = useState("");
-  const [distributionQuery, setDistributionQuery] = useState("");
-  const [distributionStatus, setDistributionStatus] = useState<"ALL" | "ACTIVE" | "INACTIVE">(
-    "ALL",
-  );
-  const [distributionEditorOpen, setDistributionEditorOpen] = useState(false);
-  const [editingDistributionId, setEditingDistributionId] = useState<string | null>(null);
-  const [distributionDraft, setDistributionDraft] =
-    useState<DistributionDraft>(emptyDistributionDraft);
-  const [loadingDistribution, setLoadingDistribution] = useState(false);
-  const [pendingDistributionStatus, setPendingDistributionStatus] = useState<{
-    distribution: CommissionDistribution;
-    nextActive: boolean;
-  } | null>(null);
-
   const loadRules = useCallback(async () => {
-    if (!canListRules) return;
+    if (!canList) return;
     setRulesLoading(true);
     try {
       setRules(await adminApi.commissionRules.list());
@@ -396,13 +241,13 @@ function Commissions() {
     } finally {
       setRulesLoading(false);
     }
-  }, [canListRules]);
+  }, [canList]);
 
-  const loadServiceCatalog = useCallback(async () => {
-    if (!canListRules) return;
+  const loadCatalog = useCallback(async () => {
+    if (!canList) return;
     setCatalogLoading(true);
     try {
-      setServiceCatalog(await adminApi.commissionRules.serviceCatalog());
+      setCatalog(await adminApi.commissionRules.serviceCatalog());
     } catch (caught) {
       setError(
         caught instanceof AdminApiError ? caught.message : "Unable to load the service catalog.",
@@ -410,98 +255,39 @@ function Commissions() {
     } finally {
       setCatalogLoading(false);
     }
-  }, [canListRules]);
+  }, [canList]);
 
-  const loadDistributions = useCallback(async () => {
-    if (!canListDistributions) return;
-    setDistributionsLoading(true);
+  const loadRoles = useCallback(async () => {
+    if (!canList) return;
+    setRolesLoading(true);
     try {
-      setDistributions(await adminApi.commissionDistributions.list());
+      setRoles(asArray<AdminEntity>(await adminApi.roles.list()));
     } catch (caught) {
       setError(
-        caught instanceof AdminApiError
-          ? caught.message
-          : "Unable to load commission distributions.",
+        caught instanceof AdminApiError ? caught.message : "Unable to load hierarchy roles.",
       );
     } finally {
-      setDistributionsLoading(false);
+      setRolesLoading(false);
     }
-  }, [canListDistributions]);
+  }, [canList]);
 
-  async function refreshAll() {
-    setError("");
-    await Promise.all([loadServiceCatalog(), loadRules(), loadDistributions()]);
-  }
-
-  useEffect(() => {
-    if (!canManage) return;
-    void Promise.all([loadServiceCatalog(), loadRules(), loadDistributions()]);
-  }, [canManage, loadDistributions, loadRules, loadServiceCatalog]);
-
-  const distributionRules = useMemo(
-    () =>
-      rules.filter((rule) =>
-        shouldShowRuleDistributions(
-          catalogItemForService(serviceCatalog, rule.serviceType),
-          rule.rulePurpose,
-        ),
-      ),
-    [rules, serviceCatalog],
-  );
-
-  useEffect(() => {
-    const selectableRules = view === "DISTRIBUTIONS" ? distributionRules : rules;
-    if (!selectableRules.length) {
-      setSelectedRuleId("");
-      return;
+  const loadProviders = useCallback(async (registry: RuleProviderRegistry, force = false) => {
+    if (force) {
+      delete providerCache.current[registry];
+      delete providerRequests.current[registry];
     }
-    if (selectedRuleId && selectableRules.some((rule) => rule.id === selectedRuleId)) return;
-    setSelectedRuleId(selectableRules.find((rule) => rule.isActive)?.id || selectableRules[0].id);
-  }, [distributionRules, rules, selectedRuleId, view]);
-
-  const visibleRules = useMemo(() => {
-    const search = ruleQuery.trim().toLowerCase();
-    return rules.filter((rule) => {
-      if (ruleStatus === "ACTIVE" && !rule.isActive) return false;
-      if (ruleStatus === "INACTIVE" && rule.isActive) return false;
-      if (ruleRoleFilter !== "ALL" && rule.role !== ruleRoleFilter) return false;
-      if (!search) return true;
-      return `${catalogServiceLabel(serviceCatalog, rule.serviceType)} ${rule.serviceType} ${rule.operator || ""} ${rule.role} ${rule.rulePurpose} ${rule.commissionType} ${rule.id}`
-        .toLowerCase()
-        .includes(search);
-    });
-  }, [rules, ruleQuery, ruleStatus, ruleRoleFilter, serviceCatalog]);
-
-  const selectedRule = useMemo(
-    () => rules.find((rule) => rule.id === selectedRuleId),
-    [rules, selectedRuleId],
-  );
-  const selectedDraftCatalog = catalogItemForService(serviceCatalog, ruleDraft.serviceType);
-  const selectedRuleCatalog = selectedRule
-    ? catalogItemForService(serviceCatalog, selectedRule.serviceType)
-    : undefined;
-  const showDraftTds = shouldShowRuleTds(selectedDraftCatalog, ruleDraft.rulePurpose);
-  const selectedProviderRegistry = providerRegistryForService(ruleDraft.serviceType);
-  const selectedProviders = selectedProviderRegistry
-    ? providersByRegistry[selectedProviderRegistry] || []
-    : [];
-  const providerOptions = ruleProviderOptions(selectedProviders, ruleDraft.operator);
-
-  const loadProviderRegistry = useCallback(async (registry: RuleProviderRegistry) => {
-    setProviderError("");
-    const cached = providerCacheRef.current[registry];
+    const cached = providerCache.current[registry];
     if (cached) return cached;
-    const pending = providerRequestsRef.current[registry];
+    const pending = providerRequests.current[registry];
     if (pending) return pending;
-
-    setProviderLoading(registry);
+    setProviderLoading((current) => ({ ...current, [registry]: true }));
     const request = (
       registry === "AEPS"
         ? adminApi.superAdminAeps.providers.list()
         : adminApi.superAdminPayout.providers.list()
     )
       .then((providers) => {
-        providerCacheRef.current[registry] = providers;
+        providerCache.current[registry] = providers;
         setProvidersByRegistry((current) => ({ ...current, [registry]: providers }));
         return providers;
       })
@@ -514,238 +300,259 @@ function Commissions() {
         throw caught;
       })
       .finally(() => {
-        delete providerRequestsRef.current[registry];
-        setProviderLoading((current) => (current === registry ? null : current));
+        delete providerRequests.current[registry];
+        setProviderLoading((current) => ({ ...current, [registry]: false }));
       });
-    providerRequestsRef.current[registry] = request;
+    providerRequests.current[registry] = request;
     return request;
   }, []);
 
   useEffect(() => {
-    if (!ruleEditorOpen || !selectedProviderRegistry) return;
-    void loadProviderRegistry(selectedProviderRegistry).catch(() => undefined);
-  }, [loadProviderRegistry, ruleEditorOpen, selectedProviderRegistry]);
+    if (!canList) return;
+    void Promise.all([loadCatalog(), loadRoles(), loadRules()]);
+  }, [canList, loadCatalog, loadRoles, loadRules]);
 
-  const selectedRuleDistributions = useMemo(
-    () => distributions.filter((item) => item.commissionRuleId === selectedRuleId),
-    [distributions, selectedRuleId],
+  useEffect(() => {
+    const registries = new Set(
+      [...catalog.map((item) => item.serviceType), ...rules.map((rule) => rule.serviceType)]
+        .map(providerRegistryForService)
+        .filter((registry): registry is RuleProviderRegistry => Boolean(registry)),
+    );
+    registries.forEach((registry) => void loadProviders(registry).catch(() => undefined));
+  }, [catalog, loadProviders, rules]);
+
+  const selectedCatalog = catalogItemForService(catalog, draft.serviceType);
+  const showTds = shouldShowRuleTds(selectedCatalog, draft.rulePurpose);
+  const showAllocations = shouldShowRuleDistributions(selectedCatalog, draft.rulePurpose);
+  const selectedRegistry = providerRegistryForService(draft.serviceType);
+  const selectedProviders = selectedRegistry ? providersByRegistry[selectedRegistry] || [] : [];
+  const providerOptions = ruleProviderOptions(selectedProviders, draft.operator);
+  const roleOptions = financialRoleOptions(roles, [
+    draft.role,
+    ...draft.hierarchyAllocations.map((allocation) => allocation.recipientRole),
+  ]);
+
+  const providerName = useCallback(
+    (rule: CommissionRule) => {
+      if (!rule.operator) return "Any provider";
+      const registry = providerRegistryForService(rule.serviceType);
+      const provider = registry
+        ? providersByRegistry[registry]?.find((item) => item.publicCode === rule.operator)
+        : undefined;
+      return provider?.publicName || rule.operator;
+    },
+    [providersByRegistry],
   );
 
-  const visibleDistributions = useMemo(() => {
-    const search = distributionQuery.trim().toLowerCase();
-    return selectedRuleDistributions.filter((item) => {
-      if (distributionStatus === "ACTIVE" && !item.isActive) return false;
-      if (distributionStatus === "INACTIVE" && item.isActive) return false;
+  const visibleRules = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    return rules.filter((rule) => {
+      if (statusFilter === "ACTIVE" && !rule.isActive) return false;
+      if (statusFilter === "INACTIVE" && rule.isActive) return false;
+      if (roleFilter !== "ALL" && rule.role !== roleFilter) return false;
       if (!search) return true;
-      return `${item.recipientRole} ${item.distributionType} ${item.id}`
+      return `${catalogServiceLabel(catalog, rule.serviceType)} ${providerName(rule)} ${rule.role} ${rule.rulePurpose} ${rule.commissionType}`
         .toLowerCase()
         .includes(search);
     });
-  }, [selectedRuleDistributions, distributionQuery, distributionStatus]);
+  }, [catalog, providerName, query, roleFilter, rules, statusFilter]);
 
-  const activeRuleCount = rules.filter((rule) => rule.isActive).length;
-  const inactiveRuleCount = rules.length - activeRuleCount;
-  const serviceCount = new Set(rules.map((rule) => rule.serviceType)).size;
-  const activeSelectedDistributions = selectedRuleDistributions.filter((item) => item.isActive);
-  const selectedTotals = activeTotals(activeSelectedDistributions);
-  const health = useMemo(
-    () => distributionHealth(selectedRule, activeSelectedDistributions),
-    [selectedRule, activeSelectedDistributions],
+  const filterRoles = financialRoleOptions(
+    roles,
+    rules.map((rule) => rule.role),
   );
+  const activeRuleCount = rules.filter((rule) => rule.isActive).length;
 
-  function switchView(nextView: CommissionView) {
-    void navigate({
-      search: { view: nextView === "DISTRIBUTIONS" ? "distributions" : "rules" },
-      replace: true,
-    });
+  async function refreshAll() {
     setError("");
-    setNotice("");
-    setPendingRuleStatus(null);
-    setPendingDistributionStatus(null);
-    setRuleEditorOpen(false);
-    setDistributionEditorOpen(false);
+    setProviderError("");
+    await Promise.all([
+      loadCatalog(),
+      loadRoles(),
+      loadRules(),
+      loadProviders("AEPS", true).catch(() => undefined),
+      loadProviders("PAYOUT", true).catch(() => undefined),
+    ]);
   }
 
-  function startCreateRule() {
-    if (!canCreateRule)
+  function resetDraft() {
+    setDraft(draftFromCatalog(catalog, roles));
+  }
+
+  function startCreate() {
+    if (!canCreate)
       return setError(`Permission ${UI_PERMISSION.COMMISSION_RULE_CREATE} is required.`);
     setEditingRuleId(null);
-    setRuleDraft(draftFromCatalog(serviceCatalog));
-    setProviderError("");
+    setDraft(draftFromCatalog(catalog, roles));
     setError("");
     setNotice("");
-    setRuleEditorOpen(true);
+    setEditorOpen(true);
   }
 
-  async function changeRuleService(serviceType: string) {
-    const item = catalogItemForService(serviceCatalog, serviceType);
-    if (!item) return;
-    setProviderError("");
-    const previousRegistry = providerRegistryForService(ruleDraft.serviceType);
-    const nextRegistry = providerRegistryForService(serviceType);
-    const cachedProviders = nextRegistry ? providerCacheRef.current[nextRegistry] : undefined;
-
-    setRuleDraft((current) => {
-      const rulePurpose = rulePurposeForService(item, current.rulePurpose);
-      const operator =
-        previousRegistry !== nextRegistry
-          ? ""
-          : cachedProviders
-            ? providerAfterServiceChange(current.operator, cachedProviders)
-            : current.operator;
-      return {
-        ...current,
-        serviceType,
-        operator,
-        rulePurpose,
-        commissionType: item.supportedValueTypes.includes(current.commissionType)
-          ? current.commissionType
-          : item.supportedValueTypes[0] || current.commissionType,
-      };
-    });
-
-    if (!nextRegistry || cachedProviders) return;
-    try {
-      const providers = await loadProviderRegistry(nextRegistry);
-      setRuleDraft((current) =>
-        current.serviceType === serviceType
-          ? {
-              ...current,
-              operator: providerAfterServiceChange(current.operator, providers),
-            }
-          : current,
-      );
-    } catch {
-      // The inline registry error keeps the current selection recoverable.
-    }
-  }
-
-  async function startEditRule(rule: CommissionRule) {
-    if (!canUpdateRule)
+  async function startEdit(rule: CommissionRule) {
+    if (!canUpdate)
       return setError(`Permission ${UI_PERMISSION.COMMISSION_RULE_UPDATE} is required.`);
-    setRuleEditorOpen(true);
     setEditingRuleId(rule.id);
-    setRuleDraft(draftFromRule(rule));
-    setProviderError("");
-    setLoadingRule(true);
+    setDraft(draftFromRule(rule));
     setError("");
     setNotice("");
+    setEditorOpen(true);
+    if (!canInspect) return;
+    setLoadingRule(true);
     try {
-      if (!canInspectRule) return;
-      const fresh = await adminApi.commissionRules.get(rule.id);
-      setRuleDraft(draftFromRule(fresh));
+      setDraft(draftFromRule(await adminApi.commissionRules.get(rule.id)));
     } catch (caught) {
       setError(
-        caught instanceof AdminApiError
-          ? caught.message
-          : "Unable to load the latest rule details.",
+        caught instanceof AdminApiError ? caught.message : "Unable to load the latest rule.",
       );
     } finally {
       setLoadingRule(false);
     }
   }
 
-  function validateRuleDraft() {
-    const serviceType = ruleDraft.serviceType.trim();
-    if (!serviceType) return "Service type is required.";
-    const catalogItem = catalogItemForService(serviceCatalog, serviceType);
-    if (!catalogItem) return "Select a service from the configured service catalog.";
-    if (!catalogItem.supportedRulePurposes.includes(ruleDraft.rulePurpose)) {
-      return `${catalogItem.label} does not support ${ruleDraft.rulePurpose.toLowerCase()} rules.`;
+  async function changeService(serviceType: string) {
+    const item = catalogItemForService(catalog, serviceType);
+    if (!item) return;
+    const previousRegistry = providerRegistryForService(draft.serviceType);
+    const nextRegistry = providerRegistryForService(serviceType);
+    const cached = nextRegistry ? providerCache.current[nextRegistry] : undefined;
+    setDraft((current) => ({
+      ...current,
+      serviceType,
+      rulePurpose: rulePurposeForService(item, current.rulePurpose),
+      commissionType: item.supportedValueTypes.includes(current.commissionType)
+        ? current.commissionType
+        : item.supportedValueTypes[0] || current.commissionType,
+      operator:
+        previousRegistry !== nextRegistry
+          ? ""
+          : cached
+            ? providerAfterServiceChange(current.operator, cached)
+            : current.operator,
+    }));
+    if (!nextRegistry || cached) return;
+    try {
+      const providers = await loadProviders(nextRegistry);
+      setDraft((current) =>
+        current.serviceType === serviceType
+          ? { ...current, operator: providerAfterServiceChange(current.operator, providers) }
+          : current,
+      );
+    } catch {
+      // The registry error is rendered beside the provider field.
     }
-    if (!catalogItem.supportedValueTypes.includes(ruleDraft.commissionType)) {
-      return `${catalogItem.label} does not support ${ruleDraft.commissionType.toLowerCase()} values.`;
-    }
-    if (!ruleDraft.role.trim()) return "Role is required.";
+  }
 
-    if (!ruleDraft.commissionValue.trim()) return "Rule value is required.";
-    const commissionValue = Number(ruleDraft.commissionValue);
-    if (!Number.isFinite(commissionValue) || commissionValue < 0)
-      return "Rule value must be 0 or more.";
-    if (ruleDraft.commissionType === "PERCENTAGE" && commissionValue > 100) {
-      return "Percentage value cannot be more than 100%.";
-    }
+  function addAllocation() {
+    const used = new Set(draft.hierarchyAllocations.map((item) => item.recipientRole));
+    const recipientRole = roleOptions.find((role) => !used.has(role.value))?.value || "";
+    setDraft((current) => ({
+      ...current,
+      hierarchyAllocations: [
+        ...current.hierarchyAllocations,
+        {
+          key: nextAllocationKey(),
+          recipientRole,
+          distributionType: "PERCENTAGE",
+          distributionValue: "",
+          priority: "0",
+          isActive: true,
+        },
+      ],
+    }));
+  }
 
-    if (shouldShowRuleTds(catalogItem, ruleDraft.rulePurpose)) {
-      if (!ruleDraft.tdsRate.trim()) return "TDS rate is required.";
-      const tdsRate = Number(ruleDraft.tdsRate);
-      if (!Number.isFinite(tdsRate) || tdsRate < 0 || tdsRate > 100) {
+  function updateAllocation(key: string, patch: Partial<AllocationDraft>) {
+    setDraft((current) => ({
+      ...current,
+      hierarchyAllocations: current.hierarchyAllocations.map((allocation) =>
+        allocation.key === key ? { ...allocation, ...patch } : allocation,
+      ),
+    }));
+  }
+
+  function removeAllocation(key: string) {
+    setDraft((current) => ({
+      ...current,
+      hierarchyAllocations: current.hierarchyAllocations.filter(
+        (allocation) => allocation.key !== key,
+      ),
+    }));
+  }
+
+  function validateDraft() {
+    if (!selectedCatalog) return "Select a service from the backend catalog.";
+    if (!selectedCatalog.supportedRulePurposes.includes(draft.rulePurpose))
+      return `${selectedCatalog.label} does not support ${draft.rulePurpose.toLowerCase()} rules.`;
+    if (!selectedCatalog.supportedValueTypes.includes(draft.commissionType))
+      return `${selectedCatalog.label} does not support ${draft.commissionType.toLowerCase()} values.`;
+    if (!draft.role.trim()) return "Source role is required.";
+    if (!draft.commissionValue.trim()) return "Rule value is required.";
+    const value = Number(draft.commissionValue);
+    if (!Number.isFinite(value) || value < 0)
+      return "Rule value must be a valid non-negative number.";
+    if (draft.commissionType === "PERCENTAGE" && value > 100)
+      return "Percentage value cannot exceed 100%.";
+    if (showTds) {
+      const tds = Number(draft.tdsRate);
+      if (!draft.tdsRate.trim() || !Number.isFinite(tds) || tds < 0 || tds > 100)
         return "TDS rate must be between 0 and 100%.";
-      }
-      if (!/^(?:\d+|\d*\.\d{1,2})$/.test(ruleDraft.tdsRate.trim())) {
+      if (!/^(?:\d+|\d*\.\d{1,2})$/.test(draft.tdsRate.trim()))
         return "TDS rate can have at most 2 decimal places.";
-      }
     }
-
-    const minAmount = numberOrUndefined(ruleDraft.minAmount);
-    const maxAmount = numberOrUndefined(ruleDraft.maxAmount);
-    if (minAmount !== undefined && (!Number.isFinite(minAmount) || minAmount < 0)) {
+    const minAmount = numberOrNull(draft.minAmount);
+    const maxAmount = numberOrNull(draft.maxAmount);
+    if (minAmount !== null && (!Number.isFinite(minAmount) || minAmount < 0))
       return "Minimum amount must be 0 or more.";
-    }
-    if (maxAmount !== undefined && (!Number.isFinite(maxAmount) || maxAmount < 0)) {
+    if (maxAmount !== null && (!Number.isFinite(maxAmount) || maxAmount < 0))
       return "Maximum amount must be 0 or more.";
-    }
-    if (minAmount !== undefined && maxAmount !== undefined && minAmount > maxAmount) {
+    if (minAmount !== null && maxAmount !== null && minAmount > maxAmount)
       return "Minimum amount cannot be greater than maximum amount.";
-    }
-
-    const priority = Number(ruleDraft.priority || 0);
-    if (!Number.isInteger(priority)) return "Priority must be a whole number.";
-    return null;
+    if (!Number.isInteger(Number(draft.priority))) return "Priority must be a whole number.";
+    return showAllocations ? validateHierarchyAllocations(draft.hierarchyAllocations) : null;
   }
 
   async function submitRule(event: FormEvent) {
     event.preventDefault();
-    const required = editingRuleId
-      ? UI_PERMISSION.COMMISSION_RULE_UPDATE
-      : UI_PERMISSION.COMMISSION_RULE_CREATE;
-    if (editingRuleId ? !canUpdateRule : !canCreateRule)
-      return setError(`Permission ${required} is required.`);
+    if (editingRuleId ? !canUpdate : !canCreate)
+      return setError(
+        `Permission ${editingRuleId ? UI_PERMISSION.COMMISSION_RULE_UPDATE : UI_PERMISSION.COMMISSION_RULE_CREATE} is required.`,
+      );
     setError("");
     setNotice("");
-    const validationError = validateRuleDraft();
-    if (validationError) return setError(validationError);
-
-    const minAmount = numberOrUndefined(ruleDraft.minAmount);
-    const maxAmount = numberOrUndefined(ruleDraft.maxAmount);
-    const operator = ruleDraft.operator.trim();
-    const serviceType = ruleDraft.serviceType.trim();
-    const catalogItem = catalogItemForService(serviceCatalog, serviceType);
+    const validation = validateDraft();
+    if (validation) return setError(validation);
+    const hierarchyAllocations = hierarchyAllocationsForPayload(
+      selectedCatalog,
+      draft.rulePurpose,
+      draft.hierarchyAllocations,
+    ) as CommissionHierarchyAllocationInput[];
     const common = {
-      serviceType,
-      role: normalizeCode(ruleDraft.role),
-      rulePurpose: ruleDraft.rulePurpose,
-      commissionType: ruleDraft.commissionType,
-      commissionValue: Number(ruleDraft.commissionValue),
-      tdsRate: ruleTdsRate(catalogItem, ruleDraft.rulePurpose, ruleDraft.tdsRate),
-      priority: Number(ruleDraft.priority || 0),
-      isActive: ruleDraft.isActive,
+      serviceType: draft.serviceType.trim(),
+      operator: draft.operator.trim() || null,
+      role: draft.role.trim(),
+      rulePurpose: draft.rulePurpose,
+      commissionType: draft.commissionType,
+      commissionValue: Number(draft.commissionValue),
+      tdsRate: ruleTdsRate(selectedCatalog, draft.rulePurpose, draft.tdsRate),
+      minAmount: numberOrNull(draft.minAmount),
+      maxAmount: numberOrNull(draft.maxAmount),
+      priority: Number(draft.priority),
+      isActive: draft.isActive,
+      hierarchyAllocations,
     };
-
     setSaving(true);
     try {
       if (editingRuleId) {
-        const body: UpdateCommissionRuleInput = {
-          ...common,
-          operator: operator || null,
-          minAmount: minAmount ?? null,
-          maxAmount: maxAmount ?? null,
-        };
-        await adminApi.commissionRules.update(editingRuleId, body);
-        setNotice("Configured rule updated successfully.");
+        await adminApi.commissionRules.update(editingRuleId, common as UpdateCommissionRuleInput);
+        setNotice("Configured rule and hierarchy allocations updated successfully.");
       } else {
-        const body: CreateCommissionRuleInput = {
-          ...common,
-          ...(operator ? { operator } : {}),
-          minAmount: minAmount ?? null,
-          maxAmount: maxAmount ?? null,
-        };
-        await adminApi.commissionRules.create(body);
-        setNotice("Configured rule created successfully.");
+        await adminApi.commissionRules.create(common as CreateCommissionRuleInput);
+        setNotice("Configured rule and hierarchy allocations created successfully.");
       }
-      setRuleEditorOpen(false);
+      setEditorOpen(false);
       setEditingRuleId(null);
-      setRuleDraft(draftFromCatalog(serviceCatalog));
+      resetDraft();
       await loadRules();
     } catch (caught) {
       setError(
@@ -756,294 +563,51 @@ function Commissions() {
     }
   }
 
-  async function confirmRuleStatusChange() {
-    if (!pendingRuleStatus) return;
-    const { rule, nextActive } = pendingRuleStatus;
-    if (nextActive ? !canUpdateRule : !canDeactivateRule)
-      return setError(
-        `Permission ${nextActive ? UI_PERMISSION.COMMISSION_RULE_UPDATE : UI_PERMISSION.COMMISSION_RULE_DEACTIVATE} is required.`,
-      );
+  async function confirmStatusChange() {
+    if (!pendingStatus) return;
+    const { rule, nextActive } = pendingStatus;
+    if (nextActive ? !canUpdate : !canDeactivate) return;
     setSaving(true);
     setError("");
-    setNotice("");
     try {
       if (nextActive) {
+        // Status-only PATCH intentionally omits hierarchyAllocations and preserves them.
         await adminApi.commissionRules.update(rule.id, { isActive: true });
-        setNotice("Commission rule reactivated successfully.");
       } else {
         await adminApi.commissionRules.deactivate(rule.id);
-        setNotice("Commission rule deactivated. Historical commission links remain preserved.");
       }
       setRules((current) =>
         current.map((item) => (item.id === rule.id ? { ...item, isActive: nextActive } : item)),
       );
-      setPendingRuleStatus(null);
+      setNotice(`Configured rule ${nextActive ? "reactivated" : "deactivated"}.`);
+      setPendingStatus(null);
     } catch (caught) {
-      setError(
-        caught instanceof AdminApiError ? caught.message : "Unable to change the rule status.",
-      );
+      setError(caught instanceof AdminApiError ? caught.message : "Unable to change rule status.");
     } finally {
       setSaving(false);
     }
   }
 
-  function startCreateDistribution() {
-    if (!canCreateDistribution)
-      return setError(`Permission ${UI_PERMISSION.COMMISSION_DISTRIBUTION_CREATE} is required.`);
-    if (!selectedRuleId) {
-      setError("Create a distribution-enabled configured rule first, then select it.");
-      return;
-    }
-    if (
-      !selectedRule ||
-      !shouldShowRuleDistributions(selectedRuleCatalog, selectedRule.rulePurpose)
-    ) {
-      setError("Distributions are not available for the selected configured rule.");
-      return;
-    }
-    setEditingDistributionId(null);
-    setDistributionDraft({ ...emptyDistributionDraft, commissionRuleId: selectedRuleId });
-    setError("");
-    setNotice("");
-    setDistributionEditorOpen(true);
-  }
+  const activePercentageTotal = draft.hierarchyAllocations.reduce(
+    (total, allocation) =>
+      allocation.isActive && allocation.distributionType === "PERCENTAGE"
+        ? total + (Number(allocation.distributionValue) || 0)
+        : total,
+    0,
+  );
 
-  async function startEditDistribution(distribution: CommissionDistribution) {
-    if (!canUpdateDistribution)
-      return setError(`Permission ${UI_PERMISSION.COMMISSION_DISTRIBUTION_UPDATE} is required.`);
-    const rule = rules.find((item) => item.id === distribution.commissionRuleId);
-    if (
-      !rule ||
-      !shouldShowRuleDistributions(
-        catalogItemForService(serviceCatalog, rule.serviceType),
-        rule.rulePurpose,
-      )
-    ) {
-      setError("Distributions are not available for this configured rule.");
-      return;
-    }
-    setDistributionEditorOpen(true);
-    setEditingDistributionId(distribution.id);
-    setDistributionDraft(draftFromDistribution(distribution));
-    setLoadingDistribution(true);
-    setError("");
-    setNotice("");
-    try {
-      if (!canInspectDistribution) return;
-      const fresh = await adminApi.commissionDistributions.get(distribution.id);
-      setDistributionDraft(draftFromDistribution(fresh));
-      setSelectedRuleId(fresh.commissionRuleId);
-    } catch (caught) {
-      setError(
-        caught instanceof AdminApiError
-          ? caught.message
-          : "Unable to load the latest distribution details.",
-      );
-    } finally {
-      setLoadingDistribution(false);
-    }
-  }
-
-  function proposedDistributionHealth(draft: DistributionDraft, editingId?: string | null) {
-    const rule = rules.find((item) => item.id === draft.commissionRuleId);
-    if (!rule) return distributionHealth(undefined, []);
-
-    const base = distributions.filter(
-      (item) => item.commissionRuleId === draft.commissionRuleId && item.id !== editingId,
-    );
-    if (!draft.isActive)
-      return distributionHealth(
-        rule,
-        base.filter((item) => item.isActive),
-      );
-
-    const proposed: CommissionDistribution = {
-      id: editingId || "__PROPOSED__",
-      commissionRuleId: draft.commissionRuleId,
-      recipientRole: normalizeCode(draft.recipientRole),
-      distributionType: draft.distributionType,
-      distributionValue: Number(draft.distributionValue),
-      priority: Number(draft.priority || 0),
-      isActive: true,
-    };
-    return distributionHealth(rule, [...base.filter((item) => item.isActive), proposed]);
-  }
-
-  function validateDistributionDraft() {
-    if (!distributionDraft.commissionRuleId.trim()) return "Commission rule is required.";
-    if (!normalizeCode(distributionDraft.recipientRole)) return "Recipient role is required.";
-
-    if (!distributionDraft.distributionValue.trim()) return "Distribution value is required.";
-    const value = Number(distributionDraft.distributionValue);
-    if (!Number.isFinite(value) || value < 0) return "Distribution value must be 0 or more.";
-    if (distributionDraft.distributionType === "PERCENTAGE" && value > 100) {
-      return "Percentage distribution cannot be more than 100%.";
-    }
-
-    const priority = Number(distributionDraft.priority || 0);
-    if (!Number.isInteger(priority)) return "Priority must be a whole number.";
-
-    const recipientRole = normalizeCode(distributionDraft.recipientRole);
-    const duplicate = distributions.find(
-      (item) =>
-        item.commissionRuleId === distributionDraft.commissionRuleId &&
-        normalizeCode(item.recipientRole) === recipientRole &&
-        item.id !== editingDistributionId,
-    );
-    if (duplicate) {
-      return duplicate.isActive
-        ? `This rule already has an active ${recipientRole} distribution. Edit that row instead.`
-        : `This rule already has an inactive ${recipientRole} distribution. Reactivate or edit that row instead of creating a duplicate.`;
-    }
-
-    const proposedHealth = proposedDistributionHealth(distributionDraft, editingDistributionId);
-    if (distributionDraft.isActive && proposedHealth.tone === "danger") {
-      return `This active setup would over-allocate the commission pool. ${proposedHealth.detail}`;
-    }
-
-    return null;
-  }
-
-  async function submitDistribution(event: FormEvent) {
-    event.preventDefault();
-    const required = editingDistributionId
-      ? UI_PERMISSION.COMMISSION_DISTRIBUTION_UPDATE
-      : UI_PERMISSION.COMMISSION_DISTRIBUTION_CREATE;
-    if (editingDistributionId ? !canUpdateDistribution : !canCreateDistribution)
-      return setError(`Permission ${required} is required.`);
-    const distributionRule = rules.find((rule) => rule.id === distributionDraft.commissionRuleId);
-    if (
-      !distributionRule ||
-      !shouldShowRuleDistributions(
-        catalogItemForService(serviceCatalog, distributionRule.serviceType),
-        distributionRule.rulePurpose,
-      )
-    ) {
-      return setError("Distribution APIs are not available for this configured rule.");
-    }
-    setError("");
-    setNotice("");
-    const validationError = validateDistributionDraft();
-    if (validationError) return setError(validationError);
-
-    const common = {
-      recipientRole: normalizeCode(distributionDraft.recipientRole),
-      distributionType: distributionDraft.distributionType,
-      distributionValue: Number(distributionDraft.distributionValue),
-      priority: Number(distributionDraft.priority || 0),
-      isActive: distributionDraft.isActive,
-    };
-
-    setSaving(true);
-    try {
-      if (editingDistributionId) {
-        const body: UpdateCommissionDistributionInput = common;
-        await adminApi.commissionDistributions.update(editingDistributionId, body);
-        setNotice("Commission distribution updated successfully.");
-      } else {
-        const body: CreateCommissionDistributionInput = {
-          commissionRuleId: distributionDraft.commissionRuleId,
-          ...common,
-        };
-        await adminApi.commissionDistributions.create(body);
-        setNotice("Commission distribution created successfully.");
-      }
-      setSelectedRuleId(distributionDraft.commissionRuleId);
-      setDistributionEditorOpen(false);
-      setEditingDistributionId(null);
-      setDistributionDraft(emptyDistributionDraft);
-      await loadDistributions();
-    } catch (caught) {
-      setError(
-        caught instanceof AdminApiError
-          ? caught.message
-          : "Unable to save the commission distribution.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function confirmDistributionStatusChange() {
-    if (!pendingDistributionStatus) return;
-    const { distribution, nextActive } = pendingDistributionStatus;
-    const rule = rules.find((item) => item.id === distribution.commissionRuleId);
-    if (
-      !rule ||
-      !shouldShowRuleDistributions(
-        catalogItemForService(serviceCatalog, rule.serviceType),
-        rule.rulePurpose,
-      )
-    ) {
-      setPendingDistributionStatus(null);
-      setError("Distribution APIs are not available for this configured rule.");
-      return;
-    }
-    if (nextActive ? !canUpdateDistribution : !canDeactivateDistribution)
-      return setError(
-        `Permission ${nextActive ? UI_PERMISSION.COMMISSION_DISTRIBUTION_UPDATE : UI_PERMISSION.COMMISSION_DISTRIBUTION_DEACTIVATE} is required.`,
-      );
-    setError("");
-    setNotice("");
-
-    if (nextActive) {
-      const nextDraft = draftFromDistribution({ ...distribution, isActive: true });
-      const nextHealth = proposedDistributionHealth(nextDraft, distribution.id);
-      if (nextHealth.tone === "danger") {
-        setPendingDistributionStatus(null);
-        setError(`Cannot reactivate this share yet. ${nextHealth.detail}`);
-        return;
-      }
-    }
-
-    setSaving(true);
-    try {
-      if (nextActive) {
-        await adminApi.commissionDistributions.update(distribution.id, { isActive: true });
-        setNotice("Commission distribution reactivated successfully.");
-      } else {
-        await adminApi.commissionDistributions.deactivate(distribution.id);
-        setNotice(
-          "Commission distribution deactivated. Historical allocation records remain safe.",
-        );
-      }
-      setDistributions((current) =>
-        current.map((item) =>
-          item.id === distribution.id ? { ...item, isActive: nextActive } : item,
-        ),
-      );
-      setPendingDistributionStatus(null);
-    } catch (caught) {
-      setError(
-        caught instanceof AdminApiError
-          ? caught.message
-          : "Unable to change the distribution status.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (!canManage) {
+  if (!canList) {
     return (
       <AdminLayout
         active="commissions"
         eyebrow="Pricing"
         title="Configured Rules"
-        description="Global configured rules and distributions are restricted to Admin and Super Admin accounts."
+        description="Configured rule access is restricted to authorized Admin and Super Admin accounts."
       >
         <AdminPanel>
           <div className="flex gap-3 rounded-xl bg-amber-50 p-4 text-amber-900">
             <ShieldAlert size={20} className="mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-black">
-                Global commission editing is not available for {actor?.role || "this role"}.
-              </p>
-              <p className="mt-1 text-xs leading-5">
-                Distributor and Master Distributor pages should show their scoped commission data.
-                They should not change the global rule engine.
-              </p>
-            </div>
+            <p className="text-sm font-bold">Configured Rules permission is required.</p>
           </div>
         </AdminPanel>
       </AdminLayout>
@@ -1055,37 +619,16 @@ function Commissions() {
       active="commissions"
       eyebrow="Pricing"
       title="Configured Rules"
-      description="Manage catalog-driven commission and surcharge rules, slabs and eligible hierarchy distributions."
+      description="Manage slab rules and their hierarchy allocations together using the backend service catalog."
     >
       <div className="inline-flex rounded-xl border border-border bg-white p-1">
-        {canListRules && (
-          <button
-            type="button"
-            onClick={() => switchView("RULES")}
-            className={`rounded-lg px-4 py-2.5 text-xs font-extrabold transition ${
-              view === "RULES" ? "bg-secondary text-white" : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            Configured Rules
-          </button>
-        )}
-        {canListDistributions && (
-          <button
-            type="button"
-            onClick={() => switchView("DISTRIBUTIONS")}
-            className={`rounded-lg px-4 py-2.5 text-xs font-extrabold transition ${
-              view === "DISTRIBUTIONS"
-                ? "bg-secondary text-white"
-                : "text-muted-foreground hover:bg-muted"
-            }`}
-          >
-            Distribution Setup
-          </button>
-        )}
+        <span className="rounded-lg bg-secondary px-4 py-2.5 text-xs font-extrabold text-white">
+          Configured Rules
+        </span>
         {canViewHierarchy && (
           <Link
             to="/admin/commissions/hierarchy"
-            className="rounded-lg px-4 py-2.5 text-xs font-extrabold text-muted-foreground transition hover:bg-muted"
+            className="rounded-lg px-4 py-2.5 text-xs font-extrabold text-muted-foreground hover:bg-muted"
           >
             Hierarchy
           </Link>
@@ -1094,37 +637,11 @@ function Commissions() {
 
       <CommissionCalculator />
 
-      {view === "RULES" ? (
-        <div className="mt-5 grid gap-4 md:grid-cols-4">
-          <Summary icon={SlidersHorizontal} label="Total rules" value={rules.length} />
-          <Summary icon={CheckCircle2} label="Active" value={activeRuleCount} tone="good" />
-          <Summary icon={X} label="Inactive" value={inactiveRuleCount} />
-          <Summary icon={Percent} label="Services" value={serviceCount} />
-        </div>
-      ) : (
-        <div className="mt-5 grid gap-4 md:grid-cols-4">
-          <Summary
-            icon={UsersRound}
-            label="Recipients"
-            value={activeSelectedDistributions.length}
-          />
-          <MetricSummary
-            icon={Percent}
-            label="Percentage shares"
-            value={`${selectedTotals.percentage.toFixed(2)}%`}
-          />
-          <MetricSummary
-            icon={IndianRupee}
-            label="Fixed shares"
-            value={money(selectedTotals.fixed)}
-          />
-          <MetricSummary
-            icon={Layers3}
-            label="Rule status"
-            value={selectedRule?.isActive ? "ACTIVE" : selectedRule ? "INACTIVE" : "—"}
-          />
-        </div>
-      )}
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <Summary label="Total rules" value={rules.length} />
+        <Summary label="Active rules" value={activeRuleCount} tone="good" />
+        <Summary label="Catalog services" value={catalog.length} />
+      </div>
 
       {error && (
         <p
@@ -1140,100 +657,55 @@ function Commissions() {
         </p>
       )}
 
-      {view === "RULES" && pendingRuleStatus && (
-        <AdminPanel className="mt-5 border-amber-200 bg-amber-50/60">
+      {pendingStatus && (
+        <AdminPanel className="mt-5 border-amber-200 bg-amber-50/50">
           <p className="text-sm font-black text-secondary">
-            {pendingRuleStatus.nextActive ? "Reactivate" : "Deactivate"} this configured rule?
+            {pendingStatus.nextActive ? "Reactivate" : "Deactivate"} this configured rule?
           </p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {pendingRuleStatus.rule.serviceType} · {pendingRuleStatus.rule.role} ·{" "}
-            {pendingRuleStatus.rule.operator || "Any operator"} ·{" "}
-            {money(pendingRuleStatus.rule.minAmount)} to {money(pendingRuleStatus.rule.maxAmount)}
-          </p>
-          <p className="mt-2 text-xs leading-5 text-amber-900">
-            {pendingRuleStatus.nextActive
-              ? "The rule will become eligible for matching again."
-              : "The backend soft-deactivates the rule. Old commission records keep their rule link."}
+          <p className="mt-1 text-xs text-muted-foreground">
+            {catalogServiceLabel(catalog, pendingStatus.rule.serviceType)} ·{" "}
+            {pendingStatus.rule.role}· {pendingStatus.rule.rulePurpose}
           </p>
           <div className="mt-4 flex gap-2">
             <button
               type="button"
-              disabled={saving}
-              onClick={() => setPendingRuleStatus(null)}
-              className="rounded-xl border border-border bg-white px-4 py-2 text-xs font-extrabold text-secondary disabled:opacity-50"
+              onClick={() => setPendingStatus(null)}
+              className="rounded-xl border border-border bg-white px-4 py-2 text-xs font-bold"
             >
               Cancel
             </button>
             <button
               type="button"
               disabled={saving}
-              onClick={() => void confirmRuleStatusChange()}
-              className="inline-flex items-center gap-2 rounded-xl bg-secondary px-4 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+              onClick={() => void confirmStatusChange()}
+              className="rounded-xl bg-secondary px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
             >
-              {saving && <Loader2 size={14} className="animate-spin" />} Confirm
+              {saving ? "Saving…" : "Confirm"}
             </button>
           </div>
         </AdminPanel>
       )}
 
-      {view === "DISTRIBUTIONS" && pendingDistributionStatus && (
-        <AdminPanel className="mt-5 border-amber-200 bg-amber-50/60">
-          <p className="text-sm font-black text-secondary">
-            {pendingDistributionStatus.nextActive ? "Reactivate" : "Deactivate"} this distribution?
-          </p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {pendingDistributionStatus.distribution.recipientRole} ·{" "}
-            {distributionRate(pendingDistributionStatus.distribution)} · Priority{" "}
-            {pendingDistributionStatus.distribution.priority}
-          </p>
-          <p className="mt-2 text-xs leading-5 text-amber-900">
-            {pendingDistributionStatus.nextActive
-              ? "The recipient role will be used again when this rule matches and an eligible hierarchy user exists."
-              : "The DELETE endpoint is a soft deactivation. Old distribution transactions keep their historical link."}
-          </p>
-          <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => setPendingDistributionStatus(null)}
-              className="rounded-xl border border-border bg-white px-4 py-2 text-xs font-extrabold text-secondary disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void confirmDistributionStatusChange()}
-              className="inline-flex items-center gap-2 rounded-xl bg-secondary px-4 py-2 text-xs font-extrabold text-white disabled:opacity-50"
-            >
-              {saving && <Loader2 size={14} className="animate-spin" />} Confirm
-            </button>
-          </div>
-        </AdminPanel>
-      )}
-
-      {view === "RULES" && ruleEditorOpen && (
+      {editorOpen && (
         <AdminPanel className="mt-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-extrabold uppercase tracking-wider text-primary">
-                {editingRuleId ? "Edit rule" : "New rule"}
+                {editingRuleId ? "Edit configured rule" : "New configured rule"}
               </p>
-              <h2 className="mt-1 text-xl font-black">
-                {editingRuleId ? "Update configured rule" : "Create configured rule"}
-              </h2>
+              <h2 className="mt-1 text-xl font-black">Rule, slab and hierarchy allocations</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Service and provider values are submitted from their backend registries.
+                Saving an edit synchronizes the complete allocation list shown in this form.
               </p>
             </div>
             <button
               type="button"
-              onClick={() => {
-                setRuleEditorOpen(false);
-                setEditingRuleId(null);
-                setRuleDraft(draftFromCatalog(serviceCatalog));
-              }}
               aria-label="Close rule editor"
+              onClick={() => {
+                setEditorOpen(false);
+                setEditingRuleId(null);
+                resetDraft();
+              }}
               className="grid h-9 w-9 place-items-center rounded-xl border border-border text-muted-foreground hover:bg-muted"
             >
               <X size={16} />
@@ -1241,21 +713,17 @@ function Commissions() {
           </div>
 
           {loadingRule ? (
-            <div className="mt-6 flex items-center gap-2 rounded-xl bg-muted p-4 text-sm font-semibold text-muted-foreground">
-              <Loader2 size={16} className="animate-spin" /> Loading latest rule…
-            </div>
+            <LoadingBox text="Loading latest rule…" />
           ) : (
-            <form onSubmit={submitRule} className="mt-6 space-y-5">
+            <form onSubmit={submitRule} className="mt-6 space-y-6">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                <Field label="Service *" hint="Options are loaded from the backend catalog.">
+                <Field label="Service *">
                   <select
-                    value={ruleDraft.serviceType}
-                    disabled={catalogLoading || !serviceCatalog.length}
-                    onChange={(event) => void changeRuleService(event.target.value)}
+                    value={draft.serviceType}
+                    onChange={(event) => void changeService(event.target.value)}
                     className={inputClass}
                   >
-                    <option value="">Select service</option>
-                    {serviceCatalog.map((item) => (
+                    {catalog.map((item) => (
                       <option key={item.serviceType} value={item.serviceType}>
                         {item.label}
                       </option>
@@ -1263,27 +731,36 @@ function Commissions() {
                   </select>
                 </Field>
                 <Field label="Rule purpose *">
-                  <Select
-                    value={ruleDraft.rulePurpose}
-                    onChange={(value) =>
-                      setRuleDraft((current) => ({
+                  <select
+                    value={draft.rulePurpose}
+                    onChange={(event) =>
+                      setDraft((current) => ({
                         ...current,
-                        rulePurpose: value as CommissionRulePurpose,
+                        rulePurpose: event.target.value as CommissionRulePurpose,
                       }))
                     }
                     className={inputClass}
-                    options={selectedDraftCatalog?.supportedRulePurposes || []}
-                  />
+                  >
+                    {(selectedCatalog?.supportedRulePurposes || []).map((purpose) => (
+                      <option key={purpose} value={purpose}>
+                        {purpose}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
-                <Field label="Provider" hint="Optional. Select Any provider for a general rule.">
+                <Field label="Provider" hint="Any provider submits operator as null.">
                   <select
-                    value={ruleDraft.operator}
+                    value={draft.operator}
                     disabled={
-                      !selectedProviderRegistry ||
-                      (providerLoading === selectedProviderRegistry && !selectedProviders.length)
+                      !selectedRegistry ||
+                      Boolean(
+                        selectedRegistry &&
+                        providerLoading[selectedRegistry] &&
+                        !selectedProviders.length,
+                      )
                     }
                     onChange={(event) =>
-                      setRuleDraft((current) => ({ ...current, operator: event.target.value }))
+                      setDraft((current) => ({ ...current, operator: event.target.value }))
                     }
                     className={inputClass}
                   >
@@ -1294,40 +771,35 @@ function Commissions() {
                       </option>
                     ))}
                   </select>
-                  {selectedProviderRegistry && providerLoading === selectedProviderRegistry ? (
-                    <p className="mt-2 text-[10px] font-semibold text-muted-foreground">
-                      Loading providers…
-                    </p>
-                  ) : providerError ? (
-                    <p className="mt-2 text-[10px] font-semibold text-red-600">{providerError}</p>
-                  ) : selectedProviderRegistry && !selectedProviders.length ? (
-                    <p className="mt-2 text-[10px] font-semibold text-muted-foreground">
-                      No providers are currently available in this registry.
-                    </p>
-                  ) : !selectedProviderRegistry ? (
-                    <p className="mt-2 text-[10px] font-semibold text-muted-foreground">
-                      This service does not use an AEPS or payout provider registry.
-                    </p>
-                  ) : null}
+                  {selectedRegistry && providerLoading[selectedRegistry] && (
+                    <FieldStatus>Loading providers…</FieldStatus>
+                  )}
+                  {providerError && <FieldStatus error>{providerError}</FieldStatus>}
                 </Field>
-                <Field label="Source role *" hint="Role whose transaction matches this rule.">
-                  <Select
-                    value={ruleDraft.role}
-                    onChange={(value) => setRuleDraft((current) => ({ ...current, role: value }))}
+                <Field label="Source role *" hint="Active roles are loaded from /roles.">
+                  <select
+                    value={draft.role}
+                    disabled={rolesLoading}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, role: event.target.value }))
+                    }
                     className={inputClass}
-                    options={["RETAILER", "DISTRIBUTOR", "MASTER_DISTRIBUTOR"]}
-                  />
+                  >
+                    <option value="">Select source role</option>
+                    {roleOptions.map((role) => (
+                      <option key={role.value} value={role.value}>
+                        {role.label}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
-                <Field
-                  label="Priority"
-                  hint="Higher priority is evaluated first among matching rules."
-                >
+                <Field label="Priority">
                   <input
                     type="number"
                     step="1"
-                    value={ruleDraft.priority}
+                    value={draft.priority}
                     onChange={(event) =>
-                      setRuleDraft((current) => ({ ...current, priority: event.target.value }))
+                      setDraft((current) => ({ ...current, priority: event.target.value }))
                     }
                     className={inputClass}
                   />
@@ -1336,135 +808,107 @@ function Commissions() {
 
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <Field label="Value type *">
-                  <Select
-                    value={ruleDraft.commissionType}
-                    onChange={(value) =>
-                      setRuleDraft((current) => ({
+                  <select
+                    value={draft.commissionType}
+                    onChange={(event) =>
+                      setDraft((current) => ({
                         ...current,
-                        commissionType: value as CommissionRuleType,
+                        commissionType: event.target.value as CommissionRuleType,
                       }))
                     }
                     className={inputClass}
-                    options={selectedDraftCatalog?.supportedValueTypes || []}
-                  />
+                  >
+                    {(selectedCatalog?.supportedValueTypes || []).map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
                 <Field
                   label={
-                    ruleDraft.commissionType === "PERCENTAGE"
-                      ? "Percentage value *"
-                      : "Fixed value *"
-                  }
-                  hint={
-                    ruleDraft.commissionType === "PERCENTAGE"
-                      ? "0 to 100"
-                      : "Amount cannot be negative."
+                    draft.commissionType === "PERCENTAGE" ? "Percentage value *" : "Fixed value *"
                   }
                 >
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground">
-                      {ruleDraft.commissionType === "PERCENTAGE" ? "%" : "₹"}
-                    </span>
-                    <input
-                      type="number"
-                      min="0"
-                      max={ruleDraft.commissionType === "PERCENTAGE" ? "100" : undefined}
-                      step="0.0001"
-                      value={ruleDraft.commissionValue}
-                      onChange={(event) =>
-                        setRuleDraft((current) => ({
-                          ...current,
-                          commissionValue: event.target.value,
-                        }))
-                      }
-                      className={`${inputClass} pl-9`}
-                    />
-                  </div>
+                  <NumberInput
+                    icon={draft.commissionType === "PERCENTAGE" ? "%" : "₹"}
+                    value={draft.commissionValue}
+                    min="0"
+                    max={draft.commissionType === "PERCENTAGE" ? "100" : undefined}
+                    step="0.0001"
+                    onChange={(value) =>
+                      setDraft((current) => ({ ...current, commissionValue: value }))
+                    }
+                  />
                 </Field>
-                {showDraftTds ? (
-                  <Field
-                    label="TDS rate (%) *"
-                    hint="Percentage deducted from earned commission: 0 to 100."
-                  >
-                    <div className="relative">
-                      <Percent
-                        size={14}
-                        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-                      />
-                      <input
-                        required
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={ruleDraft.tdsRate}
-                        onChange={(event) =>
-                          setRuleDraft((current) => ({
-                            ...current,
-                            tdsRate: event.target.value,
-                          }))
-                        }
-                        className={`${inputClass} pl-9`}
-                      />
-                    </div>
+                {showTds && (
+                  <Field label="TDS rate (%) *" hint="0–100, maximum 2 decimal places.">
+                    <NumberInput
+                      icon="%"
+                      value={draft.tdsRate}
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      onChange={(value) => setDraft((current) => ({ ...current, tdsRate: value }))}
+                    />
                   </Field>
-                ) : null}
-                <Field label="Minimum transaction amount" hint="Blank means no lower limit.">
-                  <div className="relative">
-                    <IndianRupee
-                      size={14}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={ruleDraft.minAmount}
-                      onChange={(event) =>
-                        setRuleDraft((current) => ({ ...current, minAmount: event.target.value }))
-                      }
-                      className={`${inputClass} pl-9`}
-                    />
-                  </div>
+                )}
+                <Field label="Minimum amount" hint="Blank sends null.">
+                  <NumberInput
+                    icon="₹"
+                    value={draft.minAmount}
+                    min="0"
+                    step="0.01"
+                    onChange={(value) => setDraft((current) => ({ ...current, minAmount: value }))}
+                  />
                 </Field>
-                <Field label="Maximum transaction amount" hint="Blank means no upper limit.">
-                  <div className="relative">
-                    <IndianRupee
-                      size={14}
-                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={ruleDraft.maxAmount}
-                      onChange={(event) =>
-                        setRuleDraft((current) => ({ ...current, maxAmount: event.target.value }))
-                      }
-                      className={`${inputClass} pl-9`}
-                    />
-                  </div>
+                <Field label="Maximum amount" hint="Blank sends null.">
+                  <NumberInput
+                    icon="₹"
+                    value={draft.maxAmount}
+                    min="0"
+                    step="0.01"
+                    onChange={(value) => setDraft((current) => ({ ...current, maxAmount: value }))}
+                  />
                 </Field>
               </div>
 
               <label className="flex w-fit cursor-pointer items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm font-bold text-secondary">
                 <input
                   type="checkbox"
-                  checked={ruleDraft.isActive}
+                  checked={draft.isActive}
                   onChange={(event) =>
-                    setRuleDraft((current) => ({ ...current, isActive: event.target.checked }))
+                    setDraft((current) => ({ ...current, isActive: event.target.checked }))
                   }
                   className="h-4 w-4 accent-primary"
                 />
                 Rule is active
               </label>
 
+              {showAllocations ? (
+                <AllocationEditor
+                  allocations={draft.hierarchyAllocations}
+                  roleOptions={roleOptions}
+                  activePercentageTotal={activePercentageTotal}
+                  onAdd={addAllocation}
+                  onUpdate={updateAllocation}
+                  onRemove={removeAllocation}
+                />
+              ) : (
+                <div className="rounded-xl bg-muted p-4 text-xs text-muted-foreground">
+                  {draft.rulePurpose === "SURCHARGE"
+                    ? "Surcharge applies to the selected source role. TDS is 0 and hierarchy allocations are submitted as an empty array."
+                    : "This service does not support hierarchy distributions. Allocations are submitted as an empty array."}
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-3 border-t border-border pt-5">
                 <button
                   type="button"
                   onClick={() => {
-                    setRuleEditorOpen(false);
+                    setEditorOpen(false);
                     setEditingRuleId(null);
-                    setRuleDraft(draftFromCatalog(serviceCatalog));
+                    resetDraft();
                   }}
                   className="rounded-xl border border-border px-5 py-3 text-xs font-extrabold text-secondary hover:bg-muted"
                 >
@@ -1481,7 +925,7 @@ function Commissions() {
                   ) : (
                     <Plus size={15} />
                   )}
-                  {saving ? "Saving…" : editingRuleId ? "Save changes" : "Create rule"}
+                  {saving ? "Saving…" : editingRuleId ? "Save rule and allocations" : "Create rule"}
                 </button>
               </div>
             </form>
@@ -1489,945 +933,436 @@ function Commissions() {
         </AdminPanel>
       )}
 
-      {view === "RULES" && (
-        <AdminPanel className="mt-5">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <h2 className="text-xl font-black">Configured rules</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {visibleRules.length} of {rules.length} rule{rules.length === 1 ? "" : "s"} shown.
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <label className="flex min-w-0 items-center gap-2 rounded-xl border border-border px-3 py-2.5 sm:w-72">
-                <Search size={15} className="text-muted-foreground" />
-                <input
-                  value={ruleQuery}
-                  onChange={(event) => setRuleQuery(event.target.value)}
-                  placeholder="Search service, operator, role…"
-                  className="min-w-0 flex-1 bg-transparent text-xs outline-none"
-                />
-              </label>
-              <Select
-                value={ruleStatus}
-                onChange={(value) => setRuleStatus(value as typeof ruleStatus)}
-                options={["ALL", "ACTIVE", "INACTIVE"]}
-              />
-              <Select
-                value={ruleRoleFilter}
-                onChange={setRuleRoleFilter}
-                options={["ALL", "RETAILER", "DISTRIBUTOR", "MASTER_DISTRIBUTOR"]}
-              />
-              <button
-                type="button"
-                onClick={() => void refreshAll()}
-                disabled={rulesLoading || catalogLoading || distributionsLoading}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-xs font-extrabold text-secondary hover:bg-muted disabled:opacity-50"
-              >
-                <RefreshCw
-                  size={14}
-                  className={
-                    rulesLoading || catalogLoading || distributionsLoading ? "animate-spin" : ""
-                  }
-                />{" "}
-                Refresh
-              </button>
-              <button
-                type="button"
-                onClick={startCreateRule}
-                disabled={!canCreateRule || catalogLoading || !serviceCatalog.length}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-white"
-              >
-                <Plus size={14} /> New rule
-              </button>
-            </div>
+      <AdminPanel className="mt-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <h2 className="text-xl font-black">Configured rules</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {visibleRules.length} of {rules.length} rules shown.
+            </p>
           </div>
-
-          {rulesLoading && !rules.length ? (
-            <LoadingBox text="Loading configured rules…" />
-          ) : (
-            <div className="mt-6 overflow-x-auto rounded-xl border border-border">
-              <table className="min-w-[1050px] w-full text-left text-xs">
-                <thead className="bg-muted/70 text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3">Service / operator</th>
-                    <th className="px-4 py-3">Role</th>
-                    <th className="px-4 py-3">Slab</th>
-                    <th className="px-4 py-3">Rule value</th>
-                    <th className="px-4 py-3">Distributions</th>
-                    <th className="px-4 py-3">Priority</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {visibleRules.map((rule) => {
-                    const catalogItem = catalogItemForService(serviceCatalog, rule.serviceType);
-                    const distributionsAllowed = shouldShowRuleDistributions(
-                      catalogItem,
-                      rule.rulePurpose,
-                    );
-                    const linked = distributions.filter(
-                      (item) => item.commissionRuleId === rule.id,
-                    );
-                    const activeLinked = linked.filter((item) => item.isActive).length;
-                    return (
-                      <tr key={rule.id} className="bg-white align-top hover:bg-muted/25">
-                        <td className="px-4 py-4">
-                          <p className="font-black text-secondary">
-                            {catalogServiceLabel(serviceCatalog, rule.serviceType)}
-                          </p>
-                          <p className="mt-1 text-[10px] font-black text-primary">
-                            {rule.rulePurpose}
-                          </p>
-                          <p className="mt-1 text-[11px] text-muted-foreground">
-                            {rule.operator || "Any operator"}
-                          </p>
-                          <p
-                            className="mt-2 max-w-48 truncate font-mono text-[9px] text-muted-foreground"
-                            title={rule.id}
-                          >
-                            {rule.id}
-                          </p>
-                        </td>
-                        <td className="px-4 py-4 font-extrabold text-secondary">{rule.role}</td>
-                        <td className="px-4 py-4">
-                          <p className="font-bold text-secondary">
-                            {money(rule.minAmount)} → {money(rule.maxAmount)}
-                          </p>
-                        </td>
-                        <td className="px-4 py-4">
-                          <p className="font-black text-secondary">{ruleRate(rule)}</p>
-                          <p className="mt-1 text-[10px] text-muted-foreground">
-                            {rule.commissionType}
-                          </p>
-                          <p className="mt-1 text-[10px] font-bold text-muted-foreground">
-                            {shouldShowRuleTds(catalogItem, rule.rulePurpose)
-                              ? `TDS ${Number(rule.tdsRate ?? 0)}%`
-                              : "TDS not applicable"}
-                          </p>
-                        </td>
-                        <td className="px-4 py-4">
-                          {distributionsAllowed ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedRuleId(rule.id);
-                                switchView("DISTRIBUTIONS");
-                              }}
-                              className="rounded-lg border border-border px-3 py-2 font-extrabold text-secondary hover:bg-muted"
-                            >
-                              {activeLinked} active / {linked.length} total
-                            </button>
-                          ) : (
-                            <span className="text-[10px] font-bold text-muted-foreground">
-                              Not applicable
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4 font-black text-secondary">{rule.priority}</td>
-                        <td className="px-4 py-4">
-                          <StatusPill active={rule.isActive} />
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              disabled={!canUpdateRule}
-                              onClick={() => void startEditRule(rule)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 font-extrabold text-secondary hover:bg-muted"
-                            >
-                              <Edit3 size={12} /> Edit
-                            </button>
-                            <button
-                              type="button"
-                              disabled={rule.isActive ? !canDeactivateRule : !canUpdateRule}
-                              onClick={() =>
-                                setPendingRuleStatus({ rule, nextActive: !rule.isActive })
-                              }
-                              className={`rounded-lg border px-3 py-2 font-extrabold ${
-                                rule.isActive
-                                  ? "border-amber-200 text-amber-800 hover:bg-amber-50"
-                                  : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                              }`}
-                            >
-                              {rule.isActive ? "Deactivate" : "Reactivate"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {!visibleRules.length && (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="px-4 py-12 text-center text-sm text-muted-foreground"
-                      >
-                        No configured rules match the current filters.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </AdminPanel>
-      )}
-
-      {view === "DISTRIBUTIONS" && (
-        <>
-          <AdminPanel className="mt-5">
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-primary">
-                  Distribution rule
-                </p>
-                <h2 className="mt-1 text-xl font-black">Choose the commission pool to split</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Each recipient role can have one distribution configuration per commission rule.
-                </p>
-                <div className="mt-4 max-w-3xl">
-                  <Field
-                    label="Commission rule *"
-                    hint="Distributions run only when this rule wins the commission match."
-                  >
-                    <CommissionRuleSelect
-                      rules={distributionRules}
-                      serviceCatalog={serviceCatalog}
-                      value={selectedRuleId}
-                      onChange={(value) => {
-                        setSelectedRuleId(value);
-                        setDistributionEditorOpen(false);
-                        setPendingDistributionStatus(null);
-                        setError("");
-                        setNotice("");
-                      }}
-                      disabled={!distributionRules.length}
-                    />
-                  </Field>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => void refreshAll()}
-                  disabled={rulesLoading || distributionsLoading}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-xs font-extrabold text-secondary hover:bg-muted disabled:opacity-50"
-                >
-                  <RefreshCw
-                    size={14}
-                    className={rulesLoading || distributionsLoading ? "animate-spin" : ""}
-                  />{" "}
-                  Refresh
-                </button>
-                <button
-                  type="button"
-                  onClick={startCreateDistribution}
-                  disabled={!canCreateDistribution || !selectedRuleId}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Plus size={14} /> New distribution
-                </button>
-              </div>
-            </div>
-
-            {selectedRule && (
-              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <InfoBox
-                  label="Service / provider"
-                  value={`${catalogServiceLabel(serviceCatalog, selectedRule.serviceType)} · ${selectedRule.operator || "Any operator"}`}
-                />
-                <InfoBox label="Source role" value={selectedRule.role} />
-                <InfoBox
-                  label="Commission pool"
-                  value={`${ruleRate(selectedRule)} · ${selectedRule.commissionType}`}
-                />
-                <InfoBox
-                  label="Transaction slab"
-                  value={`${money(selectedRule.minAmount)} → ${money(selectedRule.maxAmount)}`}
-                />
-              </div>
-            )}
-
-            <div className="mt-5 rounded-xl bg-muted/60 p-4 text-xs leading-5 text-muted-foreground">
-              <strong className="text-secondary">How this backend flow works:</strong> PERCENTAGE
-              distributions are calculated from the matched <strong>commission pool</strong>, not
-              from the gross transaction. Active distributions run by priority. If the matching
-              hierarchy user is missing or not eligible, that share is skipped and stays in the
-              source merchant's remainder. The backend also rejects any real execution that would
-              allocate more than the full commission pool.
-            </div>
-          </AdminPanel>
-
-          {selectedRule && (
-            <div
-              className={`mt-5 rounded-xl border p-4 ${health.tone === "good" ? "border-emerald-200 bg-emerald-50" : health.tone === "danger" ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <label className="flex min-w-0 items-center gap-2 rounded-xl border border-border px-3 py-2.5 sm:w-72">
+              <Search size={15} className="text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search service, provider, role…"
+                className="min-w-0 flex-1 bg-transparent text-xs outline-none"
+              />
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}
+              className="rounded-xl border border-border bg-white px-3 text-xs font-bold"
             >
-              <p
-                className={`text-sm font-black ${health.tone === "good" ? "text-emerald-800" : health.tone === "danger" ? "text-red-800" : "text-amber-900"}`}
-              >
-                {health.title}
-              </p>
-              <p
-                className={`mt-1 text-xs leading-5 ${health.tone === "good" ? "text-emerald-700" : health.tone === "danger" ? "text-red-700" : "text-amber-800"}`}
-              >
-                {health.detail}
-              </p>
-              {!selectedRule.isActive && (
-                <p className="mt-2 text-xs font-bold text-amber-900">
-                  This commission rule is INACTIVE, so its distributions will not run until the rule
-                  is reactivated.
-                </p>
-              )}
-            </div>
-          )}
+              <option value="ALL">All statuses</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+            <select
+              value={roleFilter}
+              onChange={(event) => setRoleFilter(event.target.value)}
+              className="rounded-xl border border-border bg-white px-3 text-xs font-bold"
+            >
+              <option value="ALL">All source roles</option>
+              {filterRoles.map((role) => (
+                <option key={role.value} value={role.value}>
+                  {role.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => void refreshAll()}
+              disabled={rulesLoading || catalogLoading || rolesLoading}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-xs font-extrabold text-secondary disabled:opacity-50"
+            >
+              <RefreshCw
+                size={14}
+                className={rulesLoading || catalogLoading || rolesLoading ? "animate-spin" : ""}
+              />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={startCreate}
+              disabled={!canCreate || catalogLoading || rolesLoading || !catalog.length}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-extrabold text-white disabled:opacity-50"
+            >
+              <Plus size={14} /> New rule
+            </button>
+          </div>
+        </div>
 
-          {distributionEditorOpen && (
-            <AdminPanel className="mt-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-extrabold uppercase tracking-wider text-primary">
-                    {editingDistributionId ? "Edit distribution" : "New distribution"}
-                  </p>
-                  <h2 className="mt-1 text-xl font-black">
-                    {editingDistributionId ? "Update hierarchy share" : "Add a hierarchy share"}
-                  </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    A new distribution needs a valid ACTIVE recipient role. Reactivating an existing
-                    distribution also requires the role to be active.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDistributionEditorOpen(false);
-                    setEditingDistributionId(null);
-                    setDistributionDraft(emptyDistributionDraft);
-                  }}
-                  aria-label="Close distribution editor"
-                  className="grid h-9 w-9 place-items-center rounded-xl border border-border text-muted-foreground hover:bg-muted"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              {loadingDistribution ? (
-                <div className="mt-6 flex items-center gap-2 rounded-xl bg-muted p-4 text-sm font-semibold text-muted-foreground">
-                  <Loader2 size={16} className="animate-spin" /> Loading latest distribution…
-                </div>
-              ) : (
-                <form onSubmit={submitDistribution} className="mt-6 space-y-5">
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                    <div className="xl:col-span-2">
-                      <Field
-                        label="Commission rule *"
-                        hint={
-                          editingDistributionId
-                            ? "A distribution cannot be moved to another rule. Create a new one instead."
-                            : "Choose the commission pool that this share belongs to."
-                        }
-                      >
-                        <CommissionRuleSelect
-                          rules={distributionRules}
-                          serviceCatalog={serviceCatalog}
-                          value={distributionDraft.commissionRuleId}
-                          onChange={(value) =>
-                            setDistributionDraft((current) => ({
-                              ...current,
-                              commissionRuleId: value,
-                            }))
-                          }
-                          disabled={Boolean(editingDistributionId)}
-                        />
-                      </Field>
-                    </div>
-                    <Field
-                      label="Recipient role *"
-                      hint="One config per recipient role per rule. Custom active role codes are supported."
-                    >
-                      <input
-                        value={distributionDraft.recipientRole}
-                        onChange={(event) =>
-                          setDistributionDraft((current) => ({
-                            ...current,
-                            recipientRole: event.target.value,
-                          }))
-                        }
-                        placeholder="DISTRIBUTOR"
-                        className={inputClass}
-                      />
-                      <SuggestionChips
-                        value={distributionDraft.recipientRole}
-                        onChange={(value) =>
-                          setDistributionDraft((current) => ({
-                            ...current,
-                            recipientRole: value,
-                          }))
-                        }
-                        options={["RETAILER", "DISTRIBUTOR", "MASTER_DISTRIBUTOR"]}
-                      />
-                    </Field>
-                    <Field
-                      label="Distribution type *"
-                      hint="PERCENTAGE means percentage of commission pool."
-                    >
-                      <Select
-                        value={distributionDraft.distributionType}
-                        onChange={(value) =>
-                          setDistributionDraft((current) => ({
-                            ...current,
-                            distributionType: value as CommissionDistributionType,
-                          }))
-                        }
-                        className={inputClass}
-                        options={["FIXED", "PERCENTAGE"]}
-                      />
-                    </Field>
-                    <Field label="Priority" hint="Higher priority is processed first.">
-                      <input
-                        type="number"
-                        step="1"
-                        value={distributionDraft.priority}
-                        onChange={(event) =>
-                          setDistributionDraft((current) => ({
-                            ...current,
-                            priority: event.target.value,
-                          }))
-                        }
-                        className={inputClass}
-                      />
-                    </Field>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Field
-                      label={
-                        distributionDraft.distributionType === "PERCENTAGE"
-                          ? "Share of commission pool *"
-                          : "Fixed share from commission pool *"
-                      }
-                      hint={
-                        distributionDraft.distributionType === "PERCENTAGE"
-                          ? "0 to 100. This is not a percentage of the gross transaction."
-                          : "The backend will reject execution if total active shares become larger than the actual commission pool."
-                      }
-                    >
-                      <div className="relative">
-                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground">
-                          {distributionDraft.distributionType === "PERCENTAGE" ? "%" : "₹"}
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          max={
-                            distributionDraft.distributionType === "PERCENTAGE" ? "100" : undefined
-                          }
-                          step="0.0001"
-                          value={distributionDraft.distributionValue}
-                          onChange={(event) =>
-                            setDistributionDraft((current) => ({
-                              ...current,
-                              distributionValue: event.target.value,
-                            }))
-                          }
-                          className={`${inputClass} pl-9`}
-                        />
-                      </div>
-                    </Field>
-                    <div className="flex items-end">
-                      <label className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm font-bold text-secondary">
-                        <input
-                          type="checkbox"
-                          checked={distributionDraft.isActive}
-                          onChange={(event) =>
-                            setDistributionDraft((current) => ({
-                              ...current,
-                              isActive: event.target.checked,
-                            }))
-                          }
-                          className="h-4 w-4 accent-primary"
-                        />
-                        Distribution is active
-                      </label>
-                    </div>
-                  </div>
-
-                  {distributionDraft.commissionRuleId &&
-                    distributionDraft.distributionValue.trim() && (
-                      <DraftHealth
-                        health={proposedDistributionHealth(
-                          distributionDraft,
-                          editingDistributionId,
-                        )}
-                      />
-                    )}
-
-                  <div className="flex flex-wrap gap-3 border-t border-border pt-5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDistributionEditorOpen(false);
-                        setEditingDistributionId(null);
-                        setDistributionDraft(emptyDistributionDraft);
-                      }}
-                      className="rounded-xl border border-border px-5 py-3 text-xs font-extrabold text-secondary hover:bg-muted"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      disabled={saving}
-                      className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-xs font-extrabold text-white disabled:opacity-60"
-                    >
-                      {saving ? (
-                        <Loader2 size={15} className="animate-spin" />
-                      ) : editingDistributionId ? (
-                        <Edit3 size={15} />
-                      ) : (
-                        <Plus size={15} />
-                      )}
-                      {saving
-                        ? "Saving…"
-                        : editingDistributionId
-                          ? "Save distribution"
-                          : "Create distribution"}
-                    </button>
-                  </div>
-                </form>
-              )}
-            </AdminPanel>
-          )}
-
-          <AdminPanel className="mt-5">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <h2 className="text-xl font-black">Recipient distributions</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {selectedRule
-                    ? `${visibleDistributions.length} of ${selectedRuleDistributions.length} distribution${selectedRuleDistributions.length === 1 ? "" : "s"} shown for the selected rule.`
-                    : "Select a distribution-enabled configured rule first."}
-                </p>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                <label className="flex min-w-0 items-center gap-2 rounded-xl border border-border px-3 py-2.5 sm:w-72">
-                  <Search size={15} className="text-muted-foreground" />
-                  <input
-                    value={distributionQuery}
-                    onChange={(event) => setDistributionQuery(event.target.value)}
-                    placeholder="Search recipient role…"
-                    className="min-w-0 flex-1 bg-transparent text-xs outline-none"
-                  />
-                </label>
-                <Select
-                  value={distributionStatus}
-                  onChange={(value) => setDistributionStatus(value as typeof distributionStatus)}
-                  options={["ALL", "ACTIVE", "INACTIVE"]}
-                />
-              </div>
-            </div>
-
-            {distributionsLoading && !distributions.length ? (
-              <LoadingBox text="Loading commission distributions…" />
-            ) : (
-              <div className="mt-6 overflow-x-auto rounded-xl border border-border">
-                <table className="min-w-[900px] w-full text-left text-xs">
-                  <thead className="bg-muted/70 text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3">Recipient role</th>
-                      <th className="px-4 py-3">Share</th>
-                      <th className="px-4 py-3">Priority</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Updated</th>
-                      <th className="px-4 py-3">Distribution ID</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {visibleDistributions.map((distribution) => (
-                      <tr key={distribution.id} className="bg-white align-top hover:bg-muted/25">
-                        <td className="px-4 py-4">
-                          <p className="font-black text-secondary">{distribution.recipientRole}</p>
-                          {selectedRule?.role === distribution.recipientRole && (
-                            <p className="mt-1 text-[10px] font-bold text-amber-700">
-                              Same as source role
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-4 py-4">
-                          <p className="font-black text-secondary">
-                            {distributionRate(distribution)}
-                          </p>
-                          <p className="mt-1 text-[10px] text-muted-foreground">
-                            {distribution.distributionType}
-                          </p>
-                        </td>
-                        <td className="px-4 py-4 font-black text-secondary">
-                          {distribution.priority}
-                        </td>
-                        <td className="px-4 py-4">
-                          <StatusPill active={distribution.isActive} />
-                        </td>
-                        <td className="px-4 py-4 text-[11px] text-muted-foreground">
-                          {dateTime(distribution.updatedAt || distribution.createdAt)}
-                        </td>
-                        <td className="px-4 py-4">
-                          <p
-                            className="max-w-52 truncate font-mono text-[9px] text-muted-foreground"
-                            title={distribution.id}
-                          >
-                            {distribution.id}
-                          </p>
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              disabled={!canUpdateDistribution}
-                              onClick={() => void startEditDistribution(distribution)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 font-extrabold text-secondary hover:bg-muted"
-                            >
-                              <Edit3 size={12} /> Edit
-                            </button>
-                            <button
-                              type="button"
-                              disabled={
-                                distribution.isActive
-                                  ? !canDeactivateDistribution
-                                  : !canUpdateDistribution
-                              }
-                              onClick={() =>
-                                setPendingDistributionStatus({
-                                  distribution,
-                                  nextActive: !distribution.isActive,
-                                })
-                              }
-                              className={`rounded-lg border px-3 py-2 font-extrabold ${
-                                distribution.isActive
-                                  ? "border-amber-200 text-amber-800 hover:bg-amber-50"
-                                  : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                              }`}
-                            >
-                              {distribution.isActive ? "Deactivate" : "Reactivate"}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {!visibleDistributions.length && (
-                      <tr>
-                        <td
-                          colSpan={7}
-                          className="px-4 py-12 text-center text-sm text-muted-foreground"
-                        >
-                          {selectedRule
-                            ? "No distributions match the current filters for this rule."
-                            : "Create a distribution-enabled configured rule before adding distributions."}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </AdminPanel>
-        </>
-      )}
+        {rulesLoading && !rules.length ? (
+          <LoadingBox text="Loading configured rules…" />
+        ) : (
+          <RuleTable
+            rules={visibleRules}
+            catalog={catalog}
+            expandedRuleId={expandedRuleId}
+            providerName={providerName}
+            canUpdate={canUpdate}
+            canDeactivate={canDeactivate}
+            onExpand={(id) => setExpandedRuleId((current) => (current === id ? "" : id))}
+            onEdit={(rule) => void startEdit(rule)}
+            onStatus={(rule) => setPendingStatus({ rule, nextActive: !rule.isActive })}
+          />
+        )}
+      </AdminPanel>
     </AdminLayout>
   );
 }
 
-function Summary({
-  icon: Icon,
-  label,
-  value,
-  tone,
+function AllocationEditor({
+  allocations,
+  roleOptions,
+  activePercentageTotal,
+  onAdd,
+  onUpdate,
+  onRemove,
 }: {
-  icon: typeof Percent;
-  label: string;
-  value: number;
-  tone?: "good";
+  allocations: AllocationDraft[];
+  roleOptions: Array<{ value: string; label: string }>;
+  activePercentageTotal: number;
+  onAdd: () => void;
+  onUpdate: (key: string, patch: Partial<AllocationDraft>) => void;
+  onRemove: (key: string) => void;
 }) {
   return (
-    <AdminPanel>
-      <div className="flex items-center justify-between">
-        <span
-          className={`grid h-10 w-10 place-items-center rounded-xl ${tone === "good" ? "bg-emerald-50 text-emerald-700" : "bg-primary/10 text-primary"}`}
-        >
-          <Icon size={18} />
-        </span>
-        <span className="text-2xl font-black text-secondary">{value}</span>
-      </div>
-      <p className="mt-4 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-    </AdminPanel>
-  );
-}
-
-function MetricSummary({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: typeof CircleDollarSign;
-  label: string;
-  value: string;
-}) {
-  return (
-    <AdminPanel>
-      <div className="flex items-center justify-between gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-          <Icon size={18} />
-        </span>
-        <span className="truncate text-lg font-black text-secondary" title={value}>
-          {value}
-        </span>
-      </div>
-      <p className="mt-4 text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-    </AdminPanel>
-  );
-}
-
-function CommissionRuleSelect({
-  rules,
-  serviceCatalog,
-  value,
-  onChange,
-  disabled,
-}: {
-  rules: CommissionRule[];
-  serviceCatalog: CommissionServiceCatalog[];
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const selected = rules.find((rule) => rule.id === value);
-  const normalizedQuery = query.trim().toLowerCase();
-  const filteredRules = normalizedQuery
-    ? rules.filter((rule) =>
-        [
-          rule.serviceType,
-          catalogServiceLabel(serviceCatalog, rule.serviceType),
-          rule.operator || "any operator",
-          rule.role,
-          rule.commissionType,
-          ruleRate(rule),
-          rule.id,
-        ].some((item) => String(item).toLowerCase().includes(normalizedQuery)),
-      )
-    : rules;
-
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        if (!nextOpen) setQuery("");
-      }}
-    >
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          aria-label="Choose configured rule"
-          className="group flex min-h-16 w-full items-center gap-3 rounded-2xl border border-border bg-white px-4 py-3 text-left shadow-sm outline-none transition hover:border-primary/40 hover:shadow-md focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60"
-        >
-          <span
-            className={`h-9 w-1 shrink-0 rounded-full ${selected?.isActive ? "bg-emerald-500" : "bg-muted-foreground/35"}`}
-          />
-          {selected ? (
-            <span className="min-w-0 flex-1">
-              <span className="flex flex-wrap items-center gap-2">
-                <span className="truncate text-sm font-black text-secondary">
-                  {catalogServiceLabel(serviceCatalog, selected.serviceType)}
-                </span>
-                <span className="text-xs text-muted-foreground">•</span>
-                <span className="truncate text-xs font-bold text-secondary/75">
-                  {selected.operator || "Any operator"}
-                </span>
-                <StatusPill active={selected.isActive} />
-              </span>
-              <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                <span>{selected.role}</span>
-                <span className="font-extrabold text-primary">{ruleRate(selected)}</span>
-                <span>
-                  {money(selected.minAmount)} → {money(selected.maxAmount)}
-                </span>
-              </span>
-            </span>
-          ) : (
-            <span className="min-w-0 flex-1 text-sm font-semibold text-muted-foreground">
-              {rules.length ? "Choose a configured rule" : "No configured rules found"}
-            </span>
-          )}
-          <ChevronDown
-            size={17}
-            className={`shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
-          />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={8}
-        className="w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-2xl border-border p-0 shadow-xl"
-      >
-        <div className="border-b border-border bg-muted/35 p-3">
-          <div className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2.5">
-            <Search size={15} className="shrink-0 text-muted-foreground" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search service, operator, role or rule ID…"
-              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-            />
-          </div>
-          <p className="mt-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            {filteredRules.length} matching rule{filteredRules.length === 1 ? "" : "s"}
+    <section className="rounded-2xl border border-border bg-muted/20 p-4 md:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-black text-secondary">Hierarchy allocations</h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Percentage shares apply to the gross commission pool. The remainder stays with the
+            source role.
           </p>
         </div>
-        <div className="max-h-80 space-y-1 overflow-y-auto p-2">
-          {filteredRules.map((rule) => {
-            const isSelected = rule.id === value;
-            return (
-              <button
-                key={rule.id}
-                type="button"
-                onClick={() => {
-                  onChange(rule.id);
-                  setOpen(false);
-                }}
-                className={`w-full rounded-xl border p-3 text-left transition ${
-                  isSelected
-                    ? "border-primary/35 bg-primary/5 shadow-sm"
-                    : "border-transparent hover:border-border hover:bg-muted/45"
-                }`}
+        <button
+          type="button"
+          onClick={onAdd}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-white px-4 py-2.5 text-xs font-extrabold text-primary"
+        >
+          <Plus size={14} /> Add allocation
+        </button>
+      </div>
+      <div className="mt-4 space-y-3">
+        {allocations.map((allocation, index) => (
+          <div key={allocation.key} className="rounded-xl border border-border bg-white p-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.3fr_1fr_1fr_0.7fr_auto_auto] xl:items-end">
+              <Field label={`Recipient role ${index + 1} *`}>
+                <select
+                  value={allocation.recipientRole}
+                  onChange={(event) =>
+                    onUpdate(allocation.key, { recipientRole: event.target.value })
+                  }
+                  className={inputClass}
+                >
+                  <option value="">Select recipient role</option>
+                  {roleOptions.map((role) => (
+                    <option key={role.value} value={role.value}>
+                      {role.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Distribution type *">
+                <select
+                  value={allocation.distributionType}
+                  onChange={(event) =>
+                    onUpdate(allocation.key, {
+                      distributionType: event.target.value as CommissionRuleType,
+                    })
+                  }
+                  className={inputClass}
+                >
+                  <option value="FIXED">FIXED</option>
+                  <option value="PERCENTAGE">PERCENTAGE</option>
+                </select>
+              </Field>
+              <Field
+                label={
+                  allocation.distributionType === "PERCENTAGE"
+                    ? "Pool percentage *"
+                    : "Fixed amount *"
+                }
               >
-                <span className="flex items-start gap-3">
-                  <span
-                    className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${rule.isActive ? "bg-emerald-500" : "bg-muted-foreground/35"}`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-black text-secondary">
-                        {catalogServiceLabel(serviceCatalog, rule.serviceType)}
-                        <span className="font-semibold text-muted-foreground">
-                          {" "}
-                          · {rule.operator || "Any operator"}
-                        </span>
-                      </span>
-                      <span className="font-black text-primary">{ruleRate(rule)}</span>
-                    </span>
-                    <span className="mt-2 flex flex-wrap items-center gap-2 text-[10px] font-bold text-muted-foreground">
-                      <span className="rounded-full bg-muted px-2 py-1">{rule.role}</span>
-                      <span className="rounded-full bg-muted px-2 py-1">
-                        {money(rule.minAmount)} → {money(rule.maxAmount)}
-                      </span>
-                      <span className="rounded-full bg-muted px-2 py-1">
-                        Priority {rule.priority}
-                      </span>
-                    </span>
-                  </span>
-                  {isSelected && <CheckCircle2 size={17} className="shrink-0 text-primary" />}
-                </span>
+                <NumberInput
+                  icon={allocation.distributionType === "PERCENTAGE" ? "%" : "₹"}
+                  value={allocation.distributionValue}
+                  min="0"
+                  max={allocation.distributionType === "PERCENTAGE" ? "100" : undefined}
+                  step="0.0001"
+                  onChange={(value) => onUpdate(allocation.key, { distributionValue: value })}
+                />
+              </Field>
+              <Field label="Priority">
+                <input
+                  type="number"
+                  step="1"
+                  value={allocation.priority}
+                  onChange={(event) => onUpdate(allocation.key, { priority: event.target.value })}
+                  className={inputClass}
+                />
+              </Field>
+              <label className="flex h-12 items-center gap-2 rounded-xl border border-border px-3 text-xs font-bold text-secondary">
+                <input
+                  type="checkbox"
+                  checked={allocation.isActive}
+                  onChange={(event) => onUpdate(allocation.key, { isActive: event.target.checked })}
+                  className="h-4 w-4 accent-primary"
+                />
+                Active
+              </label>
+              <button
+                type="button"
+                aria-label={`Remove allocation ${index + 1}`}
+                onClick={() => onRemove(allocation.key)}
+                className="grid h-12 w-12 place-items-center rounded-xl border border-red-200 text-red-600 hover:bg-red-50"
+              >
+                <Trash2 size={16} />
               </button>
-            );
-          })}
-          {!filteredRules.length && (
-            <div className="px-4 py-8 text-center">
-              <p className="text-sm font-bold text-secondary">No matching rules</p>
-              <p className="mt-1 text-xs text-muted-foreground">Try a different search term.</p>
             </div>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
+          </div>
+        ))}
+        {!allocations.length && (
+          <p className="rounded-xl border border-dashed border-border bg-white px-4 py-8 text-center text-xs text-muted-foreground">
+            No recipient allocations. The complete commission remains with the source role.
+          </p>
+        )}
+      </div>
+      <p
+        className={`mt-3 text-xs font-bold ${activePercentageTotal > 100 ? "text-red-600" : "text-muted-foreground"}`}
+      >
+        Active percentage total: {activePercentageTotal.toFixed(4)}%
+      </p>
+    </section>
   );
 }
 
-function SuggestionChips({
-  value,
-  onChange,
-  options,
+function RuleTable({
+  rules,
+  catalog,
+  expandedRuleId,
+  providerName,
+  canUpdate,
+  canDeactivate,
+  onExpand,
+  onEdit,
+  onStatus,
 }: {
-  value: string;
-  onChange: (value: string) => void;
-  options: string[];
+  rules: CommissionRule[];
+  catalog: CommissionServiceCatalog[];
+  expandedRuleId: string;
+  providerName: (rule: CommissionRule) => string;
+  canUpdate: boolean;
+  canDeactivate: boolean;
+  onExpand: (id: string) => void;
+  onEdit: (rule: CommissionRule) => void;
+  onStatus: (rule: CommissionRule) => void;
 }) {
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Suggested values">
-      {options.map((option) => {
-        const selected = value.trim().toUpperCase() === option;
-        return (
-          <button
-            key={option}
-            type="button"
-            onClick={() => onChange(option)}
-            className={`rounded-full border px-2.5 py-1 text-[9px] font-extrabold transition ${
-              selected
-                ? "border-primary bg-primary text-white"
-                : "border-border bg-white text-muted-foreground hover:border-primary/35 hover:text-secondary"
-            }`}
-          >
-            {option}
-          </button>
-        );
-      })}
+    <div className="mt-6 overflow-x-auto rounded-xl border border-border">
+      <table className="min-w-[1120px] w-full text-left text-xs">
+        <thead className="bg-muted/70 text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
+          <tr>
+            <th className="px-4 py-3">Service / provider</th>
+            <th className="px-4 py-3">Source role</th>
+            <th className="px-4 py-3">Purpose / slab</th>
+            <th className="px-4 py-3">Value / TDS</th>
+            <th className="px-4 py-3">Hierarchy allocations</th>
+            <th className="px-4 py-3">Status</th>
+            <th className="px-4 py-3 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rules.map((rule) => {
+            const allocations = rule.hierarchyAllocations || [];
+            const activeAllocations = allocations.filter((allocation) => allocation.isActive);
+            const isExpanded = expandedRuleId === rule.id;
+            const item = catalogItemForService(catalog, rule.serviceType);
+            return (
+              <Fragment key={rule.id}>
+                <tr className="bg-white align-top hover:bg-muted/25">
+                  <td className="px-4 py-4">
+                    <p className="font-black text-secondary">
+                      {catalogServiceLabel(catalog, rule.serviceType)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">{providerName(rule)}</p>
+                  </td>
+                  <td className="px-4 py-4 font-extrabold text-secondary">{rule.role}</td>
+                  <td className="px-4 py-4">
+                    <p className="font-black text-primary">{rule.rulePurpose}</p>
+                    <p className="mt-1 text-muted-foreground">
+                      {money(rule.minAmount)} → {money(rule.maxAmount)}
+                    </p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <p className="font-black text-secondary">
+                      {ruleValue(rule)} · {rule.commissionType}
+                    </p>
+                    <p className="mt-1 text-muted-foreground">
+                      {shouldShowRuleTds(item, rule.rulePurpose)
+                        ? `TDS ${Number(rule.tdsRate ?? 0)}%`
+                        : "TDS not applicable"}
+                    </p>
+                  </td>
+                  <td className="px-4 py-4">
+                    {shouldShowRuleDistributions(item, rule.rulePurpose) ? (
+                      <button
+                        type="button"
+                        onClick={() => onExpand(rule.id)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 font-extrabold text-secondary hover:bg-muted"
+                      >
+                        {activeAllocations.length} active / {allocations.length} total
+                        {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      </button>
+                    ) : (
+                      <span className="text-muted-foreground">Not applicable</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4">
+                    <StatusPill active={rule.isActive} />
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        disabled={!canUpdate}
+                        onClick={() => onEdit(rule)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2 font-extrabold text-secondary disabled:opacity-50"
+                      >
+                        <Edit3 size={12} /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        disabled={rule.isActive ? !canDeactivate : !canUpdate}
+                        onClick={() => onStatus(rule)}
+                        className="rounded-lg border border-border px-3 py-2 font-extrabold text-secondary disabled:opacity-50"
+                      >
+                        {rule.isActive ? "Deactivate" : "Reactivate"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {isExpanded && (
+                  <tr className="bg-muted/25">
+                    <td colSpan={7} className="px-6 py-5">
+                      <AllocationSummary allocations={allocations} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+          {!rules.length && (
+            <tr>
+              <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                No configured rules match the current filters.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AllocationSummary({ allocations }: { allocations: CommissionHierarchyAllocation[] }) {
+  if (!allocations.length)
+    return (
+      <p className="text-xs text-muted-foreground">
+        No hierarchy allocations configured. The source role keeps the complete commission.
+      </p>
+    );
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {allocations.map((allocation) => (
+        <div
+          key={allocation.id || `${allocation.recipientRole}-${allocation.priority}`}
+          className="rounded-xl border border-border bg-white p-4"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-black text-secondary">{allocation.recipientRole}</p>
+            <StatusPill active={allocation.isActive} />
+          </div>
+          <p className="mt-2 text-xs font-bold text-primary">{allocationValue(allocation)}</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {allocation.distributionType} · Priority {allocation.priority}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="block">
+    <div>
       <span className="text-xs font-extrabold text-secondary">{label}</span>
       <div className="mt-2">{children}</div>
-      {hint && (
-        <span className="mt-1.5 block text-[10px] leading-4 text-muted-foreground">{hint}</span>
-      )}
+      {hint && <span className="mt-1.5 block text-[10px] text-muted-foreground">{hint}</span>}
     </div>
   );
 }
 
-function Select({
+function FieldStatus({ children, error = false }: { children: ReactNode; error?: boolean }) {
+  return (
+    <p
+      className={`mt-2 text-[10px] font-semibold ${error ? "text-red-600" : "text-muted-foreground"}`}
+    >
+      {children}
+    </p>
+  );
+}
+
+function NumberInput({
+  icon,
   value,
+  min,
+  max,
+  step,
   onChange,
-  options,
-  className,
-  disabled,
 }: {
+  icon: string;
   value: string;
+  min?: string;
+  max?: string;
+  step?: string;
   onChange: (value: string) => void;
-  options: string[];
-  className?: string;
-  disabled?: boolean;
 }) {
   return (
-    <UiSelect value={value} onValueChange={onChange} disabled={disabled}>
-      <UiSelectTrigger
-        className={
-          className
-            ? `${className} h-auto min-h-11 cursor-pointer shadow-none`
-            : "h-10 w-auto min-w-26 rounded-xl border-border bg-white px-3 text-xs font-extrabold text-secondary shadow-none"
-        }
+    <div className="relative">
+      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+        {icon}
+      </span>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={`${inputClass} pl-9`}
+      />
+    </div>
+  );
+}
+
+function Summary({ label, value, tone }: { label: string; value: number; tone?: "good" }) {
+  return (
+    <div className="rounded-2xl border border-border bg-white p-5">
+      <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={`mt-2 text-2xl font-black ${tone === "good" ? "text-emerald-700" : "text-secondary"}`}
       >
-        <UiSelectValue />
-      </UiSelectTrigger>
-      <UiSelectContent position="item-aligned" className="rounded-xl border-border shadow-xl">
-        {options.map((option) => (
-          <UiSelectItem
-            key={option}
-            value={option}
-            className="cursor-pointer rounded-lg py-2.5 pl-3 pr-9 text-xs font-bold"
-          >
-            {option}
-          </UiSelectItem>
-        ))}
-      </UiSelectContent>
-    </UiSelect>
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -2445,36 +1380,6 @@ function LoadingBox({ text }: { text: string }) {
   return (
     <div className="mt-6 flex items-center justify-center gap-2 rounded-xl border border-dashed border-border py-12 text-sm font-semibold text-muted-foreground">
       <Loader2 size={17} className="animate-spin" /> {text}
-    </div>
-  );
-}
-
-function InfoBox({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-white p-3.5">
-      <p className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1.5 text-xs font-black text-secondary">{value}</p>
-    </div>
-  );
-}
-
-function DraftHealth({ health }: { health: Health }) {
-  return (
-    <div
-      className={`rounded-xl border p-4 ${health.tone === "good" ? "border-emerald-200 bg-emerald-50" : health.tone === "danger" ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"}`}
-    >
-      <p
-        className={`text-xs font-black ${health.tone === "good" ? "text-emerald-800" : health.tone === "danger" ? "text-red-800" : "text-amber-900"}`}
-      >
-        {health.title}
-      </p>
-      <p
-        className={`mt-1 text-[11px] leading-5 ${health.tone === "good" ? "text-emerald-700" : health.tone === "danger" ? "text-red-700" : "text-amber-800"}`}
-      >
-        {health.detail}
-      </p>
     </div>
   );
 }
