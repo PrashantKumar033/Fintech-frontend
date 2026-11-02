@@ -65,6 +65,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { useServiceReadiness } from "@/lib/service-readiness";
+import {
+  asAepsCoordinates,
+  browserLocationMessage,
+  getBrowserLocation,
+} from "@/lib/browser-location";
 
 const actionCopy: Record<AepsNextAction, string> = {
   REGISTER: "Complete merchant registration",
@@ -564,6 +569,7 @@ function Registration({
     [loadingPrerequisites, setLoadingPrerequisites] = useState(true),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
+    [locationBusy, setLocationBusy] = useState(false),
     [locationError, setLocationError] = useState(""),
     [fieldErrors, setFieldErrors] = useState<AepsRegistrationErrors>({});
   const setForm = useCallback<typeof setFormState>(
@@ -642,26 +648,17 @@ function Registration({
       return next;
     });
   };
-  const locate = () => {
-    setLocationError("");
-    if (!window.isSecureContext) {
-      setLocationError(
-        "Chrome blocks location on an insecure LAN address. Open the site through HTTPS, or use localhost on this computer, then try again.",
-      );
-      return;
-    }
-    if (!navigator.geolocation) {
-      setLocationError(
-        "This browser does not support location capture. Please use a supported browser or device.",
-      );
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        setLocationError("");
-        setForm((f) => {
-          setFieldErrors((current) => {
-            const next = { ...current };
+  const locate = useCallback(
+    async (forceRefresh = false) => {
+      setLocationBusy(true);
+      setLocationError("");
+      try {
+        const { lat, long } = asAepsCoordinates(
+          await getBrowserLocation({ forceRefresh, allowMockDevelopmentFallback: true }),
+        );
+        setForm((current) => {
+          setFieldErrors((errors) => {
+            const next = { ...errors };
             delete next.lat;
             delete next.long;
             delete next.shopLat;
@@ -669,23 +666,24 @@ function Registration({
             return next;
           });
           return {
-            ...f,
-            lat: String(p.coords.latitude),
-            long: String(p.coords.longitude),
-            shopLat: f.shopLat || String(p.coords.latitude),
-            shopLong: f.shopLong || String(p.coords.longitude),
+            ...current,
+            lat,
+            long,
+            shopLat: current.shopLat || lat,
+            shopLong: current.shopLong || long,
           };
         });
-      },
-      (reason) =>
-        setLocationError(
-          reason.code === reason.PERMISSION_DENIED
-            ? "Location access was denied. Allow Location in browser site settings and try again."
-            : "Current location could not be determined. Check GPS/network and try again.",
-        ),
-      { enableHighAccuracy: true },
-    );
-  };
+      } catch (locationFailure) {
+        setLocationError(browserLocationMessage(locationFailure));
+      } finally {
+        setLocationBusy(false);
+      }
+    },
+    [setForm],
+  );
+  useEffect(() => {
+    if (!form.lat || !form.long) void locate();
+  }, [form.lat, form.long, locate]);
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError("");
@@ -898,11 +896,16 @@ function Registration({
         </div>
         <button
           type="button"
-          onClick={locate}
+          onClick={() => void locate(true)}
+          disabled={locationBusy}
           className="flex items-center gap-2 text-sm font-bold text-primary"
         >
-          <MapPin size={16} />
-          {form.lat && form.long ? "Location captured" : "Use current location"}
+          {locationBusy ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}
+          {locationBusy
+            ? "Fetching location automatically…"
+            : form.lat && form.long
+              ? "Location ready · Refresh"
+              : "Try location again"}
         </button>
         {locationError && (
           <p role="alert" className="-mt-4 text-xs font-semibold text-red-700">
@@ -1126,17 +1129,6 @@ function DailyTwoFactor({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [requestKey, setRequestKey] = useState("");
-  useEffect(() => {
-    navigator.geolocation?.getCurrentPosition(
-      (p) => {
-        setLat(String(p.coords.latitude));
-        setLong(String(p.coords.longitude));
-        setPid("");
-      },
-      () => setError("Location access is required for daily AEPS verification."),
-      { enableHighAccuracy: true },
-    );
-  }, []);
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError("");
@@ -1423,16 +1415,6 @@ function TransactionForm({
       cancelled = true;
     };
   }, [authType, operation, providerCode, service.title, token]);
-  useEffect(() => {
-    navigator.geolocation?.getCurrentPosition((p) =>
-      setForm((f) => ({
-        ...f,
-        lat: String(p.coords.latitude),
-        long: String(p.coords.longitude),
-        pidData: "",
-      })),
-    );
-  }, []);
   useEffect(() => {
     if (previousPipeRef.current === pipe) return;
     previousPipeRef.current = pipe;
@@ -1962,27 +1944,29 @@ function LocationStatus({
   onCapture: (lat: string, long: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
-  const [denied, setDenied] = useState(false);
+  const [locationError, setLocationError] = useState("");
+  const onCaptureRef = useRef(onCapture);
   const captured = !!lat && !!long;
-  const capture = () => {
-    if (!navigator.geolocation) {
-      setDenied(true);
-      return;
-    }
+  useEffect(() => {
+    onCaptureRef.current = onCapture;
+  }, [onCapture]);
+  const capture = useCallback(async (forceRefresh = false) => {
     setBusy(true);
-    setDenied(false);
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        onCapture(String(p.coords.latitude), String(p.coords.longitude));
-        setBusy(false);
-      },
-      () => {
-        setDenied(true);
-        setBusy(false);
-      },
-      { enableHighAccuracy: true },
-    );
-  };
+    setLocationError("");
+    try {
+      const location = asAepsCoordinates(
+        await getBrowserLocation({ forceRefresh, allowMockDevelopmentFallback: true }),
+      );
+      onCaptureRef.current(location.lat, location.long);
+    } catch (locationFailure) {
+      setLocationError(browserLocationMessage(locationFailure));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+  useEffect(() => {
+    if (!captured) void capture();
+  }, [capture, captured]);
   return (
     <div className="sm:col-span-2">
       <span className="text-xs font-bold text-muted-foreground">Location</span>
@@ -1996,15 +1980,13 @@ function LocationStatus({
         <span className="flex items-center gap-2">
           {captured ? <CheckCircle2 size={16} /> : <MapPin size={16} />}
           {captured
-            ? "Location captured"
-            : denied
-              ? "Location access is blocked. Allow it in browser site settings."
-              : "Waiting for location permission…"}
+            ? "Location ready"
+            : locationError || (busy ? "Fetching location automatically…" : "Location required")}
         </span>
-        {!captured && (
+        {(!captured || locationError) && (
           <button
             type="button"
-            onClick={capture}
+            onClick={() => void capture(true)}
             disabled={busy}
             className="rounded-lg border border-amber-300 bg-white px-3 py-1 text-xs font-bold disabled:opacity-50"
           >

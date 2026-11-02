@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, Loader2, RefreshCw, Settings2, X } from "lucide-react";
 import { AdminPanel } from "@/components/admin/admin-layout";
 import {
+  AdminApiError,
   adminApi,
   type AepsTwoFactorReconciliationItem,
   type ReconciliationAction,
@@ -15,8 +16,16 @@ const actions: ReconciliationAction[] = [
   "CONFIRM_PROVIDER_FAILED",
   "RETRY_REVERSAL",
 ];
+const downstreamMessage = (message?: string, errorCode?: string) =>
+  [message?.trim(), errorCode?.trim() ? `Error code: ${errorCode.trim()}` : ""]
+    .filter(Boolean)
+    .join(" · ");
 const messageOf = (error: unknown) =>
-  error instanceof Error ? error.message : "The AEPS 2FA request could not be completed.";
+  error instanceof AdminApiError
+    ? downstreamMessage(error.message, error.errorCode)
+    : error instanceof Error
+      ? error.message
+      : "The AEPS 2FA request could not be completed.";
 const DEFAULT_PROVIDER = "PROVIDER_1";
 
 export function SuperAdminAepsTwoFactor() {
@@ -109,7 +118,7 @@ export function SuperAdminAepsTwoFactor() {
     setBusy(true);
     setError("");
     try {
-      await adminApi.superAdminAeps.resolveTwoFactor(selected.id, {
+      const result = await adminApi.superAdminAeps.resolveTwoFactor(selected.id, {
         action,
         reason: reason.trim(),
         providerTxnRefId: providerTxnRefId.trim() || undefined,
@@ -117,7 +126,10 @@ export function SuperAdminAepsTwoFactor() {
         providerStatusMessage: providerStatusMessage.trim() || undefined,
       });
       setSelected(null);
-      setNotice("2FA reconciliation action completed.");
+      setNotice(
+        downstreamMessage(result.message, result.errorCode) ||
+          "2FA reconciliation action completed.",
+      );
       await load(page);
     } catch (value) {
       setError(messageOf(value));

@@ -7,6 +7,7 @@ import {
   Edit3,
   FileText,
   Landmark,
+  Loader2,
   MapPin,
   Plus,
   RefreshCw,
@@ -26,6 +27,18 @@ import {
 } from "@/lib/role-hierarchy";
 import { complianceApi, complianceMessage, type BankAccount } from "@/lib/compliance-api";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
+import {
+  applyDmtBankMutation,
+  buildDmtBankCreateInput,
+  canHardDeleteDmtAccount,
+  canVerifyDmtAccount,
+  isDmtOnlyAccount,
+} from "@/lib/bank-account-ui";
+import {
+  asAepsCoordinates,
+  browserLocationMessage,
+  getBrowserLocation,
+} from "@/lib/browser-location";
 
 export const Route = createFileRoute("/retailer/bank/")({
   head: () => ({ meta: [{ title: "Bank Accounts — UMOBIPAY" }] }),
@@ -33,6 +46,7 @@ export const Route = createFileRoute("/retailer/bank/")({
 });
 const initial = {
   bankName: "",
+  bankCode: "",
   ifsc: "",
   branchName: "",
   accountHolderName: "",
@@ -62,49 +76,28 @@ function fileTypeLabel(file: File): string {
 }
 
 function isFullyVerifiedBank(account: BankAccount): boolean {
+  const adminReady =
+    account.purposes.length === 1 && account.purposes.includes("DMT")
+      ? account.adminReviewRequired === false
+      : account.adminReviewStatus === "APPROVED";
   return (
     account.status === "ACTIVE" &&
-    account.adminReviewStatus === "APPROVED" &&
+    adminReady &&
     account.verificationStatus === "VERIFIED" &&
     account.ownershipStatus === "VERIFIED"
   );
 }
 
-function captureBankCoordinates(): Promise<BankCoordinates> {
-  if (typeof window === "undefined" || !window.isSecureContext) {
-    return Promise.reject(
-      new Error(
-        "Location is blocked on an insecure address. Open UMOBIPAY through HTTPS or localhost, then try again.",
-      ),
-    );
-  }
-  if (!navigator.geolocation) {
-    return Promise.reject(new Error("This browser does not support location capture."));
-  }
-
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) =>
-        resolve({
-          lat: String(coords.latitude),
-          long: String(coords.longitude),
-        }),
-      (error) => {
-        const text =
-          error.code === error.PERMISSION_DENIED
-            ? "Location permission was denied. Allow location for this site and try again."
-            : error.code === error.POSITION_UNAVAILABLE
-              ? "Current location is unavailable. Turn on device location and try again."
-              : "Location capture timed out. Check GPS/network and try again.";
-        reject(new Error(text));
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
-    );
-  });
+async function captureBankCoordinates(forceRefresh = false): Promise<BankCoordinates> {
+  return asAepsCoordinates(
+    await getBrowserLocation({ forceRefresh, allowMockDevelopmentFallback: true }),
+  );
 }
 
 function BankAccountsPage() {
   const requestKeyRef = useRef<string | null>(null);
+  const dmtCreateInFlightRef = useRef(false);
+  const bankActionInFlightRef = useRef(new Set<string>());
   const addRequestHandledRef = useRef(false);
   const [activeTab, setActiveTab] = useState<BankTab>("AEPS");
   // Adding the identity's own bank account is mandatory onboarding. Keep it
@@ -122,6 +115,10 @@ function BankAccountsPage() {
     [passbook, setPassbook] = useState<File | null>(null),
     [fileInputKey, setFileInputKey] = useState(0),
     [busy, setBusy] = useState(false),
+    [dmtAddBusy, setDmtAddBusy] = useState(false),
+    [dmtVerifyCreateBusy, setDmtVerifyCreateBusy] = useState(false),
+    [verifyingBankId, setVerifyingBankId] = useState<string | null>(null),
+    [hardDeletingBankId, setHardDeletingBankId] = useState<string | null>(null),
     [locationBusy, setLocationBusy] = useState(false),
     [coordinates, setCoordinates] = useState<BankCoordinates | null>(null),
     [locationError, setLocationError] = useState(""),
@@ -196,6 +193,25 @@ function BankAccountsPage() {
     // `load` intentionally stays page-local; session identity changes cause a remount.
   }, [navigate]);
   useEffect(() => {
+    if (!adding || activeTab !== "AEPS" || coordinates) return;
+    let active = true;
+    setLocationBusy(true);
+    setLocationError("");
+    captureBankCoordinates()
+      .then((location) => {
+        if (active) setCoordinates(location);
+      })
+      .catch((locationFailure) => {
+        if (active) setLocationError(browserLocationMessage(locationFailure));
+      })
+      .finally(() => {
+        if (active) setLocationBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeTab, adding, coordinates]);
+  useEffect(() => {
     if (!session || addRequestHandledRef.current || typeof window === "undefined") return;
     const requestedType = new URLSearchParams(window.location.search).get("add");
     if (requestedType !== "AEPS" && requestedType !== "MAIN") return;
@@ -231,28 +247,34 @@ function BankAccountsPage() {
       </div>
     );
   const activeSession = session;
+  function validateBankDetails(requireAccountNumber = !editingId) {
+    if (!form.bankName.trim() || !form.accountHolderName.trim())
+      return "Bank name and account holder name are required.";
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifsc.trim().toUpperCase()))
+      return "Enter a valid 11-character IFSC code.";
+    if (requireAccountNumber && !/^\d{9,18}$/.test(form.accountNumber))
+      return "Account number must contain 9 to 18 digits.";
+    if (!requireAccountNumber && form.accountNumber && !/^\d{9,18}$/.test(form.accountNumber))
+      return "Account number must contain 9 to 18 digits.";
+    if (form.accountNumber && form.accountNumber !== form.confirm)
+      return "Account numbers do not match.";
+    return null;
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setMessage(null);
-    if (!form.bankName.trim() || !form.accountHolderName.trim())
-      return setMessage({ ok: false, text: "Bank name and account holder name are required." });
-    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifsc.trim().toUpperCase()))
-      return setMessage({ ok: false, text: "Enter a valid 11-character IFSC code." });
-    if (!editingId && !/^\d{9,18}$/.test(form.accountNumber))
-      return setMessage({ ok: false, text: "Account number must contain 9 to 18 digits." });
-    if (editingId && form.accountNumber && !/^\d{9,18}$/.test(form.accountNumber))
-      return setMessage({ ok: false, text: "Account number must contain 9 to 18 digits." });
-    if (form.accountNumber && form.accountNumber !== form.confirm)
-      return setMessage({ ok: false, text: "Account numbers do not match." });
-    if (!form.purposes.length)
-      return setMessage({ ok: false, text: "Select at least one account purpose." });
+    const validation = validateBankDetails();
+    if (validation) return setMessage({ ok: false, text: validation });
+    const isDmt = activeTab === "MAIN";
     const requiresPassbook =
-      !editingId ||
-      editingAccount?.adminReviewStatus === "REJECTED" ||
-      !editingAccount?.passbookOriginalName ||
-      Boolean(form.accountNumber) ||
-      form.ifsc.trim().toUpperCase() !== editingAccount?.ifsc.toUpperCase() ||
-      form.accountHolderName.trim() !== editingAccount?.accountHolderName;
+      (!isDmt && !editingId) ||
+      (!isDmt &&
+        (editingAccount?.adminReviewStatus === "REJECTED" ||
+          !editingAccount?.passbookOriginalName ||
+          Boolean(form.accountNumber) ||
+          form.ifsc.trim().toUpperCase() !== editingAccount?.ifsc.toUpperCase() ||
+          form.accountHolderName.trim() !== editingAccount?.accountHolderName));
     if (requiresPassbook && !passbook)
       return setMessage({
         ok: false,
@@ -261,7 +283,7 @@ function BankAccountsPage() {
     setBusy(true);
     try {
       let bankCoordinates = coordinates;
-      if (!bankCoordinates) {
+      if (!isDmt && !bankCoordinates) {
         setLocationBusy(true);
         setLocationError("");
         try {
@@ -278,13 +300,15 @@ function BankAccountsPage() {
       }
       const payload = {
         bankName: form.bankName.trim(),
+        ...(isDmt && form.bankCode.trim() ? { bankCode: form.bankCode.trim() } : {}),
         ifsc: form.ifsc.toUpperCase(),
         branchName: form.branchName || undefined,
         accountHolderName: form.accountHolderName.trim(),
         accountType: form.accountType,
-        purposes: form.purposes,
-        lat: bankCoordinates.lat,
-        long: bankCoordinates.long,
+        purposes: isDmt ? (["DMT"] as Array<"DMT" | "PAYOUT">) : form.purposes,
+        ...(!isDmt && bankCoordinates
+          ? { lat: bankCoordinates.lat, long: bankCoordinates.long }
+          : {}),
         ...(form.accountNumber ? { accountNumber: form.accountNumber } : {}),
         ...(form.accountNumber ? { confirmAccountNumber: form.confirm } : {}),
       };
@@ -297,17 +321,21 @@ function BankAccountsPage() {
           payload,
           passbook && requiresPassbook ? passbook : undefined,
         );
-      else
+      else if (!isDmt)
         await complianceApi.addBank(
           activeSession.accessToken,
           {
             ...payload,
+            creationMode: "ADD_ONLY",
+            lat: bankCoordinates!.lat,
+            long: bankCoordinates!.long,
             accountNumber: form.accountNumber,
             confirmAccountNumber: form.confirm,
           },
           passbook!,
           requestKey,
         );
+      else return;
       requestKeyRef.current = null;
       setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
       setAdding(false);
@@ -320,7 +348,9 @@ function BankAccountsPage() {
       setMessage({
         ok: true,
         text: editingId
-          ? "Bank account updated. Review-sensitive changes have been sent for admin approval."
+          ? isDmt
+            ? "Main wallet bank account updated."
+            : "Bank account updated. Review-sensitive changes have been sent for admin approval."
           : "Bank account submitted for admin approval. Provider verification will start after approval.",
       });
       await load(activeSession.accessToken);
@@ -330,13 +360,64 @@ function BankAccountsPage() {
       setBusy(false);
     }
   }
+
+  async function createDmtBank(creationMode: "ADD_ONLY" | "ADD_AND_VERIFY") {
+    if (dmtCreateInFlightRef.current) return;
+    setMessage(null);
+    const validation = validateBankDetails(true);
+    if (validation) return setMessage({ ok: false, text: validation });
+    const setModeBusy = creationMode === "ADD_ONLY" ? setDmtAddBusy : setDmtVerifyCreateBusy;
+    dmtCreateInFlightRef.current = true;
+    setModeBusy(true);
+    try {
+      const freshCoordinates =
+        creationMode === "ADD_AND_VERIFY" ? await captureBankCoordinates(true) : null;
+      const response = await complianceApi.addDmtBank(
+        activeSession.accessToken,
+        buildDmtBankCreateInput(
+          {
+            bankName: form.bankName,
+            bankCode: form.bankCode,
+            ifsc: form.ifsc,
+            branchName: form.branchName,
+            accountHolderName: form.accountHolderName,
+            accountNumber: form.accountNumber,
+            confirmAccountNumber: form.confirm,
+            accountType: form.accountType,
+          },
+          creationMode,
+          freshCoordinates,
+        ),
+      );
+      if (!response.success) {
+        throw new Error(response.message || "The bank-account request could not be completed.");
+      }
+      setAccounts((current) => applyDmtBankMutation(current, response));
+      setAdding(false);
+      setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
+      setMessage({
+        ok: true,
+        text:
+          response.message ||
+          (creationMode === "ADD_AND_VERIFY"
+            ? "Bank-account verification request completed."
+            : "Main wallet bank account added. Verification is pending."),
+      });
+      await load(activeSession.accessToken);
+    } catch (error) {
+      setMessage({ ok: false, text: complianceMessage(error) });
+    } finally {
+      dmtCreateInFlightRef.current = false;
+      setModeBusy(false);
+    }
+  }
   const verified = accounts.some(isFullyVerifiedBank);
   const filteredAccounts = accounts.filter((a) =>
     activeTab === "AEPS" ? a.purposes.includes("PAYOUT") : a.purposes.includes("DMT"),
   );
 
   function closeBankModal() {
-    if (busy) return;
+    if (busy || dmtAddBusy || dmtVerifyCreateBusy) return;
     setEditingId(null);
     setEditingAccount(null);
     setPassbook(null);
@@ -365,6 +446,60 @@ function BankAccountsPage() {
       purposes: type === "AEPS" ? ["PAYOUT"] : ["DMT"],
     });
     setAdding(true);
+  }
+
+  async function verifyDmtAccount(account: BankAccount) {
+    const actionKey = `verify:${account.id}`;
+    if (bankActionInFlightRef.current.has(actionKey)) return;
+    bankActionInFlightRef.current.add(actionKey);
+    setVerifyingBankId(account.id);
+    setMessage(null);
+    try {
+      const freshCoordinates = await captureBankCoordinates(true);
+      const response = await complianceApi.verifyDmtBank(
+        activeSession.accessToken,
+        account.id,
+        freshCoordinates,
+      );
+      if (!response.success) {
+        throw new Error(response.message || "Bank-account verification could not be completed.");
+      }
+      setAccounts((current) => applyDmtBankMutation(current, response));
+      setMessage({
+        ok: true,
+        text: response.message || "Bank-account verification request completed.",
+      });
+    } catch (error) {
+      setMessage({ ok: false, text: complianceMessage(error) });
+    } finally {
+      await load(activeSession.accessToken);
+      bankActionInFlightRef.current.delete(actionKey);
+      setVerifyingBankId(null);
+    }
+  }
+
+  async function hardDeleteDmtAccount(account: BankAccount) {
+    const actionKey = `delete:${account.id}`;
+    if (bankActionInFlightRef.current.has(actionKey)) return;
+    if (
+      !window.confirm(
+        `Permanently delete ${account.bankName} account ending ${account.accountNumberLast4}?`,
+      )
+    )
+      return;
+    bankActionInFlightRef.current.add(actionKey);
+    setHardDeletingBankId(account.id);
+    setMessage(null);
+    try {
+      await complianceApi.hardDeleteDmtBank(activeSession.accessToken, account.id);
+      setMessage({ ok: true, text: "Main wallet bank account permanently deleted." });
+      await load(activeSession.accessToken);
+    } catch (error) {
+      setMessage({ ok: false, text: complianceMessage(error) });
+    } finally {
+      bankActionInFlightRef.current.delete(actionKey);
+      setHardDeletingBankId(null);
+    }
   }
 
   return (
@@ -440,6 +575,7 @@ function BankAccountsPage() {
             <div className="mt-6 space-y-3">
               {filteredAccounts.map((a) => {
                 const isPrimary = activeTab === "AEPS" ? a.isDefault : Boolean(a.isDmtDefault);
+                const dmtOnly = isDmtOnlyAccount(a);
                 return (
                   <article
                     key={a.id}
@@ -462,7 +598,9 @@ function BankAccountsPage() {
                           •••• {a.accountNumberLast4} · {a.accountType} · {a.ifsc}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">{a.accountHolderName}</p>
-                        {a.adminReviewStatus === "REJECTED" && a.adminReviewReason ? (
+                        {activeTab === "AEPS" &&
+                        a.adminReviewStatus === "REJECTED" &&
+                        a.adminReviewReason ? (
                           <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-2 text-xs font-semibold text-red-600">
                             Reason: {a.adminReviewReason}
                           </p>
@@ -471,24 +609,42 @@ function BankAccountsPage() {
                       <div className="shrink-0 sm:text-right">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-wide ${
-                            isFullyVerifiedBank(a)
+                            dmtOnly && a.status === "ACTIVE"
                               ? "bg-emerald-50 text-emerald-700"
-                              : a.adminReviewStatus === "REJECTED"
+                              : dmtOnly &&
+                                  (a.status === "BLOCKED" ||
+                                    a.status === "INACTIVE" ||
+                                    a.verificationStatus === "FAILED" ||
+                                    a.verificationStatus === "REJECTED" ||
+                                    a.ownershipStatus === "FAILED")
                                 ? "bg-red-50 text-red-700"
-                                : "bg-amber-50 text-amber-700"
+                                : isFullyVerifiedBank(a)
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : a.adminReviewStatus === "REJECTED"
+                                    ? "bg-red-50 text-red-700"
+                                    : "bg-amber-50 text-amber-700"
                           }`}
                         >
-                          {isFullyVerifiedBank(a)
-                            ? "VERIFIED"
-                            : a.adminReviewStatus === "REJECTED"
-                              ? "ADMIN REJECTED"
-                              : a.adminReviewStatus !== "APPROVED"
-                                ? "ADMIN REVIEW PENDING"
-                                : `BANK ${a.verificationStatus}`}
+                          {dmtOnly
+                            ? a.status
+                            : isFullyVerifiedBank(a)
+                              ? "VERIFIED"
+                              : a.adminReviewStatus === "REJECTED"
+                                ? "ADMIN REJECTED"
+                                : a.adminReviewStatus !== "APPROVED"
+                                  ? "ADMIN REVIEW PENDING"
+                                  : `BANK ${a.verificationStatus}`}
                         </span>
                         <p className="mt-1.5 text-[10px] font-semibold text-muted-foreground">
-                          Ownership: {a.ownershipStatus}
+                          {dmtOnly
+                            ? `Verification: ${a.verificationStatus}`
+                            : `Ownership: ${a.ownershipStatus}`}
                         </p>
+                        {dmtOnly && (
+                          <p className="mt-1 text-[10px] font-semibold text-muted-foreground">
+                            Ownership: {a.ownershipStatus}
+                          </p>
+                        )}
                         <div className="mt-3 flex flex-wrap gap-2 sm:justify-end">
                           <button
                             type="button"
@@ -507,6 +663,7 @@ function BankAccountsPage() {
                                 setLocationError("");
                                 setForm({
                                   bankName: latest.bankName,
+                                  bankCode: latest.bankCode || "",
                                   ifsc: latest.ifsc,
                                   branchName: latest.branchName || "",
                                   accountHolderName: latest.accountHolderName,
@@ -526,6 +683,21 @@ function BankAccountsPage() {
                           >
                             <Edit3 size={12} /> Edit
                           </button>
+                          {activeTab === "MAIN" && canVerifyDmtAccount(a) && (
+                            <button
+                              type="button"
+                              disabled={Boolean(verifyingBankId)}
+                              onClick={() => void verifyDmtAccount(a)}
+                              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-primary/90 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+                            >
+                              {verifyingBankId === a.id ? (
+                                <Loader2 size={16} className="animate-spin" />
+                              ) : (
+                                <ShieldCheck size={16} />
+                              )}
+                              {verifyingBankId === a.id ? "Verifying bank account…" : "Verify"}
+                            </button>
+                          )}
                           {!isPrimary &&
                             a.status === "ACTIVE" &&
                             a.adminReviewStatus === "APPROVED" &&
@@ -555,7 +727,22 @@ function BankAccountsPage() {
                                 Set primary
                               </button>
                             )}
-                          {!a.isDefault && !a.isDmtDefault && (
+                          {canHardDeleteDmtAccount(a) && (
+                            <button
+                              type="button"
+                              disabled={Boolean(hardDeletingBankId)}
+                              onClick={() => void hardDeleteDmtAccount(a)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-red-100 bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-600 disabled:opacity-50"
+                            >
+                              {hardDeletingBankId === a.id ? (
+                                <Loader2 size={12} className="animate-spin" />
+                              ) : (
+                                <Trash2 size={12} />
+                              )}
+                              {hardDeletingBankId === a.id ? "Deleting…" : "Delete permanently"}
+                            </button>
+                          )}
+                          {activeTab === "AEPS" && !a.isDefault && !a.isDmtDefault && (
                             <button
                               type="button"
                               disabled={!canManageBank || busy}
@@ -664,11 +851,19 @@ function BankAccountsPage() {
 
                 <form
                   id="add-bank-account-form"
-                  onSubmit={submit}
+                  onSubmit={
+                    activeTab === "MAIN" && !editingId
+                      ? (event) => {
+                          event.preventDefault();
+                          void createDmtBank("ADD_ONLY");
+                        }
+                      : submit
+                  }
                   className="grid min-h-0 flex-1 gap-4 overflow-y-auto bg-mint/35 p-5 sm:grid-cols-2 sm:p-7"
                 >
                   {[
                     ["Bank name", "bankName"],
+                    ...(activeTab === "MAIN" ? [["Bank code (optional)", "bankCode"]] : []),
                     ["IFSC code", "ifsc"],
                     ["Branch (optional)", "branchName"],
                     ["Account holder name", "accountHolderName"],
@@ -681,7 +876,7 @@ function BankAccountsPage() {
                         autoFocus={key === "bankName"}
                         list={key === "bankName" ? "supported-bank-directory" : undefined}
                         required={
-                          key !== "branchName" &&
+                          !["branchName", "bankCode"].includes(key) &&
                           (!editingId || !["accountNumber", "confirm"].includes(key))
                         }
                         value={form[key as keyof typeof form]}
@@ -736,202 +931,232 @@ function BankAccountsPage() {
                       className="mt-1.5 w-full rounded-xl border border-border bg-muted px-4 py-3 text-sm font-normal normal-case text-muted-foreground"
                     />
                   </label>
-                  <div className="sm:col-span-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <label
-                        htmlFor="passbook-upload-input"
-                        className="text-xs font-bold uppercase text-muted-foreground"
-                      >
-                        Passbook front
-                        {!editingId || editingAccount?.adminReviewStatus === "REJECTED" ? (
-                          <span className="ml-1 text-red-500">*</span>
-                        ) : null}
-                      </label>
-                      <span className="rounded-full bg-white/70 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">
-                        Private document
-                      </span>
-                    </div>
-
-                    <input
-                      key={fileInputKey}
-                      id="passbook-upload-input"
-                      type="file"
-                      required={
-                        !editingId ||
-                        editingAccount?.adminReviewStatus === "REJECTED" ||
-                        !editingAccount?.passbookOriginalName
-                      }
-                      accept="image/jpeg,image/png,application/pdf"
-                      aria-describedby="passbook-upload-help"
-                      onChange={(event) => {
-                        requestKeyRef.current = null;
-                        const file = event.target.files?.[0] || null;
-                        if (file && !PASSBOOK_FILE_TYPES.has(file.type)) {
-                          event.target.value = "";
-                          setPassbook(null);
-                          setMessage({
-                            ok: false,
-                            text: "Upload the passbook as a JPG, PNG or PDF.",
-                          });
-                          return;
-                        }
-                        if (file && file.size > MAX_PASSBOOK_SIZE) {
-                          event.target.value = "";
-                          setPassbook(null);
-                          setMessage({ ok: false, text: "Passbook file must be 5 MB or smaller." });
-                          return;
-                        }
-                        setPassbook(file);
-                        if (file) setMessage(null);
-                      }}
-                      className="sr-only"
-                    />
-
-                    {passbook ? (
-                      <div className="mt-2 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/80 shadow-sm">
-                        <div className="flex items-start gap-3 p-4 sm:items-center">
-                          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white shadow-sm">
-                            <FileText size={23} />
-                          </span>
-                          <div className="min-w-0 flex-1 normal-case">
-                            <p className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-800">
-                              <CheckCircle2 size={15} /> File ready to upload
-                            </p>
-                            <p
-                              className="mt-1 truncate text-sm font-bold text-secondary"
-                              title={passbook.name}
-                            >
-                              {passbook.name}
-                            </p>
-                            <p className="mt-0.5 text-xs text-emerald-800/75">
-                              {fileTypeLabel(passbook)} · {formatFileSize(passbook.size)}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              requestKeyRef.current = null;
-                              setPassbook(null);
-                              setFileInputKey((value) => value + 1);
-                            }}
-                            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-emerald-200 bg-white text-emerald-800 transition hover:bg-emerald-100"
-                            aria-label="Remove selected passbook file"
-                            title="Remove file"
-                          >
-                            <X size={17} />
-                          </button>
-                        </div>
+                  {activeTab === "AEPS" && (
+                    <div className="sm:col-span-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <label
                           htmlFor="passbook-upload-input"
-                          className="flex cursor-pointer items-center justify-center gap-2 border-t border-emerald-200 bg-white/65 px-4 py-2.5 text-xs font-extrabold text-emerald-800 transition hover:bg-white"
+                          className="text-xs font-bold uppercase text-muted-foreground"
                         >
-                          <UploadCloud size={15} /> Choose a different file
+                          Passbook front
+                          {!editingId || editingAccount?.adminReviewStatus === "REJECTED" ? (
+                            <span className="ml-1 text-red-500">*</span>
+                          ) : null}
                         </label>
+                        <span className="rounded-full bg-white/70 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-muted-foreground">
+                          Private document
+                        </span>
                       </div>
-                    ) : editingAccount?.passbookOriginalName ? (
-                      <div className="mt-2 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-600 text-white">
-                            <CheckCircle2 size={21} />
-                          </span>
-                          <div className="min-w-0 flex-1 normal-case">
-                            <p className="text-xs font-extrabold text-sky-800">
-                              Passbook already attached
-                            </p>
-                            <p
-                              className="mt-1 truncate text-sm font-bold text-secondary"
-                              title={editingAccount.passbookOriginalName}
+
+                      <input
+                        key={fileInputKey}
+                        id="passbook-upload-input"
+                        type="file"
+                        required={
+                          !editingId ||
+                          editingAccount?.adminReviewStatus === "REJECTED" ||
+                          !editingAccount?.passbookOriginalName
+                        }
+                        accept="image/jpeg,image/png,application/pdf"
+                        aria-describedby="passbook-upload-help"
+                        onChange={(event) => {
+                          requestKeyRef.current = null;
+                          const file = event.target.files?.[0] || null;
+                          if (file && !PASSBOOK_FILE_TYPES.has(file.type)) {
+                            event.target.value = "";
+                            setPassbook(null);
+                            setMessage({
+                              ok: false,
+                              text: "Upload the passbook as a JPG, PNG or PDF.",
+                            });
+                            return;
+                          }
+                          if (file && file.size > MAX_PASSBOOK_SIZE) {
+                            event.target.value = "";
+                            setPassbook(null);
+                            setMessage({
+                              ok: false,
+                              text: "Passbook file must be 5 MB or smaller.",
+                            });
+                            return;
+                          }
+                          setPassbook(file);
+                          if (file) setMessage(null);
+                        }}
+                        className="sr-only"
+                      />
+
+                      {passbook ? (
+                        <div className="mt-2 overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/80 shadow-sm">
+                          <div className="flex items-start gap-3 p-4 sm:items-center">
+                            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white shadow-sm">
+                              <FileText size={23} />
+                            </span>
+                            <div className="min-w-0 flex-1 normal-case">
+                              <p className="flex items-center gap-1.5 text-xs font-extrabold text-emerald-800">
+                                <CheckCircle2 size={15} /> File ready to upload
+                              </p>
+                              <p
+                                className="mt-1 truncate text-sm font-bold text-secondary"
+                                title={passbook.name}
+                              >
+                                {passbook.name}
+                              </p>
+                              <p className="mt-0.5 text-xs text-emerald-800/75">
+                                {fileTypeLabel(passbook)} · {formatFileSize(passbook.size)}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                requestKeyRef.current = null;
+                                setPassbook(null);
+                                setFileInputKey((value) => value + 1);
+                              }}
+                              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-emerald-200 bg-white text-emerald-800 transition hover:bg-emerald-100"
+                              aria-label="Remove selected passbook file"
+                              title="Remove file"
                             >
-                              {editingAccount.passbookOriginalName}
-                            </p>
+                              <X size={17} />
+                            </button>
                           </div>
                           <label
                             htmlFor="passbook-upload-input"
-                            className="cursor-pointer rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-extrabold text-sky-800 transition hover:bg-sky-100"
+                            className="flex cursor-pointer items-center justify-center gap-2 border-t border-emerald-200 bg-white/65 px-4 py-2.5 text-xs font-extrabold text-emerald-800 transition hover:bg-white"
                           >
-                            Replace
+                            <UploadCloud size={15} /> Choose a different file
                           </label>
                         </div>
-                      </div>
-                    ) : (
-                      <label
-                        htmlFor="passbook-upload-input"
-                        className="group mt-2 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary/25 bg-white/80 px-5 py-7 text-center transition hover:border-primary/55 hover:bg-white hover:shadow-sm"
-                      >
-                        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary transition group-hover:scale-105 group-hover:bg-primary group-hover:text-white">
-                          <UploadCloud size={24} />
-                        </span>
-                        <span className="mt-3 text-sm font-extrabold normal-case text-secondary">
-                          Upload passbook front
-                        </span>
-                        <span className="mt-1 text-xs font-normal normal-case text-muted-foreground">
-                          Click to browse a JPG, PNG or PDF
-                        </span>
-                        <span className="mt-3 rounded-full bg-muted px-3 py-1 text-[10px] font-bold normal-case text-muted-foreground">
-                          Maximum file size: 5 MB
-                        </span>
-                      </label>
-                    )}
+                      ) : editingAccount?.passbookOriginalName ? (
+                        <div className="mt-2 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-600 text-white">
+                              <CheckCircle2 size={21} />
+                            </span>
+                            <div className="min-w-0 flex-1 normal-case">
+                              <p className="text-xs font-extrabold text-sky-800">
+                                Passbook already attached
+                              </p>
+                              <p
+                                className="mt-1 truncate text-sm font-bold text-secondary"
+                                title={editingAccount.passbookOriginalName}
+                              >
+                                {editingAccount.passbookOriginalName}
+                              </p>
+                            </div>
+                            <label
+                              htmlFor="passbook-upload-input"
+                              className="cursor-pointer rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-extrabold text-sky-800 transition hover:bg-sky-100"
+                            >
+                              Replace
+                            </label>
+                          </div>
+                        </div>
+                      ) : (
+                        <label
+                          htmlFor="passbook-upload-input"
+                          className="group mt-2 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary/25 bg-white/80 px-5 py-7 text-center transition hover:border-primary/55 hover:bg-white hover:shadow-sm"
+                        >
+                          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary transition group-hover:scale-105 group-hover:bg-primary group-hover:text-white">
+                            <UploadCloud size={24} />
+                          </span>
+                          <span className="mt-3 text-sm font-extrabold normal-case text-secondary">
+                            Upload passbook front
+                          </span>
+                          <span className="mt-1 text-xs font-normal normal-case text-muted-foreground">
+                            Click to browse a JPG, PNG or PDF
+                          </span>
+                          <span className="mt-3 rounded-full bg-muted px-3 py-1 text-[10px] font-bold normal-case text-muted-foreground">
+                            Maximum file size: 5 MB
+                          </span>
+                        </label>
+                      )}
 
-                    <p
-                      id="passbook-upload-help"
-                      className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"
-                    >
-                      <ShieldCheck size={13} className="shrink-0 text-primary" /> Only authorised
-                      reviewers can access this document.
-                    </p>
-                  </div>
-                  <div className="sm:col-span-2">
+                      <p
+                        id="passbook-upload-help"
+                        className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"
+                      >
+                        <ShieldCheck size={13} className="shrink-0 text-primary" /> Only authorised
+                        reviewers can access this document.
+                      </p>
+                    </div>
+                  )}
+                  {activeTab === "AEPS" && (
+                    <div className="sm:col-span-2">
+                      <button
+                        type="button"
+                        disabled={busy || locationBusy}
+                        onClick={async () => {
+                          setLocationBusy(true);
+                          setLocationError("");
+                          requestKeyRef.current = null;
+                          try {
+                            setCoordinates(await captureBankCoordinates(true));
+                          } catch (error) {
+                            setCoordinates(null);
+                            setLocationError(
+                              error instanceof Error
+                                ? error.message
+                                : "Location could not be captured.",
+                            );
+                          } finally {
+                            setLocationBusy(false);
+                          }
+                        }}
+                        className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-bold text-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <MapPin size={16} />
+                        {locationBusy
+                          ? "Capturing location…"
+                          : coordinates
+                            ? "Location captured"
+                            : "Use current location"}
+                      </button>
+                      {locationError && (
+                        <p role="alert" className="mt-2 text-xs font-semibold text-red-600">
+                          {locationError}
+                        </p>
+                      )}
+                      {!locationError && coordinates && (
+                        <p className="mt-2 text-xs font-semibold text-emerald-700">
+                          Secure location is ready for bank verification.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {activeTab === "MAIN" && !editingId ? (
+                    <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        disabled={!canManageBank || dmtAddBusy || dmtVerifyCreateBusy}
+                        onClick={() => void createDmtBank("ADD_ONLY")}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-secondary bg-white py-3 text-sm font-bold text-secondary disabled:opacity-50"
+                      >
+                        {dmtAddBusy && <Loader2 size={15} className="animate-spin" />}
+                        {dmtAddBusy ? "Adding bank…" : "Add bank"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!canManageBank || dmtAddBusy || dmtVerifyCreateBusy}
+                        onClick={() => void createDmtBank("ADD_AND_VERIFY")}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-secondary py-3 text-sm font-bold text-white disabled:opacity-50"
+                      >
+                        {dmtVerifyCreateBusy && <Loader2 size={15} className="animate-spin" />}
+                        {dmtVerifyCreateBusy ? "Verifying bank account…" : "Add and verify"}
+                      </button>
+                    </div>
+                  ) : (
                     <button
-                      type="button"
-                      disabled={busy || locationBusy}
-                      onClick={async () => {
-                        setLocationBusy(true);
-                        setLocationError("");
-                        requestKeyRef.current = null;
-                        try {
-                          setCoordinates(await captureBankCoordinates());
-                        } catch (error) {
-                          setCoordinates(null);
-                          setLocationError(
-                            error instanceof Error
-                              ? error.message
-                              : "Location could not be captured.",
-                          );
-                        } finally {
-                          setLocationBusy(false);
-                        }
-                      }}
-                      className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-bold text-secondary disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={!canManageBank || busy}
+                      className="self-end rounded-xl bg-secondary py-3 text-sm font-bold text-white disabled:opacity-50"
                     >
-                      <MapPin size={16} />
-                      {locationBusy
-                        ? "Capturing location…"
-                        : coordinates
-                          ? "Location captured"
-                          : "Use current location"}
+                      {busy
+                        ? "Submitting account…"
+                        : editingId
+                          ? "Save bank account"
+                          : "Submit for review"}
                     </button>
-                    {locationError && (
-                      <p role="alert" className="mt-2 text-xs font-semibold text-red-600">
-                        {locationError}
-                      </p>
-                    )}
-                    {!locationError && coordinates && (
-                      <p className="mt-2 text-xs font-semibold text-emerald-700">
-                        Secure location is ready for bank verification.
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    disabled={!canManageBank || busy}
-                    className="self-end rounded-xl bg-secondary py-3 text-sm font-bold text-white disabled:opacity-50"
-                  >
-                    {busy
-                      ? "Submitting account…"
-                      : editingId
-                        ? "Save bank account"
-                        : "Submit for review"}
-                  </button>
+                  )}
                   {editingId && (
                     <button
                       type="button"
@@ -945,7 +1170,7 @@ function BankAccountsPage() {
                     <button
                       type="button"
                       onClick={closeBankModal}
-                      disabled={busy}
+                      disabled={busy || dmtAddBusy || dmtVerifyCreateBusy}
                       className="rounded-xl border border-border bg-white py-3 text-sm font-bold text-secondary disabled:opacity-50"
                     >
                       Cancel
@@ -961,8 +1186,9 @@ function BankAccountsPage() {
             <ShieldCheck />
             <h2 className="mt-4 text-lg font-extrabold">Bank verification</h2>
             <p className="mt-2 text-sm text-white/65">
-              Your passbook is reviewed by an administrator first. Provider verification starts only
-              after approval.
+              {activeTab === "AEPS"
+                ? "Your passbook is reviewed by an administrator first. Provider verification starts only after approval."
+                : "Add a Main wallet bank account directly, or add and verify it with your current location."}
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-5">
