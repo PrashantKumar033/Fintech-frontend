@@ -38,6 +38,11 @@ import {
 import { isManagementRole, managementBasePath } from "@/lib/role-hierarchy";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { formatWalletBalance, isNegativeWalletBalance } from "@/lib/wallet-balance";
+import {
+  browserLocationMessage,
+  getBrowserLocation,
+  type BrowserLocation,
+} from "@/lib/browser-location";
 
 const inr = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -45,32 +50,17 @@ const inr = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 2,
 });
 
-type Coordinates = { latitude: number; longitude: number };
+type Coordinates = Pick<BrowserLocation, "latitude" | "longitude">;
 
-function captureLocation(): Promise<Coordinates> {
-  if (!navigator.geolocation) {
-    return Promise.reject(new Error("This browser does not support secure location capture."));
-  }
-
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) =>
-        resolve({
-          latitude: Number(coords.latitude.toFixed(6)),
-          longitude: Number(coords.longitude.toFixed(6)),
-        }),
-      (error) => {
-        const message =
-          error.code === error.PERMISSION_DENIED
-            ? "Location permission was denied. Allow location for this site and try again."
-            : error.code === error.POSITION_UNAVAILABLE
-              ? "Current location is unavailable. Turn on device location and try again."
-              : "Location capture timed out. Please try again.";
-        reject(new Error(message));
-      },
-      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 30_000 },
-    );
+async function captureLocation(forceRefresh = false): Promise<Coordinates> {
+  const location = await getBrowserLocation({
+    forceRefresh,
+    allowMockDevelopmentFallback: true,
   });
+  return {
+    latitude: Number(location.latitude.toFixed(6)),
+    longitude: Number(location.longitude.toFixed(6)),
+  };
 }
 
 function settlementTone(status: PayoutSettlement["status"]): string {
@@ -202,6 +192,25 @@ function CreatePayoutSettlementPanel() {
   }, [load]);
 
   useEffect(() => {
+    if (!allowed) return;
+    let active = true;
+    setLocationBusy(true);
+    captureLocation()
+      .then((location) => {
+        if (active) setCoordinates(location);
+      })
+      .catch((locationFailure) => {
+        if (active) setError(browserLocationMessage(locationFailure));
+      })
+      .finally(() => {
+        if (active) setLocationBusy(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [allowed]);
+
+  useEffect(() => {
     setBankAccountId((current) =>
       eligibleAccounts.some((account) => account.id === current)
         ? current
@@ -218,7 +227,7 @@ function CreatePayoutSettlementPanel() {
     setLocationBusy(true);
     setError("");
     try {
-      setCoordinates(await captureLocation());
+      setCoordinates(await captureLocation(true));
       resetIntent();
     } catch (requestError) {
       setError(payoutMessage(requestError));

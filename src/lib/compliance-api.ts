@@ -29,6 +29,9 @@ export type BankAccount = {
   verifiedAt?: string | null;
   isDefault: boolean;
   isDmtDefault?: boolean;
+  adminReviewRequired?: boolean;
+  canVerify?: boolean;
+  canHardDelete?: boolean;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -43,8 +46,29 @@ export type BankAccountInput = {
   confirmAccountNumber: string;
   accountType: BankAccountType;
   purposes: BankAccountPurpose[];
+  creationMode: "ADD_ONLY";
   lat: string;
   long: string;
+};
+export type DmtBankCreationMode = "ADD_ONLY" | "ADD_AND_VERIFY";
+export type DmtBankAccountInput = {
+  bankName: string;
+  bankCode?: string;
+  ifsc: string;
+  branchName?: string;
+  accountHolderName: string;
+  accountNumber: string;
+  confirmAccountNumber: string;
+  accountType: BankAccountType;
+  purposes: ["DMT"];
+  creationMode: DmtBankCreationMode;
+  lat?: string;
+  long?: string;
+};
+export type DmtBankMutationResponse = {
+  success: boolean;
+  message?: string;
+  bankAccount: BankAccount;
 };
 export type BankAccountUpdate = Partial<Omit<BankAccountInput, "accountNumber">> & {
   accountNumber?: string;
@@ -142,6 +166,16 @@ export const complianceApi = {
       },
       token,
     ),
+  addDmtBank: (token: string, body: DmtBankAccountInput) =>
+    authenticatedRequest<DmtBankMutationResponse>(
+      "/identity/bank-accounts",
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": createIdempotencyKey("dmt-bank-create") },
+        body: JSON.stringify(body),
+      },
+      token,
+    ),
   updateBank: (token: string, id: string, body: BankAccountUpdate, passbook?: File) =>
     authenticatedRequest<BankAccount>(
       `/identity/update-my-bank-account/${id}`,
@@ -154,6 +188,18 @@ export const complianceApi = {
   deleteBank: (token: string, id: string) =>
     authenticatedRequest<{ success?: boolean; message?: string }>(
       `/identity/delete-my-bank-account/${id}`,
+      { method: "DELETE" },
+      token,
+    ),
+  verifyDmtBank: (token: string, id: string, coordinates: { lat: string; long: string }) =>
+    authenticatedRequest<DmtBankMutationResponse>(
+      `/identity/my-bank-accounts/${encodeURIComponent(id)}/verify`,
+      { method: "POST", body: JSON.stringify(coordinates) },
+      token,
+    ),
+  hardDeleteDmtBank: (token: string, id: string) =>
+    authenticatedRequest<{ success?: boolean; message?: string }>(
+      `/identity/my-bank-accounts/${encodeURIComponent(id)}/hard`,
       { method: "DELETE" },
       token,
     ),

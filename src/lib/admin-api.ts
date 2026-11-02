@@ -939,6 +939,7 @@ export class AdminApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public errorCode?: string,
   ) {
     super(message);
     this.name = "AdminApiError";
@@ -978,11 +979,20 @@ export function clearAdminSession() {
 let refreshInFlight: Promise<AdminSession> | null = null;
 async function parse<T>(response: Response): Promise<T> {
   const data = await response.json().catch(() => ({}));
-  if (!response.ok)
+  if (!response.ok) {
+    const payload = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
+    const errorCode =
+      typeof payload.errorCode === "string"
+        ? payload.errorCode
+        : typeof payload.code === "string"
+          ? payload.code
+          : undefined;
     throw new AdminApiError(
       messageOf(data) || "The request could not be completed.",
       response.status,
+      errorCode,
     );
+  }
   return data as T;
 }
 async function performAdminRefresh(rejectedAccessToken?: string): Promise<AdminSession> {
@@ -1335,7 +1345,7 @@ export const adminApi = {
         providerStatusMessage?: string;
       },
     ) =>
-      call(
+      call<{ message?: string; errorCode?: string; status?: string }>(
         `/super-admin/aeps/2fa/reconciliation/${encodeURIComponent(attemptId)}/resolve`,
         json("POST", body),
       ),
