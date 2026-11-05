@@ -489,14 +489,19 @@ export type AdminBankAccountDetail = AdminBankAccount & {
 
 export type AdminBankAccountReviewDetail = AdminBankAccountDetail & {
   accountNumber: string;
-  requiresManualOwnershipApproval?: boolean;
 };
 
-export type AdminBankAccountReviewResult = {
+export type AdminBankAccountVerificationResult = {
   success: boolean;
   message: string;
-  requiresManualOwnershipApproval?: boolean;
-  bankAccount: AdminBankAccount;
+  bankAccount: {
+    id?: string;
+    accountHolderName: string;
+    status: string;
+    adminReviewStatus: "PENDING" | "APPROVED" | "REJECTED";
+    verificationStatus: string;
+    verifiedAt?: string | null;
+  };
 };
 
 export type AdminBankAccountPage = {
@@ -1416,20 +1421,10 @@ export const adminApi = {
         `/admin/bank-accounts/${encodeURIComponent(bankId)}/review-details`,
         { cache: "no-store" },
       ),
-    approveBankAccount: (bankId: string) =>
-      call<AdminBankAccountReviewResult>(
-        `/admin/bank-accounts/${encodeURIComponent(bankId)}/approve`,
-        json("PATCH", {}),
-      ),
-    rejectBankAccount: (bankId: string, reason: string) =>
-      call<AdminBankAccountDetail>(
-        `/admin/bank-accounts/${encodeURIComponent(bankId)}/reject`,
-        json("PATCH", { reason: reason.trim() }),
-      ),
-    approveBankAccountOwnership: (bankId: string, reason: string) =>
-      call<AdminBankAccountReviewResult>(
-        `/admin/bank-accounts/${encodeURIComponent(bankId)}/ownership/approve`,
-        json("POST", { reason: reason.trim() }),
+    verifyBankAccount: (bankId: string) =>
+      call<AdminBankAccountVerificationResult>(
+        `/admin/bank-accounts/${encodeURIComponent(bankId)}/verify`,
+        { method: "POST" },
       ),
     fundReceivingBanks: () =>
       call<AdminFundReceivingBank[]>("/super-admin/fund-receiving-bank-accounts", {

@@ -1,15 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  CheckCircle2,
-  Eye,
-  FileText,
-  Landmark,
-  Loader2,
-  RefreshCw,
-  Search,
-  X,
-  XCircle,
-} from "lucide-react";
+import { CheckCircle2, Eye, FileText, Landmark, Loader2, RefreshCw, Search, X } from "lucide-react";
 import { AdminLayout, AdminPanel } from "@/components/admin/admin-layout";
 import { BankVerificationReconciliation } from "@/components/admin/bank-verification-reconciliation";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
@@ -21,10 +11,9 @@ import {
   type AdminBankAccountReviewDetail,
 } from "@/lib/admin-api";
 import {
-  canVerifyAndApprove,
-  isAdminReviewProcessing,
+  applyAdminBankVerification,
+  canVerifyAdminBankAccount,
   isPayoutAdminReview,
-  requiresManualOwnershipReview,
 } from "@/lib/admin-bank-review";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 
@@ -46,7 +35,6 @@ export function AdminBankOperationsPage() {
     role: "",
     status: "",
     verificationStatus: "",
-    ownershipStatus: "",
   });
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
@@ -57,9 +45,7 @@ export function AdminBankOperationsPage() {
   const [detail, setDetail] = useState<
     AdminBankAccountDetail | AdminBankAccountReviewDetail | null
   >(null);
-  const [reviewReason, setReviewReason] = useState("");
-  const [ownershipReason, setOwnershipReason] = useState("");
-  const [reviewAction, setReviewAction] = useState<"approve" | "reject" | "ownership" | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
   const reviewInFlightRef = useRef(false);
   const [passbookBusy, setPassbookBusy] = useState(false);
   const [success, setSuccess] = useState("");
@@ -125,95 +111,38 @@ export function AdminBankOperationsPage() {
     setDetail(refreshed);
   }
 
-  async function review(action: "approve" | "reject") {
-    if (
-      !detail ||
-      !canReview ||
-      !isPayoutAdminReview(detail) ||
-      reviewInFlightRef.current ||
-      isAdminReviewProcessing(detail)
-    )
+  async function verifyBankAccount() {
+    if (!detail || !canReview || !canVerifyAdminBankAccount(detail) || reviewInFlightRef.current)
       return;
-    if (action === "reject" && !reviewReason.trim()) {
-      setError("Enter a clear rejection reason before rejecting this bank account.");
-      return;
-    }
     reviewInFlightRef.current = true;
-    setReviewAction(action);
+    setVerifyBusy(true);
     setError("");
     setSuccess("");
     let completedMessage = "";
     let actionError = "";
     try {
-      if (action === "approve") {
-        const response = await adminApi.operations.approveBankAccount(detail.id);
-        completedMessage = response.message;
-        setDetail((current) =>
-          current?.id === response.bankAccount.id
-            ? {
-                ...current,
-                ...response.bankAccount,
-                requiresManualOwnershipApproval: response.requiresManualOwnershipApproval === true,
-              }
-            : current,
-        );
-      } else {
-        await adminApi.operations.rejectBankAccount(detail.id, reviewReason);
-        completedMessage = "Bank account rejected successfully.";
-      }
-      setReviewReason("");
-    } catch (value) {
-      actionError = messageOf(value);
-    } finally {
-      await Promise.allSettled([refreshDetail(detail), load(page)]);
-      if (actionError) setError(actionError);
-      else setSuccess(completedMessage || "Bank account review completed successfully.");
-      reviewInFlightRef.current = false;
-      setReviewAction(null);
-    }
-  }
-
-  async function approveOwnership() {
-    const reason = ownershipReason.trim();
-    if (
-      !detail ||
-      !canReview ||
-      !requiresManualOwnershipReview(detail) ||
-      reviewInFlightRef.current ||
-      isAdminReviewProcessing(detail)
-    )
-      return;
-    if (reason.length < 1 || reason.length > 500) {
-      setError("Enter an ownership approval reason between 1 and 500 characters.");
-      return;
-    }
-    reviewInFlightRef.current = true;
-    setReviewAction("ownership");
-    setError("");
-    setSuccess("");
-    let completedMessage = "";
-    let actionError = "";
-    try {
-      const response = await adminApi.operations.approveBankAccountOwnership(detail.id, reason);
+      const response = await adminApi.operations.verifyBankAccount(detail.id);
       completedMessage = response.message;
       setDetail((current) =>
-        current?.id === response.bankAccount.id
-          ? {
-              ...current,
-              ...response.bankAccount,
-              requiresManualOwnershipApproval: false,
-            }
+        current?.id === detail.id
+          ? applyAdminBankVerification(current, response.bankAccount)
           : current,
       );
-      setOwnershipReason("");
+      setItems((current) =>
+        current.map((account) =>
+          account.id === detail.id
+            ? applyAdminBankVerification(account, response.bankAccount)
+            : account,
+        ),
+      );
     } catch (value) {
       actionError = messageOf(value);
     } finally {
       await Promise.allSettled([refreshDetail(detail), load(page)]);
       if (actionError) setError(actionError);
-      else setSuccess(completedMessage || "Bank account ownership approved successfully.");
+      else setSuccess(completedMessage || "Bank account verified successfully.");
       reviewInFlightRef.current = false;
-      setReviewAction(null);
+      setVerifyBusy(false);
     }
   }
 
@@ -308,7 +237,7 @@ export function AdminBankOperationsPage() {
             />
           </div>
           <AdminPanel>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
               <label className="relative md:col-span-2">
                 <Search
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -339,12 +268,6 @@ export function AdminBankOperationsPage() {
                 values={["PENDING", "PROCESSING", "VERIFIED", "REJECTED", "FAILED"]}
                 set={(verificationStatus) => setFilters((v) => ({ ...v, verificationStatus }))}
               />
-              <Filter
-                label="All ownership"
-                value={filters.ownershipStatus}
-                values={["PENDING", "VERIFIED", "FAILED"]}
-                set={(ownershipStatus) => setFilters((v) => ({ ...v, ownershipStatus }))}
-              />
             </div>
             <div className="mt-4 flex justify-end">
               <button
@@ -367,7 +290,6 @@ export function AdminBankOperationsPage() {
                       "Status",
                       "Admin review",
                       "Verification",
-                      "Ownership",
                       "Action",
                     ].map((label) => (
                       <th key={label} className="px-4 py-3">
@@ -379,7 +301,7 @@ export function AdminBankOperationsPage() {
                 <tbody className="divide-y divide-border">
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="h-44 text-center">
+                      <td colSpan={7} className="h-44 text-center">
                         <Loader2 className="mx-auto animate-spin text-primary" />
                       </td>
                     </tr>
@@ -406,9 +328,6 @@ export function AdminBankOperationsPage() {
                           <Status value={item.verificationStatus} />
                         </td>
                         <td className="px-4 py-3">
-                          <Status value={item.ownershipStatus} />
-                        </td>
-                        <td className="px-4 py-3">
                           <button
                             type="button"
                             disabled={
@@ -429,7 +348,7 @@ export function AdminBankOperationsPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={8} className="h-44 text-center text-muted-foreground">
+                      <td colSpan={7} className="h-44 text-center text-muted-foreground">
                         No bank accounts match these filters.
                       </td>
                     </tr>
@@ -476,13 +395,7 @@ export function AdminBankOperationsPage() {
                       {detail.bankName} ····{detail.accountNumberLast4}
                     </h2>
                   </div>
-                  <button
-                    onClick={() => {
-                      setDetail(null);
-                      setReviewReason("");
-                      setOwnershipReason("");
-                    }}
-                  >
+                  <button onClick={() => setDetail(null)}>
                     <X />
                   </button>
                 </div>
@@ -507,10 +420,6 @@ export function AdminBankOperationsPage() {
                     <DetailRow
                       label="Verification"
                       value={<Status value={detail.verificationStatus} />}
-                    />
-                    <DetailRow
-                      label="Ownership"
-                      value={<Status value={detail.ownershipStatus} />}
                     />
                     <DetailRow
                       label="Admin review"
@@ -544,85 +453,22 @@ export function AdminBankOperationsPage() {
                   ) : (
                     <p className="mt-2 text-sm text-muted-foreground">No passbook is available.</p>
                   )}
-                  {canReview && canVerifyAndApprove(detail) ? (
+                  {canReview && canVerifyAdminBankAccount(detail) ? (
                     <div className="mt-4">
                       <button
                         type="button"
-                        disabled={reviewAction !== null}
-                        onClick={() => void review("approve")}
+                        disabled={verifyBusy}
+                        onClick={() => void verifyBankAccount()}
                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
                       >
-                        {reviewAction === "approve" ? (
+                        {verifyBusy ? (
                           <Loader2 size={16} className="animate-spin" />
                         ) : (
                           <CheckCircle2 size={16} />
                         )}
-                        {reviewAction === "approve"
-                          ? "Verifying and approving…"
-                          : "Verify and approve"}
+                        {verifyBusy ? "Verifying…" : "Verify"}
                       </button>
                     </div>
-                  ) : null}
-                  {canReview && requiresManualOwnershipReview(detail) ? (
-                    <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                      <p className="text-sm font-bold text-amber-900">
-                        Penny-drop succeeded, but account ownership needs manual review.
-                      </p>
-                      <input
-                        value={ownershipReason}
-                        maxLength={500}
-                        onChange={(event) => setOwnershipReason(event.target.value)}
-                        placeholder="Ownership approval reason (required)"
-                        className={`${control} mt-3 w-full`}
-                      />
-                      <button
-                        type="button"
-                        disabled={reviewAction !== null || !ownershipReason.trim()}
-                        onClick={() => void approveOwnership()}
-                        className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-                      >
-                        {reviewAction === "ownership" ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <CheckCircle2 size={16} />
-                        )}
-                        {reviewAction === "ownership"
-                          ? "Approving ownership…"
-                          : "Approve ownership"}
-                      </button>
-                    </div>
-                  ) : null}
-                  {canReview &&
-                  isPayoutAdminReview(detail) &&
-                  detail.adminReviewStatus === "PENDING" &&
-                  !isAdminReviewProcessing(detail) ? (
-                    <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-                      <input
-                        value={reviewReason}
-                        maxLength={500}
-                        onChange={(event) => setReviewReason(event.target.value)}
-                        placeholder="Rejection reason"
-                        className={control}
-                      />
-                      <button
-                        type="button"
-                        disabled={reviewAction !== null || !reviewReason.trim()}
-                        onClick={() => void review("reject")}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-                      >
-                        {reviewAction === "reject" ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <XCircle size={16} />
-                        )}
-                        {reviewAction === "reject" ? "Rejecting…" : "Reject"}
-                      </button>
-                    </div>
-                  ) : null}
-                  {isPayoutAdminReview(detail) && isAdminReviewProcessing(detail) ? (
-                    <p className="mt-3 text-sm font-semibold text-amber-700">
-                      Bank verification is processing. Approval actions are temporarily disabled.
-                    </p>
                   ) : null}
                 </section>
                 <DetailHistory
