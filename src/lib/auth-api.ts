@@ -296,10 +296,12 @@ export async function authenticatedRequest<T>(
   }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401) {
-      clearSession();
-      redirectToLogin();
-    }
+    // A failed refresh request is the only authoritative signal that the
+    // browser session is no longer usable (handled in performSessionRefresh).
+    // A protected resource can also return 401 for an endpoint-specific state,
+    // such as an AEPS merchant that has not been onboarded yet. If refresh has
+    // succeeded, keep the valid identity session and surface that API error to
+    // the page instead of signing the user out.
     throw new ApiError(
       extractApiMessage(data) || "We could not complete your request.",
       response.status,
