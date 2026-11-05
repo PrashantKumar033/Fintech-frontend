@@ -466,6 +466,7 @@ export type AdminBankAccount = {
   status: string;
   verificationStatus: string;
   ownershipStatus: string;
+  adminReviewRequired: boolean;
   adminReviewStatus: "PENDING" | "APPROVED" | "REJECTED";
   adminReviewReason?: string | null;
   adminReviewedAt?: string | null;
@@ -484,6 +485,18 @@ export type AdminBankAccountDetail = AdminBankAccount & {
   } | null;
   userBankStatusAudits?: Array<Record<string, unknown>>;
   bankAccountVerifications?: Array<Record<string, unknown>>;
+};
+
+export type AdminBankAccountReviewDetail = AdminBankAccountDetail & {
+  accountNumber: string;
+  requiresManualOwnershipApproval?: boolean;
+};
+
+export type AdminBankAccountReviewResult = {
+  success: boolean;
+  message: string;
+  requiresManualOwnershipApproval?: boolean;
+  bankAccount: AdminBankAccount;
 };
 
 export type AdminBankAccountPage = {
@@ -1398,8 +1411,13 @@ export const adminApi = {
       call<AdminBankAccountDetail>(`/admin/bank-accounts/${encodeURIComponent(bankId)}`, {
         cache: "no-store",
       }),
+    bankAccountReviewDetails: (bankId: string) =>
+      call<AdminBankAccountReviewDetail>(
+        `/admin/bank-accounts/${encodeURIComponent(bankId)}/review-details`,
+        { cache: "no-store" },
+      ),
     approveBankAccount: (bankId: string) =>
-      call<AdminBankAccountDetail>(
+      call<AdminBankAccountReviewResult>(
         `/admin/bank-accounts/${encodeURIComponent(bankId)}/approve`,
         json("PATCH", {}),
       ),
@@ -1407,6 +1425,11 @@ export const adminApi = {
       call<AdminBankAccountDetail>(
         `/admin/bank-accounts/${encodeURIComponent(bankId)}/reject`,
         json("PATCH", { reason: reason.trim() }),
+      ),
+    approveBankAccountOwnership: (bankId: string, reason: string) =>
+      call<AdminBankAccountReviewResult>(
+        `/admin/bank-accounts/${encodeURIComponent(bankId)}/ownership/approve`,
+        json("POST", { reason: reason.trim() }),
       ),
     fundReceivingBanks: () =>
       call<AdminFundReceivingBank[]>("/super-admin/fund-receiving-bank-accounts", {
