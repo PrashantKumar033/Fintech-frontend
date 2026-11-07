@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   BadgeCheck,
   Building2,
@@ -35,6 +35,14 @@ import {
   isDmtOnlyAccount,
 } from "@/lib/bank-account-ui";
 import {
+  applyBankDirectorySelection,
+  detailsFromIfscLookup,
+  isValidIfsc,
+  normalizeIfsc,
+  type BankDirectoryOption,
+  type BankIfscDetails,
+} from "@/lib/bank-directory";
+import {
   asAepsCoordinates,
   browserLocationMessage,
   getBrowserLocation,
@@ -45,10 +53,8 @@ export const Route = createFileRoute("/retailer/bank/")({
   component: BankAccountsPage,
 });
 const initial = {
-  bankName: "",
   bankCode: "",
   ifsc: "",
-  branchName: "",
   accountHolderName: "",
   accountNumber: "",
   confirm: "",
@@ -99,6 +105,8 @@ function BankAccountsPage() {
   const dmtCreateInFlightRef = useRef(false);
   const bankActionInFlightRef = useRef(new Set<string>());
   const addRequestHandledRef = useRef(false);
+  const bankSelectionRequestRef = useRef(0);
+  const ifscLookupRequestRef = useRef(0);
   const [activeTab, setActiveTab] = useState<BankTab>("AEPS");
   // Adding the identity's own bank account is mandatory onboarding. Keep it
   // available through its authenticated self-service backend endpoints;
@@ -107,7 +115,14 @@ function BankAccountsPage() {
   const navigate = useNavigate(),
     [session, setSession] = useState<ReturnType<typeof getSession>>(null),
     [accounts, setAccounts] = useState<BankAccount[]>([]),
-    [bankDirectory, setBankDirectory] = useState<string[]>([]),
+    [bankDirectory, setBankDirectory] = useState<BankDirectoryOption[]>([]),
+    [bankSearch, setBankSearch] = useState(""),
+    [bankDropdownOpen, setBankDropdownOpen] = useState(false),
+    [bankDirectoryLoading, setBankDirectoryLoading] = useState(false),
+    [bankDirectoryError, setBankDirectoryError] = useState(""),
+    [ifscDetails, setIfscDetails] = useState<BankIfscDetails | null>(null),
+    [ifscLookupLoading, setIfscLookupLoading] = useState(false),
+    [ifscLookupNotice, setIfscLookupNotice] = useState(""),
     [form, setForm] = useState(initial),
     [adding, setAdding] = useState(false),
     [editingId, setEditingId] = useState<string | null>(null),
@@ -135,37 +150,19 @@ function BankAccountsPage() {
       setLoading(false);
     }
   }
-  async function loadBankDirectory(token: string) {
+  const loadBankDirectory = useCallback(async (token: string, search = "") => {
+    setBankDirectoryLoading(true);
+    setBankDirectoryError("");
     try {
-      const response = await complianceApi.bankDirectory(token);
-      const root =
-        response && typeof response === "object" ? (response as Record<string, unknown>) : {};
-      const candidates = Array.isArray(response)
-        ? response
-        : Array.isArray(root.data)
-          ? root.data
-          : Array.isArray(root.banks)
-            ? root.banks
-            : [];
-      setBankDirectory(
-        candidates
-          .map((item) =>
-            typeof item === "string"
-              ? item
-              : item && typeof item === "object"
-                ? String(
-                    (item as Record<string, unknown>).bankName ||
-                      (item as Record<string, unknown>).name ||
-                      "",
-                  )
-                : "",
-          )
-          .filter(Boolean),
-      );
-    } catch {
+      const response = await complianceApi.bankDirectory(token, search);
+      setBankDirectory(Array.isArray(response.banks) ? response.banks : []);
+    } catch (error) {
       setBankDirectory([]);
+      setBankDirectoryError(complianceMessage(error));
+    } finally {
+      setBankDirectoryLoading(false);
     }
-  }
+  }, []);
   useEffect(() => {
     const value = getSession();
     if (!value) {
@@ -191,7 +188,49 @@ function BankAccountsPage() {
       window.removeEventListener("pageshow", refreshApprovedState);
     };
     // `load` intentionally stays page-local; session identity changes cause a remount.
-  }, [navigate]);
+  }, [loadBankDirectory, navigate]);
+  useEffect(() => {
+    if (!session || !adding) return;
+    const timer = window.setTimeout(
+      () => void loadBankDirectory(session.accessToken, bankSearch),
+      300,
+    );
+    return () => window.clearTimeout(timer);
+  }, [adding, bankSearch, loadBankDirectory, session]);
+  useEffect(() => {
+    if (!session || !adding) return;
+    const ifsc = normalizeIfsc(form.ifsc);
+    const requestId = ++ifscLookupRequestRef.current;
+    if (!ifsc || !isValidIfsc(ifsc)) {
+      setIfscLookupLoading(false);
+      setIfscDetails(null);
+      setIfscLookupNotice("");
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      setIfscLookupLoading(true);
+      setIfscLookupNotice("");
+      try {
+        const lookup = await complianceApi.bankIfsc(session.accessToken, ifsc);
+        if (requestId !== ifscLookupRequestRef.current) return;
+        setIfscDetails(detailsFromIfscLookup(lookup));
+        if (lookup.lookupStatus === "UNAVAILABLE") {
+          setIfscLookupNotice(
+            "Branch information is temporarily unavailable. You can still edit the IFSC.",
+          );
+        }
+      } catch {
+        if (requestId !== ifscLookupRequestRef.current) return;
+        setIfscDetails(null);
+        setIfscLookupNotice(
+          "Branch information is temporarily unavailable. You can still edit the IFSC.",
+        );
+      } finally {
+        if (requestId === ifscLookupRequestRef.current) setIfscLookupLoading(false);
+      }
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [adding, form.ifsc, session]);
   useEffect(() => {
     if (!adding || activeTab !== "AEPS" || coordinates) return;
     let active = true;
@@ -225,6 +264,10 @@ function BankAccountsPage() {
     requestKeyRef.current = null;
     setCoordinates(null);
     setLocationError("");
+    setBankSearch("");
+    setBankDropdownOpen(false);
+    setIfscDetails(null);
+    setIfscLookupNotice("");
     setForm({
       ...initial,
       accountHolderName: session.identity.fullName,
@@ -247,11 +290,47 @@ function BankAccountsPage() {
       </div>
     );
   const activeSession = session;
+  async function selectDirectoryBank(bank: BankDirectoryOption) {
+    const bankCode = bank.bankCode.trim();
+    const requestId = ++bankSelectionRequestRef.current;
+    requestKeyRef.current = null;
+    ifscLookupRequestRef.current += 1;
+    setBankSearch(bank.bankName);
+    setBankDropdownOpen(false);
+    setIfscDetails(null);
+    setIfscLookupNotice("");
+    setForm((current) => ({ ...current, bankCode, ifsc: "" }));
+    setIfscLookupLoading(true);
+    try {
+      const response = await complianceApi.bankDirectorySelection(
+        activeSession.accessToken,
+        bankCode,
+      );
+      if (requestId !== bankSelectionRequestRef.current) return;
+      const selected = applyBankDirectorySelection(response.bank || bank, response.ifscLookup);
+      setForm((current) =>
+        current.bankCode === bankCode ? { ...current, ifsc: selected.ifsc } : current,
+      );
+      setIfscDetails(selected.details);
+      if (response.ifscLookup.lookupStatus === "UNAVAILABLE") {
+        setIfscLookupNotice(
+          "A suggested IFSC is unavailable. Enter the customer branch IFSC manually.",
+        );
+      }
+    } catch (error) {
+      if (requestId !== bankSelectionRequestRef.current) return;
+      setForm((current) => (current.bankCode === bankCode ? { ...current, ifsc: "" } : current));
+      setIfscDetails(null);
+      setIfscLookupNotice(`${complianceMessage(error)} Enter the customer branch IFSC manually.`);
+    } finally {
+      if (requestId === bankSelectionRequestRef.current) setIfscLookupLoading(false);
+    }
+  }
+
   function validateBankDetails(requireAccountNumber = !editingId) {
-    if (!form.bankName.trim() || !form.accountHolderName.trim())
-      return "Bank name and account holder name are required.";
-    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifsc.trim().toUpperCase()))
-      return "Enter a valid 11-character IFSC code.";
+    if (!form.bankCode.trim() || !form.accountHolderName.trim())
+      return "Select a bank and enter the account holder name.";
+    if (!isValidIfsc(form.ifsc)) return "Enter a valid 11-character IFSC code.";
     if (requireAccountNumber && !/^\d{9,18}$/.test(form.accountNumber))
       return "Account number must contain 9 to 18 digits.";
     if (!requireAccountNumber && form.accountNumber && !/^\d{9,18}$/.test(form.accountNumber))
@@ -299,10 +378,8 @@ function BankAccountsPage() {
         }
       }
       const payload = {
-        bankName: form.bankName.trim(),
-        ...(isDmt && form.bankCode.trim() ? { bankCode: form.bankCode.trim() } : {}),
-        ifsc: form.ifsc.toUpperCase(),
-        branchName: form.branchName || undefined,
+        bankCode: form.bankCode.trim(),
+        ifsc: normalizeIfsc(form.ifsc),
         accountHolderName: form.accountHolderName.trim(),
         accountType: form.accountType,
         purposes: isDmt ? (["DMT"] as Array<"DMT" | "PAYOUT">) : form.purposes,
@@ -338,6 +415,10 @@ function BankAccountsPage() {
       else return;
       requestKeyRef.current = null;
       setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
+      setBankSearch("");
+      setBankDropdownOpen(false);
+      setIfscDetails(null);
+      setIfscLookupNotice("");
       setAdding(false);
       setEditingId(null);
       setEditingAccount(null);
@@ -376,10 +457,8 @@ function BankAccountsPage() {
         activeSession.accessToken,
         buildDmtBankCreateInput(
           {
-            bankName: form.bankName,
             bankCode: form.bankCode,
             ifsc: form.ifsc,
-            branchName: form.branchName,
             accountHolderName: form.accountHolderName,
             accountNumber: form.accountNumber,
             confirmAccountNumber: form.confirm,
@@ -395,6 +474,10 @@ function BankAccountsPage() {
       setAccounts((current) => applyDmtBankMutation(current, response));
       setAdding(false);
       setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
+      setBankSearch("");
+      setBankDropdownOpen(false);
+      setIfscDetails(null);
+      setIfscLookupNotice("");
       setMessage({
         ok: true,
         text:
@@ -415,6 +498,7 @@ function BankAccountsPage() {
   const filteredAccounts = accounts.filter((a) =>
     activeTab === "AEPS" ? a.purposes.includes("PAYOUT") : a.purposes.includes("DMT"),
   );
+  const bankSelectionValid = Boolean(form.bankCode.trim()) && isValidIfsc(form.ifsc);
 
   function closeBankModal() {
     if (busy || dmtAddBusy || dmtVerifyCreateBusy) return;
@@ -427,6 +511,10 @@ function BankAccountsPage() {
     setCoordinates(null);
     setLocationError("");
     setMessage(null);
+    setBankSearch("");
+    setBankDropdownOpen(false);
+    setIfscDetails(null);
+    setIfscLookupNotice("");
     setForm({ ...initial, accountHolderName: activeSession.identity.fullName });
   }
 
@@ -440,6 +528,10 @@ function BankAccountsPage() {
     setCoordinates(null);
     setLocationError("");
     setMessage(null);
+    setBankSearch("");
+    setBankDropdownOpen(false);
+    setIfscDetails(null);
+    setIfscLookupNotice("");
     setForm({
       ...initial,
       accountHolderName: activeSession.identity.fullName,
@@ -661,11 +753,28 @@ function BankAccountsPage() {
                                 setAdding(true);
                                 setCoordinates(null);
                                 setLocationError("");
+                                setBankSearch(latest.bankName);
+                                setBankDropdownOpen(false);
+                                setIfscDetails(null);
+                                setIfscLookupNotice("");
+                                setBankDirectory((current) =>
+                                  latest.bankCode &&
+                                  !current.some(
+                                    (bank) => bank.bankCode.trim() === latest.bankCode?.trim(),
+                                  )
+                                    ? [
+                                        {
+                                          bankCode: latest.bankCode,
+                                          bankName: latest.bankName,
+                                          suggestedIfsc: latest.ifsc,
+                                        },
+                                        ...current,
+                                      ]
+                                    : current,
+                                );
                                 setForm({
-                                  bankName: latest.bankName,
                                   bankCode: latest.bankCode || "",
                                   ifsc: latest.ifsc,
-                                  branchName: latest.branchName || "",
                                   accountHolderName: latest.accountHolderName,
                                   accountNumber: "",
                                   confirm: "",
@@ -861,11 +970,76 @@ function BankAccountsPage() {
                   }
                   className="grid min-h-0 flex-1 gap-4 overflow-y-auto bg-mint/35 p-5 sm:grid-cols-2 sm:p-7"
                 >
+                  <div className="relative text-xs font-bold uppercase text-muted-foreground">
+                    <label htmlFor="bank-directory-search">Bank</label>
+                    <input
+                      id="bank-directory-search"
+                      autoFocus
+                      autoComplete="off"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-expanded={bankDropdownOpen}
+                      aria-controls="bank-directory-options"
+                      required
+                      value={bankSearch}
+                      placeholder="Search and select a bank"
+                      onFocus={() => setBankDropdownOpen(true)}
+                      onBlur={() => {
+                        window.setTimeout(() => setBankDropdownOpen(false), 100);
+                      }}
+                      onChange={(event) => {
+                        requestKeyRef.current = null;
+                        bankSelectionRequestRef.current += 1;
+                        ifscLookupRequestRef.current += 1;
+                        setBankSearch(event.target.value);
+                        setBankDropdownOpen(true);
+                        setIfscDetails(null);
+                        setIfscLookupNotice("");
+                        setForm((current) => ({ ...current, bankCode: "", ifsc: "" }));
+                      }}
+                      className="mt-1.5 w-full rounded-xl border border-border bg-card px-4 py-3 text-sm font-normal normal-case outline-none focus:border-primary"
+                    />
+                    {bankDropdownOpen && (
+                      <div
+                        id="bank-directory-options"
+                        role="listbox"
+                        className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-border bg-card p-1.5 normal-case shadow-xl"
+                      >
+                        {bankDirectoryLoading ? (
+                          <p className="flex items-center gap-2 px-3 py-3 text-sm font-semibold text-muted-foreground">
+                            <Loader2 size={15} className="animate-spin" /> Loading banks…
+                          </p>
+                        ) : bankDirectoryError ? (
+                          <p role="alert" className="px-3 py-3 text-sm font-semibold text-red-600">
+                            {bankDirectoryError}
+                          </p>
+                        ) : bankDirectory.length === 0 ? (
+                          <p className="px-3 py-3 text-sm font-semibold text-muted-foreground">
+                            No banks found.
+                          </p>
+                        ) : (
+                          bankDirectory.map((bank, index) => (
+                            <button
+                              key={`${bank.bankCode}:${bank.bankName}:${index}`}
+                              type="button"
+                              role="option"
+                              aria-selected={form.bankCode === bank.bankCode}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => void selectDirectoryBank(bank)}
+                              className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-secondary transition hover:bg-mint"
+                            >
+                              <span>{bank.bankName}</span>
+                              <span className="shrink-0 text-[10px] font-extrabold uppercase text-muted-foreground">
+                                {bank.bankCode}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                   {[
-                    ["Bank name", "bankName"],
-                    ...(activeTab === "MAIN" ? [["Bank code (optional)", "bankCode"]] : []),
                     ["IFSC code", "ifsc"],
-                    ["Branch (optional)", "branchName"],
                     ["Account holder name", "accountHolderName"],
                     ["Account number", "accountNumber"],
                     ["Confirm account number", "confirm"],
@@ -873,34 +1047,73 @@ function BankAccountsPage() {
                     <label key={key} className="text-xs font-bold uppercase text-muted-foreground">
                       {label}
                       <input
-                        autoFocus={key === "bankName"}
-                        list={key === "bankName" ? "supported-bank-directory" : undefined}
-                        required={
-                          !["branchName", "bankCode"].includes(key) &&
-                          (!editingId || !["accountNumber", "confirm"].includes(key))
-                        }
+                        required={!editingId || !["accountNumber", "confirm"].includes(key)}
                         value={form[key as keyof typeof form]}
                         onChange={(e) => {
                           requestKeyRef.current = null;
-                          setForm({
-                            ...form,
+                          if (key === "ifsc") {
+                            ifscLookupRequestRef.current += 1;
+                            setIfscDetails(null);
+                            setIfscLookupNotice("");
+                          }
+                          setForm((current) => ({
+                            ...current,
                             [key]:
                               key === "ifsc"
-                                ? e.target.value.toUpperCase().slice(0, 11)
+                                ? normalizeIfsc(e.target.value).slice(0, 11)
                                 : key.includes("accountNumber") || key === "confirm"
                                   ? e.target.value.replace(/\D/g, "").slice(0, 18)
                                   : e.target.value,
-                          });
+                          }));
                         }}
                         className="mt-1.5 w-full rounded-xl border border-border bg-card px-4 py-3 text-sm font-normal normal-case outline-none focus:border-primary"
                       />
+                      {key === "ifsc" && form.ifsc && !isValidIfsc(form.ifsc) ? (
+                        <span className="mt-1.5 block normal-case text-red-600">
+                          Enter a valid 11-character IFSC code.
+                        </span>
+                      ) : null}
                     </label>
                   ))}
-                  <datalist id="supported-bank-directory">
-                    {bankDirectory.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
+                  <div className="rounded-xl border border-border bg-card p-4 sm:col-span-2">
+                    <div className="flex items-center gap-2 text-xs font-extrabold uppercase text-muted-foreground">
+                      {ifscLookupLoading ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Landmark size={14} />
+                      )}
+                      Branch information
+                    </div>
+                    {ifscDetails ? (
+                      <div className="mt-2 grid gap-2 text-sm text-secondary sm:grid-cols-2">
+                        <p>
+                          <span className="font-bold">Branch:</span>{" "}
+                          {ifscDetails.branch || "Not provided"}
+                        </p>
+                        <p>
+                          <span className="font-bold">Location:</span>{" "}
+                          {[ifscDetails.city, ifscDetails.district, ifscDetails.state]
+                            .filter(Boolean)
+                            .join(", ") || "Not provided"}
+                        </p>
+                        <p className="sm:col-span-2">
+                          <span className="font-bold">Address:</span>{" "}
+                          {ifscDetails.address || "Not provided"}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {ifscLookupLoading
+                          ? "Looking up branch details…"
+                          : "Enter a valid IFSC to view its branch and address."}
+                      </p>
+                    )}
+                    {ifscLookupNotice && (
+                      <p role="status" className="mt-2 text-xs font-semibold text-amber-700">
+                        {ifscLookupNotice}
+                      </p>
+                    )}
+                  </div>
                   <label className="text-xs font-bold uppercase text-muted-foreground">
                     Account type
                     <select
@@ -1128,7 +1341,9 @@ function BankAccountsPage() {
                     <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
                       <button
                         type="button"
-                        disabled={!canManageBank || dmtAddBusy || dmtVerifyCreateBusy}
+                        disabled={
+                          !canManageBank || !bankSelectionValid || dmtAddBusy || dmtVerifyCreateBusy
+                        }
                         onClick={() => void createDmtBank("ADD_ONLY")}
                         className="inline-flex items-center justify-center gap-2 rounded-xl border border-secondary bg-white py-3 text-sm font-bold text-secondary disabled:opacity-50"
                       >
@@ -1137,7 +1352,9 @@ function BankAccountsPage() {
                       </button>
                       <button
                         type="button"
-                        disabled={!canManageBank || dmtAddBusy || dmtVerifyCreateBusy}
+                        disabled={
+                          !canManageBank || !bankSelectionValid || dmtAddBusy || dmtVerifyCreateBusy
+                        }
                         onClick={() => void createDmtBank("ADD_AND_VERIFY")}
                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-secondary py-3 text-sm font-bold text-white disabled:opacity-50"
                       >
@@ -1147,7 +1364,7 @@ function BankAccountsPage() {
                     </div>
                   ) : (
                     <button
-                      disabled={!canManageBank || busy}
+                      disabled={!canManageBank || !bankSelectionValid || busy}
                       className="self-end rounded-xl bg-secondary py-3 text-sm font-bold text-white disabled:opacity-50"
                     >
                       {busy

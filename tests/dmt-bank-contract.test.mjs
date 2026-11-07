@@ -25,10 +25,8 @@ const bankAccount = {
 };
 
 const draft = {
-  bankName: " Union Bank of India ",
-  bankCode: " 032 ",
+  bankCode: " UBIN ",
   ifsc: "ubin0554553",
-  branchName: " CHEEKA BRANCH ",
   accountHolderName: " FRANCY ",
   accountNumber: "545501010050846",
   confirmAccountNumber: "545501010050846",
@@ -37,10 +35,8 @@ const draft = {
 
 test("DMT add bank sends ADD_ONLY without credentials, passbook or coordinates", () => {
   assert.deepEqual(buildDmtBankCreateInput(draft, "ADD_ONLY"), {
-    bankName: "Union Bank of India",
-    bankCode: "032",
+    bankCode: "UBIN",
     ifsc: "UBIN0554553",
-    branchName: "CHEEKA BRANCH",
     accountHolderName: "FRANCY",
     accountNumber: "545501010050846",
     confirmAccountNumber: "545501010050846",
@@ -57,10 +53,8 @@ test("DMT add and verify sends coordinates with ADD_AND_VERIFY", () => {
       long: "76.8809",
     }),
     {
-      bankName: "Union Bank of India",
-      bankCode: "032",
+      bankCode: "UBIN",
       ifsc: "UBIN0554553",
-      branchName: "CHEEKA BRANCH",
       accountHolderName: "FRANCY",
       accountNumber: "545501010050846",
       confirmAccountNumber: "545501010050846",
