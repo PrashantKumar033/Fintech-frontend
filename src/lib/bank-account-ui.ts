@@ -7,10 +7,8 @@ import type {
 } from "@/lib/compliance-api";
 
 export type DmtBankDraft = {
-  bankName: string;
   bankCode: string;
   ifsc: string;
-  branchName: string;
   accountHolderName: string;
   accountNumber: string;
   confirmAccountNumber: string;
@@ -23,10 +21,8 @@ export function buildDmtBankCreateInput(
   coordinates?: { lat: string; long: string } | null,
 ): DmtBankAccountInput {
   return {
-    bankName: draft.bankName.trim(),
-    ...(draft.bankCode.trim() ? { bankCode: draft.bankCode.trim() } : {}),
+    bankCode: draft.bankCode.trim(),
     ifsc: draft.ifsc.trim().toUpperCase(),
-    ...(draft.branchName.trim() ? { branchName: draft.branchName.trim() } : {}),
     accountHolderName: draft.accountHolderName.trim(),
     accountNumber: draft.accountNumber,
     confirmAccountNumber: draft.confirmAccountNumber,

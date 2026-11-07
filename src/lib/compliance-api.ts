@@ -1,5 +1,10 @@
 import { ApiError, authenticatedRequest } from "./auth-api";
 import { createIdempotencyKey } from "./idempotency-key";
+import type {
+  BankDirectoryResponse,
+  BankDirectorySelectionResponse,
+  BankIfscLookup,
+} from "./bank-directory";
 
 export type BankAccountType = "SAVINGS" | "CURRENT" | "SALARY";
 export type BankAccountPurpose = "PAYOUT" | "DMT";
@@ -37,10 +42,8 @@ export type BankAccount = {
 };
 
 export type BankAccountInput = {
-  bankName: string;
-  bankCode?: string;
+  bankCode: string;
   ifsc: string;
-  branchName?: string;
   accountHolderName: string;
   accountNumber: string;
   confirmAccountNumber: string;
@@ -52,10 +55,8 @@ export type BankAccountInput = {
 };
 export type DmtBankCreationMode = "ADD_ONLY" | "ADD_AND_VERIFY";
 export type DmtBankAccountInput = {
-  bankName: string;
-  bankCode?: string;
+  bankCode: string;
   ifsc: string;
-  branchName?: string;
   accountHolderName: string;
   accountNumber: string;
   confirmAccountNumber: string;
@@ -150,7 +151,24 @@ export const complianceApi = {
       { cache: "no-store" },
       token,
     ),
-  bankDirectory: (token: string) => authenticatedRequest<unknown>("/bank/list", {}, token),
+  bankDirectory: (token: string, search = "") =>
+    authenticatedRequest<BankDirectoryResponse>(
+      `/bank/directory${search.trim() ? `?search=${encodeURIComponent(search.trim())}` : ""}`,
+      { cache: "no-store" },
+      token,
+    ),
+  bankDirectorySelection: (token: string, bankCode: string) =>
+    authenticatedRequest<BankDirectorySelectionResponse>(
+      `/bank/directory/${encodeURIComponent(bankCode.trim())}`,
+      { cache: "no-store" },
+      token,
+    ),
+  bankIfsc: (token: string, ifsc: string) =>
+    authenticatedRequest<BankIfscLookup>(
+      `/bank/ifsc/${encodeURIComponent(ifsc.trim().toUpperCase())}`,
+      { cache: "no-store" },
+      token,
+    ),
   addBank: (
     token: string,
     body: BankAccountInput,
