@@ -5,6 +5,7 @@ import {
   applyAdminBankVerification,
   canVerifyAdminBankAccount,
   isPayoutAdminReview,
+  shouldLoadBankAccountReviewDetails,
 } from "../src/lib/admin-bank-review.ts";
 
 const payoutPending = {
@@ -46,6 +47,17 @@ test("DMT-only accounts do not receive the admin Verify action", () => {
   );
 });
 
+test("super admins load secure full-number details for every bank account", () => {
+  const dmtOnly = {
+    adminReviewRequired: false,
+    purposes: ["DMT"],
+  };
+
+  assert.equal(shouldLoadBankAccountReviewDetails(dmtOnly, true), true);
+  assert.equal(shouldLoadBankAccountReviewDetails(dmtOnly, false), false);
+  assert.equal(shouldLoadBankAccountReviewDetails(payoutPending, false), true);
+});
+
 test("successful verification immediately replaces the old account-holder name", () => {
   const updated = applyAdminBankVerification(
     {
@@ -83,6 +95,7 @@ test("admin review UI uses body-less Verify and secure full-number details only"
   assert.doesNotMatch(apiSource, /admin\/bank-accounts\/\$\{[^}]+\}\/approve/);
   assert.doesNotMatch(apiSource, /admin\/bank-accounts\/\$\{[^}]+\}\/ownership\/approve/);
   assert.match(uiSource, /UI_PERMISSION\.BANK_ACCOUNT_REVIEW/);
+  assert.match(uiSource, /shouldLoadBankAccountReviewDetails\(account, privileged\)/);
   assert.match(uiSource, /"accountNumber" in detail && detail\.accountNumber/);
   assert.match(uiSource, /item\.bankName} ····\{item\.accountNumberLast4}/);
   assert.match(uiSource, /verifyBusy \? "Verifying…" : "Verify"/);

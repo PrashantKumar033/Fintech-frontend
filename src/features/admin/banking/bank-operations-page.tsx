@@ -14,6 +14,7 @@ import {
   applyAdminBankVerification,
   canVerifyAdminBankAccount,
   isPayoutAdminReview,
+  shouldLoadBankAccountReviewDetails,
 } from "@/lib/admin-bank-review";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 
@@ -82,6 +83,7 @@ export function AdminBankOperationsPage() {
 
   async function inspect(account: AdminBankAccount) {
     const isReview = isPayoutAdminReview(account);
+    const loadReviewDetails = shouldLoadBankAccountReviewDetails(account, privileged);
     if (isReview && !canReview) {
       return setError(`Permission ${UI_PERMISSION.BANK_ACCOUNT_REVIEW} is required.`);
     }
@@ -93,7 +95,7 @@ export function AdminBankOperationsPage() {
     setSuccess("");
     try {
       setDetail(
-        isReview
+        loadReviewDetails
           ? await adminApi.operations.bankAccountReviewDetails(account.id)
           : await adminApi.operations.bankAccount(account.id),
       );
@@ -105,7 +107,7 @@ export function AdminBankOperationsPage() {
   }
 
   async function refreshDetail(account: AdminBankAccountDetail) {
-    const refreshed = isPayoutAdminReview(account)
+    const refreshed = shouldLoadBankAccountReviewDetails(account, privileged)
       ? await adminApi.operations.bankAccountReviewDetails(account.id)
       : await adminApi.operations.bankAccount(account.id);
     setDetail(refreshed);
@@ -159,7 +161,7 @@ export function AdminBankOperationsPage() {
     try {
       // Signed S3 URLs expire quickly. Always ask the authenticated backend for
       // a fresh URL at the moment the reviewer opens the document.
-      const freshDetail = isPayoutAdminReview(detail)
+      const freshDetail = shouldLoadBankAccountReviewDetails(detail, privileged)
         ? await adminApi.operations.bankAccountReviewDetails(detail.id)
         : await adminApi.operations.bankAccount(detail.id);
       setDetail(freshDetail);

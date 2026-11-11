@@ -11,6 +11,13 @@ export function isPayoutAdminReview(account: AdminReviewAccountState): boolean {
   return account.adminReviewRequired === true;
 }
 
+export function shouldLoadBankAccountReviewDetails(
+  account: AdminReviewAccountState,
+  isSuperAdmin: boolean,
+): boolean {
+  return isSuperAdmin || isPayoutAdminReview(account);
+}
+
 export function canVerifyAdminBankAccount(account: AdminReviewAccountState): boolean {
   return (
     isPayoutAdminReview(account) &&
