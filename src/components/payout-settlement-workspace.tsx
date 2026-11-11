@@ -69,7 +69,11 @@ function settlementTone(status: PayoutSettlement["status"]): string {
   return "border-amber-200 bg-amber-50 text-amber-950";
 }
 
-export function PayoutSettlementWorkspace() {
+export function PayoutSettlementWorkspace({
+  preferredSourceWallet = "AEPS",
+}: {
+  preferredSourceWallet?: PayoutSourceWallet;
+}) {
   const [view, setView] = useState<"create" | "history">("create");
 
   return (
@@ -91,12 +95,20 @@ export function PayoutSettlementWorkspace() {
         </button>
       </div>
 
-      {view === "create" ? <CreatePayoutSettlementPanel /> : <PayoutHistoryPanel />}
+      {view === "create" ? (
+        <CreatePayoutSettlementPanel preferredSourceWallet={preferredSourceWallet} />
+      ) : (
+        <PayoutHistoryPanel />
+      )}
     </>
   );
 }
 
-function CreatePayoutSettlementPanel() {
+function CreatePayoutSettlementPanel({
+  preferredSourceWallet,
+}: {
+  preferredSourceWallet: PayoutSourceWallet;
+}) {
   const session = getSession();
   const accessToken = session?.accessToken;
   const { can } = useEffectiveAccess();
@@ -106,7 +118,7 @@ function CreatePayoutSettlementPanel() {
   const [balances, setBalances] = useState<WalletBalances | null>(null);
   const [providerCode, setProviderCode] = useState("");
   const [bankAccountId, setBankAccountId] = useState("");
-  const [sourceWallet, setSourceWallet] = useState<PayoutSourceWallet>("AEPS");
+  const [sourceWallet, setSourceWallet] = useState<PayoutSourceWallet>(preferredSourceWallet);
   const [paymentMode, setPaymentMode] = useState<PayoutPaymentMode>("IMPS");
   const [amount, setAmount] = useState("");
   const [tpin, setTpin] = useState("");
@@ -190,6 +202,14 @@ function CreatePayoutSettlementPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setSourceWallet(preferredSourceWallet);
+    setBankAccountId("");
+    idempotencyKey.current = null;
+    setResult(null);
+    setReviewing(false);
+  }, [preferredSourceWallet]);
 
   useEffect(() => {
     if (!allowed) return;

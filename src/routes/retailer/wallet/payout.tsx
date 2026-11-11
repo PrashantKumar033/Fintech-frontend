@@ -6,6 +6,9 @@ import { getSession } from "@/lib/auth-api";
 import { credentialsPending, resolveWorkspaceRole, signedInHome } from "@/lib/role-hierarchy";
 
 export const Route = createFileRoute("/retailer/wallet/payout")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    wallet: search.wallet === "MAIN" ? ("MAIN" as const) : ("AEPS" as const),
+  }),
   head: () => ({ meta: [{ title: "Payout to Bank — Retailer | UMOBIPAY" }] }),
   component: RetailerPayoutPage,
 });
@@ -13,6 +16,7 @@ export const Route = createFileRoute("/retailer/wallet/payout")({
 function RetailerPayoutPage() {
   const navigate = useNavigate();
   const session = getSession();
+  const { wallet } = Route.useSearch();
 
   useEffect(() => {
     if (!session) {
@@ -37,7 +41,7 @@ function RetailerPayoutPage() {
       title="Payout to bank"
       description="Settle your AEPS or MAIN wallet balance to an approved payout-enabled bank account."
     >
-      <PayoutSettlementWorkspace />
+      <PayoutSettlementWorkspace preferredSourceWallet={wallet} />
     </BusinessPage>
   );
 }

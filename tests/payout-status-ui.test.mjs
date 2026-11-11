@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   PAYOUT_TOTAL_DEBIT_LABEL,
@@ -73,4 +74,20 @@ test("payout provider displays public name while requests retain public code", (
 test("wallet debit label never renders an undefined wallet name", () => {
   assert.equal(PAYOUT_TOTAL_DEBIT_LABEL.toUpperCase(), "TOTAL WALLET DEBIT");
   assert.doesNotMatch(PAYOUT_TOTAL_DEBIT_LABEL.toUpperCase(), /UNDEFINED/);
+});
+
+test("retailer payout navigation separates AEPS settlements from MAIN fund transfer", async () => {
+  const [navigation, businessPage, payoutRoute] = await Promise.all([
+    readFile(new URL("../src/lib/app-navigation.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/business-page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/routes/retailer/wallet/payout.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(
+    navigation,
+    /key:\s*"fundTransfer"[\s\S]*?label:\s*"Fund Transfer"[\s\S]*?\/retailer\/wallet\/payout\?wallet=MAIN/,
+  );
+  assert.match(businessPage, /label:\s*"Settlements"[\s\S]*?href:\s*"\/retailer\/wallet\/payout"/);
+  assert.match(payoutRoute, /search\.wallet === "MAIN"[\s\S]*?: \("AEPS" as const\)/);
+  assert.match(payoutRoute, /<PayoutSettlementWorkspace preferredSourceWallet=\{wallet\} \/>/);
 });

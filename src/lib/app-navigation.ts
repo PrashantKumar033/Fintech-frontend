@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BanknoteArrowUp,
   Banknote,
   Building2,
   CircleDollarSign,
@@ -35,6 +36,7 @@ export type NavigationKey =
   | "earnings"
   | "settlements"
   | "wallet"
+  | "fundTransfer"
   | "reports"
   | "activity"
   | "access"
@@ -237,6 +239,15 @@ export const APP_NAVIGATION: readonly AppNavigationItem[] = [
     area: "wallet",
     icon: Wallet,
     order: { MASTER_DISTRIBUTOR: 70, DISTRIBUTOR: 70, RETAILER: 50 },
+  },
+  {
+    key: "fundTransfer",
+    active: "fundTransfer",
+    label: "Fund Transfer",
+    destinations: { RETAILER: "/retailer/wallet/payout?wallet=MAIN" },
+    area: "wallet",
+    icon: BanknoteArrowUp,
+    order: { RETAILER: 55 },
   },
   {
     key: "reports",

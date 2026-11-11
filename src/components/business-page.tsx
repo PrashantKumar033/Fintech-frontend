@@ -87,7 +87,7 @@ const retailerSectionTabs: Partial<
       permission: UI_PERMISSION.WALLET_AEPS_TO_MAIN_TRANSFER,
     },
     {
-      label: "Payout to Bank",
+      label: "Settlements",
       href: "/retailer/wallet/payout",
       permission: [
         UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE,
@@ -250,9 +250,14 @@ export function BusinessPage({
     canAccessUiArea(item.area, { role: identity.role, access }),
   );
   const pathnameItem = [...nav]
-    .filter(
-      (item) => currentUrl.pathname === item.to || currentUrl.pathname.startsWith(`${item.to}/`),
-    )
+    .filter((item) => {
+      const targetUrl = new URL(item.to, "http://localhost");
+      const pathMatches =
+        currentUrl.pathname === targetUrl.pathname ||
+        currentUrl.pathname.startsWith(`${targetUrl.pathname}/`);
+      const searchMatches = !targetUrl.search || currentUrl.search === targetUrl.search;
+      return pathMatches && searchMatches;
+    })
     .sort((left, right) => right.to.length - left.to.length)[0];
   async function signOut() {
     setMobileMenuOpen(false);
@@ -463,9 +468,14 @@ export function BusinessPage({
                 <div className="mb-4 flex gap-2 overflow-x-auto lg:hidden">
                   {nav
                     .filter((item) =>
-                      ["kycSelf", "bankAccounts", "wallet", "transactions", "aeps"].includes(
-                        item.key,
-                      ),
+                      [
+                        "kycSelf",
+                        "bankAccounts",
+                        "wallet",
+                        "fundTransfer",
+                        "transactions",
+                        "aeps",
+                      ].includes(item.key),
                     )
                     .map((item) =>
                       (complianceGateActive && !complianceAllowedKeys.has(item.key)) ||
