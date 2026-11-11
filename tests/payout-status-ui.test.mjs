@@ -77,18 +77,25 @@ test("wallet debit label never renders an undefined wallet name", () => {
 });
 
 test("retailer payout navigation separates AEPS settlements from MAIN fund transfer", async () => {
-  const [navigation, businessPage, sectionTabs, payoutRoute, payoutWorkspace, mainBankModal] =
-    await Promise.all([
-      readFile(new URL("../src/lib/app-navigation.ts", import.meta.url), "utf8"),
-      readFile(new URL("../src/components/business-page.tsx", import.meta.url), "utf8"),
-      readFile(new URL("../src/components/section-tabs.tsx", import.meta.url), "utf8"),
-      readFile(new URL("../src/routes/retailer/wallet/payout.tsx", import.meta.url), "utf8"),
-      readFile(
-        new URL("../src/components/payout-settlement-workspace.tsx", import.meta.url),
-        "utf8",
-      ),
-      readFile(new URL("../src/components/main-bank-account-modal.tsx", import.meta.url), "utf8"),
-    ]);
+  const [
+    navigation,
+    businessPage,
+    sectionTabs,
+    payoutRoute,
+    payoutWorkspace,
+    payoutHistory,
+    payoutApi,
+    mainBankModal,
+  ] = await Promise.all([
+    readFile(new URL("../src/lib/app-navigation.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/business-page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/section-tabs.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/routes/retailer/wallet/payout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/payout-settlement-workspace.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/payout-history-panel.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/lib/payout-api.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/main-bank-account-modal.tsx", import.meta.url), "utf8"),
+  ]);
 
   assert.match(
     navigation,
@@ -105,6 +112,18 @@ test("retailer payout navigation separates AEPS settlements from MAIN fund trans
   assert.match(payoutWorkspace, /!fixedSourceWallet \?[\s\S]*?Debit from wallet/);
   assert.match(payoutWorkspace, /sourceWallet === "AEPS"[\s\S]*?AEPS wallet balance/);
   assert.match(payoutWorkspace, /sourceWallet === "MAIN"[\s\S]*?Main wallet balance/);
+  assert.match(
+    payoutWorkspace,
+    /<PayoutHistoryPanel sourceWallet=\{fixedSourceWallet \?\? "AEPS"\} \/>/,
+  );
+  assert.match(
+    payoutHistory,
+    /payoutApi\.history\(accessToken,[\s\S]*?sourceWallet[\s\S]*?AEPS payout history[\s\S]*?Main wallet payout history/,
+  );
+  assert.match(
+    payoutApi,
+    /sourceWallet\?: PayoutSourceWallet[\s\S]*?sourceWallet: query\.sourceWallet/,
+  );
   assert.match(payoutWorkspace, /MainBankAccountChooser[\s\S]*?Choose payout account/);
   assert.match(payoutWorkspace, /Loading Main payout bank accounts[\s\S]*?animate-pulse/);
   assert.match(

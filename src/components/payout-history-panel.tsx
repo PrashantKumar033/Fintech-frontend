@@ -21,6 +21,7 @@ import {
   type PayoutSettlement,
   type PayoutSettlementDetail,
   type PayoutSettlementStatus,
+  type PayoutSourceWallet,
 } from "@/lib/payout-api";
 import {
   PAYOUT_TOTAL_DEBIT_LABEL,
@@ -201,7 +202,7 @@ function downloadPayoutReceipt(receipt: PayoutReceipt) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
-export function PayoutHistoryPanel() {
+export function PayoutHistoryPanel({ sourceWallet }: { sourceWallet: PayoutSourceWallet }) {
   const session = getSession();
   const accessToken = session?.accessToken;
   const { can } = useEffectiveAccess();
@@ -239,7 +240,12 @@ export function PayoutHistoryPanel() {
     setLoading(true);
     setError("");
     try {
-      const result = await payoutApi.history(accessToken, { page, limit: 10, status });
+      const result = await payoutApi.history(accessToken, {
+        page,
+        limit: 10,
+        status,
+        sourceWallet,
+      });
       setItems(result.items);
       setTotal(result.pagination.total);
       setTotalPages(result.pagination.totalPages);
@@ -251,7 +257,13 @@ export function PayoutHistoryPanel() {
     } finally {
       setLoading(false);
     }
-  }, [accessToken, allowed, page, status]);
+  }, [accessToken, allowed, page, sourceWallet, status]);
+
+  useEffect(() => {
+    setPage(1);
+    setDetail(null);
+    setReceipt(null);
+  }, [sourceWallet]);
 
   useEffect(() => {
     void load();
@@ -338,11 +350,15 @@ export function PayoutHistoryPanel() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-wider text-primary">
-              Payout ledger
+              {sourceWallet === "AEPS" ? "AEPS payout ledger" : "Main wallet payout ledger"}
             </p>
-            <h2 className="mt-1 text-xl font-black text-secondary">Your payout history</h2>
+            <h2 className="mt-1 text-xl font-black text-secondary">
+              {sourceWallet === "AEPS" ? "AEPS payout history" : "Main wallet payout history"}
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Track AEPS or MAIN wallet settlements, view details and download official receipts.
+              {sourceWallet === "AEPS"
+                ? "Track AEPS wallet settlements, view details and download official receipts."
+                : "Track Main wallet fund transfers, view details and download official receipts."}
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -488,7 +504,8 @@ export function PayoutHistoryPanel() {
               ) : (
                 <tr>
                   <td colSpan={10} className="p-12 text-center text-muted-foreground">
-                    <Search className="mx-auto mb-3" size={24} /> No payout settlements found.
+                    <Search className="mx-auto mb-3" size={24} /> No {sourceWallet} wallet payouts
+                    found.
                   </td>
                 </tr>
               )}
@@ -497,7 +514,9 @@ export function PayoutHistoryPanel() {
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
-          <p className="text-muted-foreground">{total} payout settlement(s)</p>
+          <p className="text-muted-foreground">
+            {total} {sourceWallet} wallet payout(s)
+          </p>
           <div className="flex items-center gap-3">
             <button
               type="button"

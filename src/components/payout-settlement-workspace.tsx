@@ -301,7 +301,7 @@ export function PayoutSettlementWorkspace({
       {view === "create" ? (
         <CreatePayoutSettlementPanel fixedSourceWallet={fixedSourceWallet} />
       ) : (
-        <PayoutHistoryPanel />
+        <PayoutHistoryPanel sourceWallet={fixedSourceWallet ?? "AEPS"} />
       )}
     </>
   );

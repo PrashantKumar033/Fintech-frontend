@@ -96,6 +96,7 @@ export type PayoutHistoryQuery = {
   page?: number;
   limit?: number;
   status?: PayoutSettlementStatus | "";
+  sourceWallet?: PayoutSourceWallet;
 };
 
 export type PayoutReceipt = PayoutStatusFields & {
@@ -180,6 +181,7 @@ export const payoutApi = {
         page: query.page,
         limit: query.limit,
         status: query.status || undefined,
+        sourceWallet: query.sourceWallet,
       })}`,
       { cache: "no-store" },
       token,
