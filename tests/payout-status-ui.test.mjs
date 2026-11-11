@@ -77,10 +77,11 @@ test("wallet debit label never renders an undefined wallet name", () => {
 });
 
 test("retailer payout navigation separates AEPS settlements from MAIN fund transfer", async () => {
-  const [navigation, businessPage, payoutRoute] = await Promise.all([
+  const [navigation, businessPage, payoutRoute, payoutWorkspace] = await Promise.all([
     readFile(new URL("../src/lib/app-navigation.ts", import.meta.url), "utf8"),
     readFile(new URL("../src/components/business-page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../src/routes/retailer/wallet/payout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/payout-settlement-workspace.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(
@@ -89,5 +90,8 @@ test("retailer payout navigation separates AEPS settlements from MAIN fund trans
   );
   assert.match(businessPage, /label:\s*"Settlements"[\s\S]*?href:\s*"\/retailer\/wallet\/payout"/);
   assert.match(payoutRoute, /search\.wallet === "MAIN"[\s\S]*?: \("AEPS" as const\)/);
-  assert.match(payoutRoute, /<PayoutSettlementWorkspace preferredSourceWallet=\{wallet\} \/>/);
+  assert.match(payoutRoute, /<PayoutSettlementWorkspace fixedSourceWallet=\{wallet\} \/>/);
+  assert.match(payoutWorkspace, /!fixedSourceWallet \?[\s\S]*?Debit from wallet/);
+  assert.match(payoutWorkspace, /sourceWallet === "AEPS"[\s\S]*?AEPS wallet balance/);
+  assert.match(payoutWorkspace, /sourceWallet === "MAIN"[\s\S]*?Main wallet balance/);
 });

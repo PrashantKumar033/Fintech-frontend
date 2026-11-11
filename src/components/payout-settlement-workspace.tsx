@@ -70,9 +70,9 @@ function settlementTone(status: PayoutSettlement["status"]): string {
 }
 
 export function PayoutSettlementWorkspace({
-  preferredSourceWallet = "AEPS",
+  fixedSourceWallet,
 }: {
-  preferredSourceWallet?: PayoutSourceWallet;
+  fixedSourceWallet?: PayoutSourceWallet;
 }) {
   const [view, setView] = useState<"create" | "history">("create");
 
@@ -96,7 +96,7 @@ export function PayoutSettlementWorkspace({
       </div>
 
       {view === "create" ? (
-        <CreatePayoutSettlementPanel preferredSourceWallet={preferredSourceWallet} />
+        <CreatePayoutSettlementPanel fixedSourceWallet={fixedSourceWallet} />
       ) : (
         <PayoutHistoryPanel />
       )}
@@ -105,9 +105,9 @@ export function PayoutSettlementWorkspace({
 }
 
 function CreatePayoutSettlementPanel({
-  preferredSourceWallet,
+  fixedSourceWallet,
 }: {
-  preferredSourceWallet: PayoutSourceWallet;
+  fixedSourceWallet?: PayoutSourceWallet;
 }) {
   const session = getSession();
   const accessToken = session?.accessToken;
@@ -118,7 +118,7 @@ function CreatePayoutSettlementPanel({
   const [balances, setBalances] = useState<WalletBalances | null>(null);
   const [providerCode, setProviderCode] = useState("");
   const [bankAccountId, setBankAccountId] = useState("");
-  const [sourceWallet, setSourceWallet] = useState<PayoutSourceWallet>(preferredSourceWallet);
+  const [sourceWallet, setSourceWallet] = useState<PayoutSourceWallet>(fixedSourceWallet ?? "AEPS");
   const [paymentMode, setPaymentMode] = useState<PayoutPaymentMode>("IMPS");
   const [amount, setAmount] = useState("");
   const [tpin, setTpin] = useState("");
@@ -204,12 +204,13 @@ function CreatePayoutSettlementPanel({
   }, [load]);
 
   useEffect(() => {
-    setSourceWallet(preferredSourceWallet);
+    if (!fixedSourceWallet) return;
+    setSourceWallet(fixedSourceWallet);
     setBankAccountId("");
     idempotencyKey.current = null;
     setResult(null);
     setReviewing(false);
-  }, [preferredSourceWallet]);
+  }, [fixedSourceWallet]);
 
   useEffect(() => {
     if (!allowed) return;
@@ -433,10 +434,13 @@ function CreatePayoutSettlementPanel({
               <BanknoteArrowDown size={23} />
             </span>
             <div>
-              <h2 className="text-xl font-black text-secondary">Wallet payout to bank</h2>
+              <h2 className="text-xl font-black text-secondary">
+                {sourceWallet === "AEPS" ? "AEPS wallet settlement" : "Main wallet fund transfer"}
+              </h2>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Settle AEPS or Main wallet funds into your own approved payout bank account through
-                an available provider.
+                {sourceWallet === "AEPS"
+                  ? "Settle AEPS wallet funds into your approved AEPS payout bank account through an available provider."
+                  : "Transfer Main wallet funds into your approved Main wallet payout bank account through an available provider."}
               </p>
             </div>
           </div>
@@ -450,27 +454,37 @@ function CreatePayoutSettlementPanel({
           </button>
         </div>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div
-            className={`rounded-2xl border p-4 ${isNegativeWalletBalance(aepsBalance) ? "border-red-200 bg-red-50" : "border-transparent bg-muted"}`}
-          >
-            <p className="text-xs font-black uppercase text-muted-foreground">AEPS available</p>
-            <p
-              className={`mt-2 text-2xl font-black tabular-nums ${isNegativeWalletBalance(aepsBalance) ? "text-red-700" : "text-secondary"}`}
+        <div
+          className={`mt-5 grid gap-4 sm:grid-cols-2 ${fixedSourceWallet ? "xl:grid-cols-3" : "xl:grid-cols-4"}`}
+        >
+          {(!fixedSourceWallet || sourceWallet === "AEPS") && (
+            <div
+              className={`rounded-2xl border p-4 ${isNegativeWalletBalance(aepsBalance) ? "border-red-200 bg-red-50" : "border-transparent bg-muted"}`}
             >
-              {loading ? "—" : formatWalletBalance(aepsBalance)}
-            </p>
-          </div>
-          <div
-            className={`rounded-2xl border p-4 ${isNegativeWalletBalance(mainBalance) ? "border-red-200 bg-red-50" : "border-transparent bg-muted"}`}
-          >
-            <p className="text-xs font-black uppercase text-muted-foreground">Main wallet</p>
-            <p
-              className={`mt-2 text-2xl font-black tabular-nums ${isNegativeWalletBalance(mainBalance) ? "text-red-700" : "text-secondary"}`}
+              <p className="text-xs font-black uppercase text-muted-foreground">
+                AEPS wallet balance
+              </p>
+              <p
+                className={`mt-2 text-2xl font-black tabular-nums ${isNegativeWalletBalance(aepsBalance) ? "text-red-700" : "text-secondary"}`}
+              >
+                {loading ? "—" : formatWalletBalance(aepsBalance)}
+              </p>
+            </div>
+          )}
+          {(!fixedSourceWallet || sourceWallet === "MAIN") && (
+            <div
+              className={`rounded-2xl border p-4 ${isNegativeWalletBalance(mainAvailableBalance) ? "border-red-200 bg-red-50" : "border-transparent bg-muted"}`}
             >
-              {loading ? "—" : formatWalletBalance(mainBalance)}
-            </p>
-          </div>
+              <p className="text-xs font-black uppercase text-muted-foreground">
+                Main wallet balance
+              </p>
+              <p
+                className={`mt-2 text-2xl font-black tabular-nums ${isNegativeWalletBalance(mainAvailableBalance) ? "text-red-700" : "text-secondary"}`}
+              >
+                {loading ? "—" : formatWalletBalance(mainAvailableBalance)}
+              </p>
+            </div>
+          )}
           <div className="rounded-2xl bg-muted p-4">
             <p className="text-xs font-black uppercase text-muted-foreground">
               {selectedWalletLabel} payout banks
@@ -551,22 +565,24 @@ function CreatePayoutSettlementPanel({
             </select>
           </label>
 
-          <label className="text-sm font-bold text-secondary">
-            Debit from wallet
-            <select
-              value={sourceWallet}
-              onChange={(event) => {
-                const nextWallet = event.target.value as PayoutSourceWallet;
-                setSourceWallet(nextWallet);
-                resetIntent();
-              }}
-              disabled={!allowed || loading}
-              className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
-            >
-              <option value="AEPS">AEPS wallet — {formatWalletBalance(aepsBalance)}</option>
-              <option value="MAIN">Main wallet — {formatWalletBalance(mainBalance)}</option>
-            </select>
-          </label>
+          {!fixedSourceWallet ? (
+            <label className="text-sm font-bold text-secondary">
+              Debit from wallet
+              <select
+                value={sourceWallet}
+                onChange={(event) => {
+                  const nextWallet = event.target.value as PayoutSourceWallet;
+                  setSourceWallet(nextWallet);
+                  resetIntent();
+                }}
+                disabled={!allowed || loading}
+                className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
+              >
+                <option value="AEPS">AEPS wallet — {formatWalletBalance(aepsBalance)}</option>
+                <option value="MAIN">Main wallet — {formatWalletBalance(mainBalance)}</option>
+              </select>
+            </label>
+          ) : null}
 
           <label className="text-sm font-bold text-secondary">
             Amount
