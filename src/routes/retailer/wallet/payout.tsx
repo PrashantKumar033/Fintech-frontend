@@ -36,9 +36,9 @@ function RetailerPayoutPage() {
   return (
     <BusinessPage
       identity={session.identity}
-      active="wallet"
+      active={wallet === "AEPS" ? "wallet" : "fundTransfer"}
       eyebrow={wallet === "AEPS" ? "AEPS settlement" : "Main wallet payout"}
-      title={wallet === "AEPS" ? "Settlements" : "Fund transfer"}
+      title={wallet === "AEPS" ? "AEPS settlements" : "Fund transfer"}
       description={
         wallet === "AEPS"
           ? "Settle your AEPS wallet balance to an approved AEPS payout-enabled bank account."

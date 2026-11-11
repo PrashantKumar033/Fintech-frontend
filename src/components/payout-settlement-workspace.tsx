@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   BanknoteArrowDown,
   Building2,
+  CheckCircle2,
   CircleAlert,
   Crosshair,
   History,
@@ -10,13 +11,20 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   X,
 } from "lucide-react";
 import { ActionPermissionNotice } from "@/components/action-permission-notice";
+import { MainBankAccountModal } from "@/components/main-bank-account-modal";
 import { PayoutHistoryPanel } from "@/components/payout-history-panel";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { getSession } from "@/lib/auth-api";
 import { complianceApi, type BankAccount } from "@/lib/compliance-api";
+import {
+  applyDmtBankMutation,
+  canHardDeleteDmtAccount,
+  canVerifyDmtAccount,
+} from "@/lib/bank-account-ui";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { operationsApi, operationsMessage, type WalletBalances } from "@/lib/operations-api";
 import { isPayoutBankEligible, payoutBankPurpose } from "@/lib/payout-bank-eligibility";
@@ -50,6 +58,8 @@ const inr = new Intl.NumberFormat("en-IN", {
   minimumFractionDigits: 2,
 });
 
+const MIN_BANK_SKELETON_MS = 450;
+
 type Coordinates = Pick<BrowserLocation, "latitude" | "longitude">;
 
 async function captureLocation(forceRefresh = false): Promise<Coordinates> {
@@ -67,6 +77,199 @@ function settlementTone(status: PayoutSettlement["status"]): string {
   if (status === "SUCCESS") return "border-emerald-200 bg-emerald-50 text-emerald-900";
   if (status === "FAILED") return "border-red-200 bg-red-50 text-red-900";
   return "border-amber-200 bg-amber-50 text-amber-950";
+}
+
+function MainBankAccountChooser({
+  accounts,
+  loading,
+  selectedId,
+  verifyingBankId,
+  deletingBankId,
+  notice,
+  addFormOpen,
+  onAdd,
+  onSelect,
+  onVerify,
+  onDelete,
+}: {
+  accounts: BankAccount[];
+  loading: boolean;
+  selectedId: string;
+  verifyingBankId: string | null;
+  deletingBankId: string | null;
+  notice: { ok: boolean; text: string } | null;
+  addFormOpen: boolean;
+  onAdd: () => void;
+  onSelect: (account: BankAccount) => void;
+  onVerify: (account: BankAccount) => void;
+  onDelete: (account: BankAccount) => void;
+}) {
+  return (
+    <aside aria-busy={loading} className="rounded-2xl border border-border bg-muted/30 p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-wider text-primary">
+            Main bank accounts
+          </p>
+          <h3 className="mt-1 text-lg font-black text-secondary">Choose payout account</h3>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Select one verified Main account. The selected radio button is the payout destination.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onAdd}
+          disabled={loading || addFormOpen}
+          aria-expanded={addFormOpen}
+          aria-controls="add-main-bank-modal"
+          className="inline-flex items-center gap-2 rounded-xl bg-secondary px-3.5 py-2.5 text-xs font-extrabold text-white shadow-sm transition hover:brightness-95 disabled:cursor-default disabled:opacity-60"
+        >
+          {loading ? <LoaderCircle size={15} className="animate-spin" /> : <Plus size={15} />}
+          {loading ? "Loading accounts…" : addFormOpen ? "Form open" : "Add bank account"}
+        </button>
+      </div>
+
+      {notice ? (
+        <p
+          className={`mt-4 rounded-xl border p-3 text-xs font-bold ${notice.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"}`}
+        >
+          {notice.text}
+        </p>
+      ) : null}
+
+      <div className="mt-4 space-y-3">
+        {loading ? (
+          <div role="status" aria-live="polite" className="space-y-3">
+            <span className="sr-only">Loading Main payout bank accounts</span>
+            {[0, 1].map((item) => (
+              <div
+                key={item}
+                aria-hidden="true"
+                className="animate-pulse rounded-2xl border border-border bg-white p-4 shadow-sm"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="h-5 w-5 shrink-0 rounded-full bg-secondary/15" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="h-4 w-28 rounded-full bg-secondary/15" />
+                      <div className="h-5 w-14 rounded-full bg-secondary/10" />
+                    </div>
+                    <div className="mt-3 h-3 w-36 rounded-full bg-secondary/10" />
+                    <div className="mt-2 h-3 w-28 rounded-full bg-secondary/10" />
+                  </div>
+                </div>
+                <div className="mt-4 border-t border-border/70 pt-3">
+                  <div className="h-8 w-24 rounded-lg bg-secondary/10" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : accounts.length ? (
+          accounts.map((account) => {
+            const eligible = isPayoutBankEligible(account, "MAIN");
+            const selected = account.id === selectedId;
+            const verifying = account.id === verifyingBankId;
+            const deleting = account.id === deletingBankId;
+            const verificationComplete = account.verificationStatus === "VERIFIED";
+            const verificationFailed = ["REJECTED", "FAILED"].includes(account.verificationStatus);
+            return (
+              <article
+                key={account.id}
+                className={`rounded-2xl border bg-white p-4 transition ${selected ? "border-primary ring-2 ring-primary/15" : "border-border"}`}
+              >
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                  <label
+                    className={`flex min-w-0 items-start gap-3 text-left ${eligible && !verifying && !deleting ? "cursor-pointer" : "cursor-not-allowed"}`}
+                  >
+                    <input
+                      type="radio"
+                      name="main-payout-bank-account"
+                      value={account.id}
+                      checked={selected}
+                      onChange={() => onSelect(account)}
+                      disabled={!eligible || verifying || deleting}
+                      className="mt-1 h-5 w-5 shrink-0 accent-primary disabled:opacity-40"
+                      aria-label={`Use ${account.bankName} ending ${account.accountNumberLast4} for this payout`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <strong className="block truncate text-sm text-secondary">
+                        {account.bankName}
+                      </strong>
+                      <span className="mt-1 block text-xs font-bold text-muted-foreground">
+                        •••• {account.accountNumberLast4} · {account.accountType}
+                      </span>
+                      <span className="mt-1 block text-[11px] text-muted-foreground">
+                        IFSC {account.ifsc}
+                      </span>
+                    </span>
+                  </label>
+
+                  <div className="flex items-center gap-2">
+                    <span
+                      title={`Verification status: ${account.verificationStatus.replaceAll("_", " ")}`}
+                      className={`rounded-full px-2 py-0.5 text-[9px] font-black ${verificationComplete ? "bg-emerald-50 text-emerald-700" : verificationFailed ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}
+                    >
+                      {account.verificationStatus.replaceAll("_", " ")}
+                    </span>
+                    {canHardDeleteDmtAccount(account) ? (
+                      <button
+                        type="button"
+                        onClick={() => onDelete(account)}
+                        disabled={Boolean(verifyingBankId || deletingBankId)}
+                        title="Delete permanently"
+                        aria-label={`Delete ${account.bankName} account ending ${account.accountNumberLast4} permanently`}
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-red-200 bg-red-50 text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                      >
+                        {deleting ? (
+                          <LoaderCircle size={14} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                {!eligible ? (
+                  <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-900">
+                    {verificationComplete
+                      ? "This verified account is not currently available for a Main wallet payout."
+                      : "Verify this account before choosing it for a Main wallet payout."}
+                  </p>
+                ) : null}
+
+                {canVerifyDmtAccount(account) ? (
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-border/70 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => onVerify(account)}
+                      disabled={Boolean(verifyingBankId || deletingBankId)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-extrabold text-white disabled:opacity-50"
+                    >
+                      {verifying ? (
+                        <LoaderCircle size={14} className="animate-spin" />
+                      ) : (
+                        <ShieldCheck size={14} />
+                      )}
+                      {verifying ? "Verifying…" : "Verify"}
+                    </button>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border bg-white p-8 text-center">
+            <Building2 className="mx-auto text-muted-foreground" size={24} />
+            <p className="mt-3 text-sm font-black text-secondary">No Main bank account added</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Add a Main bank account to verify it and use it for fund transfers.
+            </p>
+          </div>
+        )}
+      </div>
+    </aside>
+  );
 }
 
 export function PayoutSettlementWorkspace({
@@ -124,17 +327,30 @@ function CreatePayoutSettlementPanel({
   const [tpin, setTpin] = useState("");
   const [coordinates, setCoordinates] = useState<Coordinates | null>(null);
   const [loading, setLoading] = useState(true);
+  const [bankAccountsLoading, setBankAccountsLoading] = useState(true);
   const [locationBusy, setLocationBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [confirmationError, setConfirmationError] = useState("");
   const [error, setError] = useState("");
+  const [bankActionNotice, setBankActionNotice] = useState<{
+    ok: boolean;
+    text: string;
+  } | null>(null);
+  const [addingMainBank, setAddingMainBank] = useState(false);
+  const [verifyingBankId, setVerifyingBankId] = useState<string | null>(null);
+  const [deletingBankId, setDeletingBankId] = useState<string | null>(null);
   const [result, setResult] = useState<PayoutSettlement | null>(null);
   const idempotencyKey = useRef<string | null>(null);
+  const bankAccountsRequest = useRef(0);
 
   const eligibleAccounts = useMemo(
     () => accounts.filter((account) => isPayoutBankEligible(account, sourceWallet)),
     [accounts, sourceWallet],
+  );
+  const mainAccounts = useMemo(
+    () => accounts.filter((account) => account.purposes.includes("DMT")),
+    [accounts],
   );
   const selectedAccount = eligibleAccounts.find((account) => account.id === bankAccountId);
   const selectedProvider = providers.find(
@@ -159,16 +375,45 @@ function CreatePayoutSettlementPanel({
 
   const load = useCallback(async () => {
     if (!accessToken || !allowed) {
+      bankAccountsRequest.current += 1;
       setLoading(false);
+      setBankAccountsLoading(false);
       return;
     }
 
     setLoading(true);
+    setBankAccountsLoading(true);
     setError("");
     const failures: string[] = [];
+    const bankRequestId = ++bankAccountsRequest.current;
+    const bankLoadingStartedAt = Date.now();
+    const finishBankLoading = async () => {
+      const remaining = MIN_BANK_SKELETON_MS - (Date.now() - bankLoadingStartedAt);
+      if (remaining > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+      }
+    };
+    const bankRequest = (async () => {
+      try {
+        const loadedAccounts = await complianceApi.banks(accessToken);
+        await finishBankLoading();
+        if (bankAccountsRequest.current === bankRequestId) {
+          setAccounts(loadedAccounts);
+          setBankAccountsLoading(false);
+        }
+        return loadedAccounts;
+      } catch (requestError) {
+        await finishBankLoading();
+        if (bankAccountsRequest.current === bankRequestId) {
+          setAccounts([]);
+          setBankAccountsLoading(false);
+        }
+        throw requestError;
+      }
+    })();
     const [providerResult, bankResult, balanceResult] = await Promise.allSettled([
       payoutApi.providers(accessToken),
-      complianceApi.banks(accessToken),
+      bankRequest,
       operationsApi.balances(accessToken),
     ]);
 
@@ -182,10 +427,7 @@ function CreatePayoutSettlementPanel({
       failures.push(payoutMessage(providerResult.reason));
     }
 
-    if (bankResult.status === "fulfilled") {
-      setAccounts(bankResult.value);
-    } else {
-      setAccounts([]);
+    if (bankResult.status === "rejected") {
       failures.push(payoutMessage(bankResult.reason));
     }
 
@@ -235,9 +477,11 @@ function CreatePayoutSettlementPanel({
     setBankAccountId((current) =>
       eligibleAccounts.some((account) => account.id === current)
         ? current
-        : eligibleAccounts[0]?.id || "",
+        : fixedSourceWallet === "MAIN"
+          ? ""
+          : eligibleAccounts[0]?.id || "",
     );
-  }, [eligibleAccounts]);
+  }, [eligibleAccounts, fixedSourceWallet]);
 
   function resetIntent() {
     idempotencyKey.current = null;
@@ -255,6 +499,72 @@ function CreatePayoutSettlementPanel({
     } finally {
       setLocationBusy(false);
     }
+  }
+
+  async function verifyMainBankAccount(account: BankAccount) {
+    if (!accessToken || verifyingBankId || deletingBankId) return;
+    setBankActionNotice(null);
+    setVerifyingBankId(account.id);
+    try {
+      const location = await captureLocation(true);
+      const response = await complianceApi.verifyDmtBank(accessToken, account.id, {
+        lat: String(location.latitude),
+        long: String(location.longitude),
+      });
+      if (!response.success) {
+        throw new Error(
+          response.message || "The bank-account verification could not be completed.",
+        );
+      }
+      const refreshedAccounts = await complianceApi.banks(accessToken);
+      setAccounts(refreshedAccounts);
+      if (isPayoutBankEligible(response.bankAccount, "MAIN")) {
+        setBankAccountId(response.bankAccount.id);
+      }
+      setBankActionNotice({
+        ok: true,
+        text: response.message || "Main bank account verified and selected.",
+      });
+    } catch (requestError) {
+      setBankActionNotice({ ok: false, text: payoutMessage(requestError) });
+    } finally {
+      setVerifyingBankId(null);
+    }
+  }
+
+  async function permanentlyDeleteMainBankAccount(account: BankAccount) {
+    if (!accessToken || verifyingBankId || deletingBankId) return;
+    if (
+      !window.confirm(
+        `Permanently delete ${account.bankName} account ending ${account.accountNumberLast4}?`,
+      )
+    )
+      return;
+
+    setBankActionNotice(null);
+    setDeletingBankId(account.id);
+    try {
+      await complianceApi.hardDeleteDmtBank(accessToken, account.id);
+      setAccounts((current) => current.filter((item) => item.id !== account.id));
+      setBankAccountId((current) => (current === account.id ? "" : current));
+      resetIntent();
+      setBankActionNotice({ ok: true, text: "Main bank account permanently deleted." });
+    } catch (requestError) {
+      setBankActionNotice({ ok: false, text: payoutMessage(requestError) });
+    } finally {
+      setDeletingBankId(null);
+    }
+  }
+
+  async function mainBankAccountCreated(account: BankAccount, message: string) {
+    setAccounts((current) =>
+      applyDmtBankMutation(current, { success: true, bankAccount: account }),
+    );
+    setBankActionNotice({ ok: true, text: message });
+    setAddingMainBank(false);
+    if (!accessToken) return;
+    const refreshedAccounts = await complianceApi.banks(accessToken).catch(() => null);
+    if (refreshedAccounts) setAccounts(refreshedAccounts);
   }
 
   function validateIntent(): boolean {
@@ -501,7 +811,7 @@ function CreatePayoutSettlementPanel({
           </div>
         </div>
 
-        {!loading && allowed && eligibleAccounts.length === 0 ? (
+        {!loading && allowed && eligibleAccounts.length === 0 && fixedSourceWallet !== "MAIN" ? (
           <div className="mt-5 flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex gap-3">
               <Building2 className="shrink-0" size={19} />
@@ -519,156 +829,192 @@ function CreatePayoutSettlementPanel({
           </div>
         ) : null}
 
-        <form onSubmit={review} className="mt-6 grid gap-5 md:grid-cols-2">
-          <label className="text-sm font-bold text-secondary">
-            Payout provider
-            <select
-              required
-              value={providerCode}
-              onChange={(event) => {
-                setProviderCode(event.target.value);
-                resetIntent();
-              }}
-              disabled={!allowed || loading || providers.length === 0}
-              className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
-            >
-              <option value="">Select provider</option>
-              {providers.map((provider) => {
-                const code = payoutProviderPublicCode(provider);
-                return (
-                  <option key={code} value={code}>
-                    {payoutProviderPublicName(provider)}
-                  </option>
-                );
-              })}
-            </select>
-          </label>
-
-          <label className="text-sm font-bold text-secondary">
-            {selectedWalletLabel} payout bank account
-            <select
-              required
-              value={bankAccountId}
-              onChange={(event) => {
-                setBankAccountId(event.target.value);
-                resetIntent();
-              }}
-              disabled={!allowed || loading || eligibleAccounts.length === 0}
-              className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
-            >
-              <option value="">Select {selectedWalletLabel} enabled bank</option>
-              {eligibleAccounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.bankName} •••• {account.accountNumberLast4} ({account.accountType})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {!fixedSourceWallet ? (
+        <div
+          className={`mt-6 ${fixedSourceWallet === "MAIN" ? "grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]" : ""}`}
+        >
+          <form onSubmit={review} className="grid content-start gap-5 md:grid-cols-2">
             <label className="text-sm font-bold text-secondary">
-              Debit from wallet
+              Payout provider
               <select
-                value={sourceWallet}
+                required
+                value={providerCode}
                 onChange={(event) => {
-                  const nextWallet = event.target.value as PayoutSourceWallet;
-                  setSourceWallet(nextWallet);
+                  setProviderCode(event.target.value);
+                  resetIntent();
+                }}
+                disabled={!allowed || loading || providers.length === 0}
+                className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
+              >
+                <option value="">Select provider</option>
+                {providers.map((provider) => {
+                  const code = payoutProviderPublicCode(provider);
+                  return (
+                    <option key={code} value={code}>
+                      {payoutProviderPublicName(provider)}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+
+            <label className="text-sm font-bold text-secondary">
+              Payment mode
+              <select
+                value={paymentMode}
+                onChange={(event) => {
+                  setPaymentMode(event.target.value as PayoutPaymentMode);
                   resetIntent();
                 }}
                 disabled={!allowed || loading}
                 className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
               >
-                <option value="AEPS">AEPS wallet — {formatWalletBalance(aepsBalance)}</option>
-                <option value="MAIN">Main wallet — {formatWalletBalance(mainBalance)}</option>
+                <option value="IMPS">IMPS</option>
+                <option value="NEFT">NEFT</option>
               </select>
             </label>
-          ) : null}
 
-          <label className="text-sm font-bold text-secondary">
-            Amount
-            <input
-              required
-              type="number"
-              min={100}
-              max={49_000}
-              step="0.01"
-              inputMode="decimal"
-              value={amount}
-              onChange={(event) => {
-                setAmount(event.target.value.replace(/[^0-9.]/g, ""));
-                resetIntent();
-              }}
-              placeholder="0.00"
-              disabled={!allowed || loading}
-              className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
-            />
-            <span className="mt-1 block text-xs font-medium text-muted-foreground">
-              Allowed range: ₹100.00 – ₹49,000.00
-            </span>
-          </label>
+            {fixedSourceWallet !== "MAIN" ? (
+              <label className="text-sm font-bold text-secondary">
+                {selectedWalletLabel} payout bank account
+                <select
+                  required
+                  value={bankAccountId}
+                  onChange={(event) => {
+                    setBankAccountId(event.target.value);
+                    resetIntent();
+                  }}
+                  disabled={!allowed || loading || eligibleAccounts.length === 0}
+                  className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
+                >
+                  <option value="">Select {selectedWalletLabel} enabled bank</option>
+                  {eligibleAccounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.bankName} •••• {account.accountNumberLast4} ({account.accountType})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
-          <label className="text-sm font-bold text-secondary">
-            Payment mode
-            <select
-              value={paymentMode}
-              onChange={(event) => {
-                setPaymentMode(event.target.value as PayoutPaymentMode);
-                resetIntent();
-              }}
-              disabled={!allowed || loading}
-              className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
+            {!fixedSourceWallet ? (
+              <label className="text-sm font-bold text-secondary">
+                Debit from wallet
+                <select
+                  value={sourceWallet}
+                  onChange={(event) => {
+                    const nextWallet = event.target.value as PayoutSourceWallet;
+                    setSourceWallet(nextWallet);
+                    resetIntent();
+                  }}
+                  disabled={!allowed || loading}
+                  className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
+                >
+                  <option value="AEPS">AEPS wallet — {formatWalletBalance(aepsBalance)}</option>
+                  <option value="MAIN">Main wallet — {formatWalletBalance(mainBalance)}</option>
+                </select>
+              </label>
+            ) : null}
+
+            <label
+              className={`text-sm font-bold text-secondary ${fixedSourceWallet === "MAIN" ? "md:col-span-2" : ""}`}
             >
-              <option value="IMPS">IMPS</option>
-              <option value="NEFT">NEFT</option>
-            </select>
-          </label>
+              Amount
+              <input
+                required
+                type="number"
+                min={100}
+                max={49_000}
+                step="0.01"
+                inputMode="decimal"
+                value={amount}
+                onChange={(event) => {
+                  setAmount(event.target.value.replace(/[^0-9.]/g, ""));
+                  resetIntent();
+                }}
+                placeholder="0.00"
+                disabled={!allowed || loading}
+                className="mt-2 w-full rounded-xl border border-border bg-white px-4 py-3 outline-none focus:border-primary disabled:bg-muted"
+              />
+              <span className="mt-1 block text-xs font-medium text-muted-foreground">
+                Allowed range: ₹100.00 – ₹49,000.00
+              </span>
+            </label>
 
-          <div className="rounded-2xl border border-border bg-muted/50 p-4 md:col-span-2">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-black text-secondary">Transaction location</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {coordinates
-                    ? `Captured: ${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)}`
-                    : "Location is required by the payout contract."}
-                </p>
+            <div className="rounded-2xl border border-border bg-muted/50 p-4 md:col-span-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-black text-secondary">Transaction location</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {coordinates
+                      ? `Captured: ${coordinates.latitude.toFixed(6)}, ${coordinates.longitude.toFixed(6)}`
+                      : "Location is required by the payout contract."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void requestCurrentLocation()}
+                  disabled={!allowed || locationBusy}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50"
+                >
+                  {locationBusy ? (
+                    <LoaderCircle className="animate-spin" size={17} />
+                  ) : (
+                    <Crosshair size={17} />
+                  )}
+                  {coordinates ? "Refresh location" : "Use current location"}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => void requestCurrentLocation()}
-                disabled={!allowed || locationBusy}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-50"
-              >
-                {locationBusy ? (
-                  <LoaderCircle className="animate-spin" size={17} />
-                ) : (
-                  <Crosshair size={17} />
-                )}
-                {coordinates ? "Refresh location" : "Use current location"}
-              </button>
             </div>
-          </div>
 
-          <div className="rounded-xl bg-amber-50 p-4 text-xs leading-5 text-amber-900 md:col-span-2">
-            The configured payout surcharge is added to the requested amount and the total is
-            debited from your {selectedWalletLabel} wallet. Each wallet has its own surcharge
-            configuration; the exact surcharge and total debit are returned with the payout result.
-          </div>
+            <div className="rounded-xl bg-amber-50 p-4 text-xs leading-5 text-amber-900 md:col-span-2">
+              The configured payout surcharge is added to the requested amount and the total is
+              debited from your {selectedWalletLabel} wallet. Each wallet has its own surcharge
+              configuration; the exact surcharge and total debit are returned with the payout
+              result.
+            </div>
 
-          <button
-            disabled={
-              !allowed ||
-              loading ||
-              providers.length === 0 ||
-              eligibleAccounts.length === 0 ||
-              submitting
-            }
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50 md:col-span-2"
-          >
-            <ShieldCheck size={18} /> Review payout
-          </button>
-        </form>
+            <button
+              disabled={
+                !allowed || loading || providers.length === 0 || !selectedAccount || submitting
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50 md:col-span-2"
+            >
+              <ShieldCheck size={18} /> Review payout
+            </button>
+          </form>
+
+          {fixedSourceWallet === "MAIN" ? (
+            <MainBankAccountChooser
+              accounts={mainAccounts}
+              loading={bankAccountsLoading}
+              selectedId={bankAccountId}
+              verifyingBankId={verifyingBankId}
+              deletingBankId={deletingBankId}
+              notice={bankActionNotice}
+              addFormOpen={addingMainBank}
+              onAdd={() => {
+                setBankActionNotice(null);
+                setAddingMainBank(true);
+              }}
+              onSelect={(account) => {
+                setBankAccountId(account.id);
+                resetIntent();
+              }}
+              onVerify={(account) => void verifyMainBankAccount(account)}
+              onDelete={(account) => void permanentlyDeleteMainBankAccount(account)}
+            />
+          ) : null}
+        </div>
       </section>
+
+      {fixedSourceWallet === "MAIN" && addingMainBank && accessToken ? (
+        <MainBankAccountModal
+          accessToken={accessToken}
+          accountHolderName={session.identity.fullName}
+          onClose={() => setAddingMainBank(false)}
+          onCreated={mainBankAccountCreated}
+        />
+      ) : null}
 
       {reviewing && selectedAccount && selectedProvider && coordinates ? (
         <div className="fixed inset-0 z-[120] grid place-items-center bg-secondary/65 p-4 backdrop-blur-sm">

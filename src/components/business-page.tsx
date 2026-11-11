@@ -87,8 +87,9 @@ const retailerSectionTabs: Partial<
       permission: UI_PERMISSION.WALLET_AEPS_TO_MAIN_TRANSFER,
     },
     {
-      label: "Settlements",
-      href: "/retailer/wallet/payout",
+      label: "AEPS Settlements",
+      href: "/retailer/wallet/payout?wallet=AEPS",
+      activeHrefs: ["/retailer/wallet/payout"],
       permission: [
         UI_PERMISSION.PAYOUT_SETTLEMENT_CREATE,
         UI_PERMISSION.PAYOUT_SETTLEMENT_VIEW_SELF,
@@ -146,6 +147,7 @@ export function BusinessPage({
     | "aeps"
     | "members"
     | "wallet"
+    | "fundTransfer"
     | "transactions"
     | "reports"
     | "activity"
@@ -530,7 +532,9 @@ export function BusinessPage({
                           ? "reports"
                           : active === "commission"
                             ? "earnings"
-                            : active) as UiArea
+                            : active === "fundTransfer"
+                              ? "wallet"
+                              : active) as UiArea
               }
               role={identity.role}
               access={access}

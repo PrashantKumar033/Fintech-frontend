@@ -77,21 +77,66 @@ test("wallet debit label never renders an undefined wallet name", () => {
 });
 
 test("retailer payout navigation separates AEPS settlements from MAIN fund transfer", async () => {
-  const [navigation, businessPage, payoutRoute, payoutWorkspace] = await Promise.all([
-    readFile(new URL("../src/lib/app-navigation.ts", import.meta.url), "utf8"),
-    readFile(new URL("../src/components/business-page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../src/routes/retailer/wallet/payout.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../src/components/payout-settlement-workspace.tsx", import.meta.url), "utf8"),
-  ]);
+  const [navigation, businessPage, sectionTabs, payoutRoute, payoutWorkspace, mainBankModal] =
+    await Promise.all([
+      readFile(new URL("../src/lib/app-navigation.ts", import.meta.url), "utf8"),
+      readFile(new URL("../src/components/business-page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../src/components/section-tabs.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../src/routes/retailer/wallet/payout.tsx", import.meta.url), "utf8"),
+      readFile(
+        new URL("../src/components/payout-settlement-workspace.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../src/components/main-bank-account-modal.tsx", import.meta.url), "utf8"),
+    ]);
 
   assert.match(
     navigation,
     /key:\s*"fundTransfer"[\s\S]*?label:\s*"Fund Transfer"[\s\S]*?\/retailer\/wallet\/payout\?wallet=MAIN/,
   );
-  assert.match(businessPage, /label:\s*"Settlements"[\s\S]*?href:\s*"\/retailer\/wallet\/payout"/);
+  assert.match(
+    businessPage,
+    /label:\s*"AEPS Settlements"[\s\S]*?href:\s*"\/retailer\/wallet\/payout\?wallet=AEPS"[\s\S]*?activeHrefs:\s*\["\/retailer\/wallet\/payout"\]/,
+  );
+  assert.match(sectionTabs, /\[tab\.href, \.\.\.\(tab\.activeHrefs \|\| \[\]\)\]/);
   assert.match(payoutRoute, /search\.wallet === "MAIN"[\s\S]*?: \("AEPS" as const\)/);
+  assert.match(payoutRoute, /active=\{wallet === "AEPS" \? "wallet" : "fundTransfer"\}/);
   assert.match(payoutRoute, /<PayoutSettlementWorkspace fixedSourceWallet=\{wallet\} \/>/);
   assert.match(payoutWorkspace, /!fixedSourceWallet \?[\s\S]*?Debit from wallet/);
   assert.match(payoutWorkspace, /sourceWallet === "AEPS"[\s\S]*?AEPS wallet balance/);
   assert.match(payoutWorkspace, /sourceWallet === "MAIN"[\s\S]*?Main wallet balance/);
+  assert.match(payoutWorkspace, /MainBankAccountChooser[\s\S]*?Choose payout account/);
+  assert.match(payoutWorkspace, /Loading Main payout bank accounts[\s\S]*?animate-pulse/);
+  assert.match(
+    payoutWorkspace,
+    /const \[bankAccountsLoading, setBankAccountsLoading\] = useState\(true\)/,
+  );
+  assert.match(payoutWorkspace, /<MainBankAccountChooser[\s\S]*?loading=\{bankAccountsLoading\}/);
+  assert.match(
+    payoutWorkspace,
+    /MIN_BANK_SKELETON_MS[\s\S]*?setAccounts\(loadedAccounts\)[\s\S]*?setBankAccountsLoading\(false\)/,
+  );
+  assert.match(
+    payoutWorkspace,
+    /<MainBankAccountModal[\s\S]*?onCreated=\{mainBankAccountCreated\}/,
+  );
+  assert.match(payoutWorkspace, /type="radio"[\s\S]*?name="main-payout-bank-account"/);
+  assert.match(
+    payoutWorkspace,
+    /Verification status:[\s\S]*?account\.verificationStatus\.replaceAll/,
+  );
+  assert.doesNotMatch(payoutWorkspace, /Selected Main payout bank account/);
+  assert.match(
+    mainBankModal,
+    /id="add-main-bank-modal"[\s\S]*?role="dialog"[\s\S]*?aria-modal="true"/,
+  );
+  assert.doesNotMatch(payoutWorkspace, /href="\/retailer\/bank\?add=MAIN"/);
+  assert.match(payoutWorkspace, /canVerifyDmtAccount\(account\)[\s\S]*?Verify/);
+  assert.match(
+    payoutWorkspace,
+    /canHardDeleteDmtAccount\(account\)[\s\S]*?title="Delete permanently"[\s\S]*?<Trash2/,
+  );
+  assert.doesNotMatch(payoutWorkspace, /deleting \? "Deleting…" : "Delete permanently"/);
+  assert.match(mainBankModal, /bankDirectorySelection[\s\S]*?applyBankDirectorySelection/);
+  assert.match(mainBankModal, /addDmtBank[\s\S]*?buildDmtBankCreateInput\(draft, "ADD_ONLY"\)/);
 });

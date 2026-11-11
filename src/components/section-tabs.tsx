@@ -6,6 +6,7 @@ import { resolveWorkspaceRole } from "@/lib/role-hierarchy";
 export type SectionTab = {
   label: string;
   href: string;
+  activeHrefs?: readonly string[];
   permission?: string | readonly string[];
   area?: UiArea;
 };
@@ -45,8 +46,11 @@ export function SectionTabs({
         {visibleTabs.map((tab, index) => {
           const currentHasQuery = current.includes("?");
           const active = current
-            ? current === tab.href ||
-              (!tab.href.includes("?") && !currentHasQuery && current.split("?")[0] === tab.href)
+            ? [tab.href, ...(tab.activeHrefs || [])].some(
+                (href) =>
+                  current === href ||
+                  (!href.includes("?") && !currentHasQuery && current.split("?")[0] === href),
+              )
             : index === 0;
           return (
             <Link
