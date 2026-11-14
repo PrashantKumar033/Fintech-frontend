@@ -4,6 +4,8 @@ import {
   AEPS_MCC_OPTIONS,
   buildAepsRegistrationRequest,
   EMPTY_AEPS_REGISTRATION,
+  formatAepsDob,
+  parseAepsDob,
   validateAepsRegistration,
 } from "../src/lib/aeps-registration.ts";
 import { aepsErrorMessage } from "../src/lib/aeps-errors.ts";
@@ -51,6 +53,24 @@ test("v1.0.14 registration accepts all required fields and the MCC allow-list", 
 
 test("registration without lastName succeeds validation", () => {
   assert.deepEqual(validateAepsRegistration(validRegistration({ lastName: "" })), {});
+});
+
+test("date picker helpers preserve the provider DD-MM-YYYY contract", () => {
+  const date = new Date(1990, 1, 1);
+  assert.equal(formatAepsDob(date), "01-02-1990");
+  assert.equal(parseAepsDob("01-02-1990")?.getTime(), date.getTime());
+  assert.equal(parseAepsDob("31-02-1990"), undefined);
+});
+
+test("registration rejects impossible and future dates of birth", () => {
+  assert.match(
+    validateAepsRegistration(validRegistration({ dob: "31-02-1990" })).dob,
+    /valid date of birth/,
+  );
+  assert.match(
+    validateAepsRegistration(validRegistration({ dob: "01-01-2999" })).dob,
+    /valid date of birth/,
+  );
 });
 
 test("empty lastName is omitted without duplicating firstName", () => {

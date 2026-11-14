@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import {
   BadgeIndianRupee,
   Banknote,
+  CalendarDays,
   CheckCircle2,
   ChevronDown,
   Circle,
@@ -54,6 +55,8 @@ import {
   AEPS_MCC_OPTIONS,
   buildAepsRegistrationRequest,
   EMPTY_AEPS_REGISTRATION,
+  formatAepsDob,
+  parseAepsDob,
   validateAepsRegistration,
   type AepsRegistrationErrors,
   type AepsRegistrationField,
@@ -62,6 +65,7 @@ import { BusinessPage } from "@/components/business-page";
 import { AdminLayout } from "@/components/admin/admin-layout";
 import { ActionPermissionNotice } from "@/components/action-permission-notice";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { useEffectiveAccess } from "@/hooks/use-effective-access";
 import { UI_PERMISSION } from "@/lib/ui-permissions";
 import { useServiceReadiness } from "@/lib/service-readiness";
@@ -810,20 +814,30 @@ function Registration({
               .filter((bank) => bank.code !== undefined && bank.code !== null)
               .map((bank) => ({ value: String(bank.code), label: bank.description }))}
           />
-          {fields.map(([name, label, placeholder]) => (
-            <Field
-              key={name}
-              label={label}
-              value={form[name]}
-              placeholder={placeholder}
-              fieldId={`aeps-${name}`}
-              error={fieldErrors[name]}
-              onChange={(v) =>
-                set(name, sensitive(name) ? digits(v) : pan(name) ? v.toUpperCase() : v)
-              }
-              required={!label.includes("optional")}
-            />
-          ))}
+          {fields.map(([name, label, placeholder]) =>
+            name === "dob" ? (
+              <DateOfBirthField
+                key={name}
+                value={form.dob}
+                onChange={(value) => set("dob", value)}
+                fieldId="aeps-dob"
+                error={fieldErrors.dob}
+              />
+            ) : (
+              <Field
+                key={name}
+                label={label}
+                value={form[name]}
+                placeholder={placeholder}
+                fieldId={`aeps-${name}`}
+                error={fieldErrors[name]}
+                onChange={(v) =>
+                  set(name, sensitive(name) ? digits(v) : pan(name) ? v.toUpperCase() : v)
+                }
+                required={!label.includes("optional")}
+              />
+            ),
+          )}
           <SelectField
             label="Gender"
             value={form.gender}
@@ -2040,6 +2054,75 @@ function Field({
         </span>
       )}
     </label>
+  );
+}
+
+function DateOfBirthField({
+  value,
+  onChange,
+  fieldId,
+  error,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  fieldId: string;
+  error?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = parseAepsDob(value);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const earliestDate = new Date(today.getFullYear() - 100, 0, 1);
+  const initialMonth = new Date(today.getFullYear() - 18, today.getMonth(), 1);
+  const errorId = `${fieldId}-error`;
+
+  return (
+    <div className="block">
+      <span className="text-xs font-bold text-muted-foreground">Date of birth</span>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            id={fieldId}
+            type="button"
+            aria-required="true"
+            aria-invalid={!!error}
+            aria-describedby={error ? errorId : undefined}
+            className={`mt-1.5 flex w-full items-center justify-between gap-3 rounded-xl border bg-background px-3 py-3 text-left text-sm outline-none transition focus:ring-2 ${
+              error
+                ? "border-red-500 focus:border-red-500 focus:ring-red-100"
+                : "border-border focus:border-primary focus:ring-primary/10"
+            }`}
+          >
+            <span className={value ? "text-secondary" : "text-muted-foreground"}>
+              {value || "Select date"}
+            </span>
+            <CalendarDays size={17} aria-hidden="true" className="shrink-0 text-primary" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" sideOffset={6} className="w-auto rounded-xl p-0 shadow-xl">
+          <Calendar
+            mode="single"
+            selected={selected}
+            defaultMonth={selected ?? initialMonth}
+            startMonth={earliestDate}
+            endMonth={today}
+            disabled={{ after: today }}
+            captionLayout="dropdown"
+            onSelect={(date) => {
+              if (!date) return;
+              onChange(formatAepsDob(date));
+              setOpen(false);
+            }}
+            autoFocus
+          />
+        </PopoverContent>
+      </Popover>
+      {error && (
+        <span id={errorId} role="alert" className="mt-1.5 block text-xs font-semibold text-red-700">
+          {error}
+        </span>
+      )}
+    </div>
   );
 }
 

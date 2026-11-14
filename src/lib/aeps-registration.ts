@@ -49,6 +49,26 @@ export type AepsRegistrationForm = {
 export type AepsRegistrationField = keyof AepsRegistrationForm;
 export type AepsRegistrationErrors = Partial<Record<AepsRegistrationField, string>>;
 
+export function formatAepsDob(date: Date): string {
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${day}-${month}-${date.getFullYear()}`;
+}
+
+export function parseAepsDob(value: string): Date | undefined {
+  const match = /^(\d{2})-(\d{2})-(\d{4})$/.exec(value.trim());
+  if (!match) return undefined;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day
+    ? date
+    : undefined;
+}
+
 export const EMPTY_AEPS_REGISTRATION: AepsRegistrationForm = {
   bankAccountId: "",
   kycProfileId: "",
@@ -109,8 +129,13 @@ export function validateAepsRegistration(form: AepsRegistrationForm): AepsRegist
   if (form.bankCode && !/^\d+$/.test(form.bankCode)) {
     errors.bankCode = "Select a valid numeric bank code.";
   }
-  if (form.dob && !/^\d{2}-\d{2}-\d{4}$/.test(form.dob)) {
-    errors.dob = "Use DD-MM-YYYY format.";
+  if (form.dob) {
+    const dob = parseAepsDob(form.dob);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (!dob || dob > today) {
+      errors.dob = "Select a valid date of birth.";
+    }
   }
   if (form.emailId && !/^\S+@\S+\.\S+$/.test(form.emailId)) {
     errors.emailId = "Enter a valid merchant email address.";
