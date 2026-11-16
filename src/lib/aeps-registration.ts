@@ -117,6 +117,10 @@ function validCoordinate(value: string, minimum: number, maximum: number): boole
   return Number.isFinite(coordinate) && coordinate >= minimum && coordinate <= maximum;
 }
 
+function normalizeMerchantName(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
 export function validateAepsRegistration(form: AepsRegistrationForm): AepsRegistrationErrors {
   const errors: AepsRegistrationErrors = {};
 
@@ -128,6 +132,10 @@ export function validateAepsRegistration(form: AepsRegistrationForm): AepsRegist
 
   if (form.bankCode && !/^\d+$/.test(form.bankCode)) {
     errors.bankCode = "Select a valid numeric bank code.";
+  }
+  const firstName = normalizeMerchantName(form.firstName);
+  if (firstName && !/^[A-Za-z]+(?: [A-Za-z]+)*$/.test(firstName)) {
+    errors.firstName = "Use letters and spaces only.";
   }
   if (form.dob) {
     const dob = parseAepsDob(form.dob);
@@ -191,7 +199,9 @@ export function buildAepsRegistrationRequest(
 
   return Object.fromEntries(
     REGISTRATION_FIELDS.flatMap((field) => {
-      const value = field === "lastName" ? candidate[field].trim() : candidate[field];
+      const value = ["firstName", "middleName", "lastName"].includes(field)
+        ? normalizeMerchantName(candidate[field])
+        : candidate[field];
       return value === "" ? [] : [[field, value]];
     }),
   ) as Partial<AepsRegistrationForm>;

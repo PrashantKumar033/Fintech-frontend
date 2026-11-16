@@ -92,6 +92,25 @@ test("explicit lastName is trimmed and otherwise preserved exactly", () => {
   assert.equal(request.lastName, "D'Souza");
 });
 
+test("merchant names are normalized before the provider request", () => {
+  const request = buildAepsRegistrationRequest(
+    validRegistration({
+      firstName: "  Aryan   Kumar  ",
+      middleName: "  Dev  ",
+      lastName: "  Dhiman  ",
+    }),
+  );
+
+  assert.equal(request.firstName, "Aryan Kumar");
+  assert.equal(request.middleName, "Dev");
+  assert.equal(request.lastName, "Dhiman");
+});
+
+test("registration rejects a provider-invalid first name", () => {
+  const errors = validateAepsRegistration(validRegistration({ firstName: "Test-aryan" }));
+  assert.match(errors.firstName, /letters/);
+});
+
 test("existing mandatory registration fields remain required", () => {
   for (const field of [
     "bankAccountId",
